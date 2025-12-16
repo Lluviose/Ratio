@@ -25,15 +25,6 @@ export function AssetsRatioPage({ grouped }: { grouped: GroupedAccounts }) {
 
   return (
     <div className="h-full flex flex-col p-6 pt-10 relative overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <div className="mb-8 animate-[fadeIn_0.6s_ease-out]">
-        <h1 className="text-3xl font-black leading-tight tracking-tight text-[var(--text)]">
-          关注重要资产
-          <br />
-          <span className="text-[var(--primary)]">关注分配比</span>
-          <br />
-          专属私人财务报表
-        </h1>
-      </div>
 
       <div className="flex-1 relative min-h-0 flex items-end pb-4">
         <div className="w-full h-full max-h-[460px] flex gap-2">

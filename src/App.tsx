@@ -58,8 +58,8 @@ export default function App() {
         ) : view === 'addAccount' ? (
           <AddAccountScreen
             onBack={() => setView('main')}
-            onPick={(type) => {
-              const next = accounts.addAccount(type)
+            onPick={(type, customName) => {
+              const next = accounts.addAccount(type, customName)
               setView('main')
               setEditing(next)
             }}

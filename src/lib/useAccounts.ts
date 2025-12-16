@@ -24,11 +24,11 @@ export function useAccounts() {
   const [accounts, setAccounts] = useLocalStorageState<Account[]>('ratio.accounts', initialAccounts)
 
   const addAccount = useCallback(
-    (type: AccountTypeId) => {
+    (type: AccountTypeId, customName?: string) => {
       const next: Account = {
         id: createId(),
         type,
-        name: defaultAccountName(type),
+        name: customName?.trim() || defaultAccountName(type),
         balance: 0,
         updatedAt: nowIso(),
       }

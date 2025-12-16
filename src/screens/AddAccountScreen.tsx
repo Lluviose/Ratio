@@ -1,11 +1,14 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { accountGroups, accountTypeOptions, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
+import { useState } from 'react'
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
 
 export function AddAccountScreen(props: {
   onBack: () => void
-  onPick: (type: AccountTypeId) => void
+  onPick: (type: AccountTypeId, customName?: string) => void
 }) {
   const { onBack, onPick } = props
+  const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
+  const [customName, setCustomName] = useState('')
 
   const grouped = {
     liquid: accountTypeOptions.filter((t) => t.groupId === 'liquid'),
@@ -59,7 +62,10 @@ export function AddAccountScreen(props: {
                 key={t.id} 
                 type="button" 
                 className="flex items-center gap-4 px-4 py-4 bg-[var(--card)] hover:bg-[var(--bg)] transition-all active:scale-[0.99] rounded-2xl shadow-sm border border-[var(--hairline)]"
-                onClick={() => onPick(t.id)}
+                onClick={() => {
+                  setSelectedType(t.id)
+                  setCustomName('')
+                }}
               >
                 <span 
                   className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
@@ -103,6 +109,53 @@ export function AddAccountScreen(props: {
         {renderGroup('receivable')}
         {renderGroup('debt')}
       </div>
+
+      {selectedType && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 animate-[fadeIn_0.2s_ease-out]">
+          <div 
+            className="w-full max-w-md bg-[var(--card)] rounded-t-[28px] p-6 pb-8 animate-[slideUp_0.3s_ease-out]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center mb-6">
+              <div className="text-lg font-black text-[var(--text)]">
+                为"{defaultAccountName(selectedType)}"命名
+              </div>
+              <div className="text-sm text-[var(--muted-text)] mt-1">
+                输入自定义名称，如：交通银行、支付宝等
+              </div>
+            </div>
+            
+            <input
+              type="text"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
+              placeholder={defaultAccountName(selectedType)}
+              className="w-full px-4 py-4 rounded-2xl bg-[var(--bg)] border border-[var(--hairline)] text-[var(--text)] font-bold text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+              autoFocus
+            />
+            
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-black transition-all active:scale-[0.98]"
+                onClick={() => setSelectedType(null)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+                onClick={() => {
+                  onPick(selectedType, customName)
+                }}
+              >
+                <Check size={18} strokeWidth={3} />
+                确认
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
