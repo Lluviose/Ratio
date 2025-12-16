@@ -87,6 +87,8 @@ a {
   border-radius: 34px;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .topBar {
@@ -130,6 +132,9 @@ a {
 
 .content {
   padding: 8px 16px 92px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .card {

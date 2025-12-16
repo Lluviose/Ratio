@@ -22,7 +22,6 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('assets')
   const [view, setView] = useState<ViewId>('main')
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
-  const [privacyMode, setPrivacyMode] = useLocalStorageState<boolean>('ratio.privacy', true)
   const [crossPlatformSync, setCrossPlatformSync] = useLocalStorageState<boolean>('ratio.sync', false)
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [addTxOpen, setAddTxOpen] = useState(false)
@@ -88,7 +87,6 @@ export default function App() {
             <div className="content">
               {tab === 'assets' ? (
                 <AssetsScreen
-                  privacyMode={privacyMode}
                   recent={ledger.recent}
                   grouped={accounts.grouped}
                   getIcon={accounts.getIcon}
@@ -102,8 +100,6 @@ export default function App() {
                   themeOptions={themeOptions}
                   theme={theme}
                   onThemeChange={setTheme}
-                  privacyMode={privacyMode}
-                  onPrivacyModeChange={setPrivacyMode}
                   crossPlatformSync={crossPlatformSync}
                   onCrossPlatformSyncChange={setCrossPlatformSync}
                 />

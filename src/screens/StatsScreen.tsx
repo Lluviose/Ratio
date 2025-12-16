@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bar, BarChart, Tooltip, XAxis, YAxis } from 'recharts'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -26,6 +26,27 @@ export function StatsScreen() {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<StatsMode>('invest')
   const [range, setRange] = useState<RangeId>('6m')
+
+  const chartRef = useRef<HTMLDivElement | null>(null)
+  const [chartWidth, setChartWidth] = useState(0)
+
+  useEffect(() => {
+    if (!open) return
+    const el = chartRef.current
+    if (!el) return
+
+    const update = () => setChartWidth(el.getBoundingClientRect().width)
+    update()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update)
+      return () => window.removeEventListener('resize', update)
+    }
+
+    const ro = new ResizeObserver(() => update())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open])
 
   const data = useMemo(() => buildMockBars(), [])
 
@@ -93,9 +114,9 @@ export function StatsScreen() {
           2025年4月至9月 · 账户变动合计 {formatCny(totals.accountDeltaTotal)}，持仓盈利 {formatCny(totals.pnlTotal)}
         </div>
 
-        <div style={{ height: 210, marginTop: 12 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+        <div ref={chartRef} style={{ height: 210, marginTop: 12 }}>
+          {chartWidth > 0 ? (
+            <BarChart width={chartWidth} height={210} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
               <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="rgba(11, 15, 26, 0.25)" />
               <YAxis
                 tick={{ fontSize: 11 }}
@@ -106,7 +127,7 @@ export function StatsScreen() {
               <Bar dataKey="accountDelta" fill={mode === 'invest' ? 'var(--primary)' : '#47d16a'} radius={[10, 10, 0, 0]} />
               <Bar dataKey="pnl" fill="rgba(11, 15, 26, 0.20)" radius={[10, 10, 0, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+          ) : null}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>

@@ -6,8 +6,6 @@ export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
   theme: ThemeId
   onThemeChange: (id: ThemeId) => void
-  privacyMode: boolean
-  onPrivacyModeChange: (next: boolean) => void
   crossPlatformSync: boolean
   onCrossPlatformSyncChange: (next: boolean) => void
 }) {
@@ -15,8 +13,6 @@ export function SettingsScreen(props: {
     themeOptions,
     theme,
     onThemeChange,
-    privacyMode,
-    onPrivacyModeChange,
     crossPlatformSync,
     onCrossPlatformSyncChange,
   } = props
@@ -65,20 +61,12 @@ export function SettingsScreen(props: {
 
       <div className="card">
         <div className="cardInner">
-          <div style={{ fontWeight: 950, fontSize: 16 }}>数据隐私安全</div>
+          <div style={{ fontWeight: 950, fontSize: 16 }}>数据同步</div>
           <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
-            私人账户跨平台同步
+            跨平台同步（预留）
           </div>
 
           <div className="stack" style={{ marginTop: 14 }}>
-            <div className="assetItem" style={{ padding: '12px 14px' }}>
-              <div>
-                <div className="assetName">隐私模式</div>
-                <div className="assetSub">隐藏敏感金额与账户名称（示例）</div>
-              </div>
-              <Toggle checked={privacyMode} onChange={onPrivacyModeChange} />
-            </div>
-
             <div className="assetItem" style={{ padding: '12px 14px' }}>
               <div>
                 <div className="assetName">跨平台同步</div>

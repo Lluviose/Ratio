@@ -1,4 +1,3 @@
-import { Eye, EyeOff } from 'lucide-react'
 import { type ComponentType, useMemo } from 'react'
 import { formatCny } from '../lib/format'
 import type { Transaction } from '../lib/ledger'
@@ -16,15 +15,8 @@ export function AssetsScreen(props: {
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
   onEditAccount: (account: Account) => void
   recent: Transaction[]
-  privacyMode: boolean
 }) {
-  const { grouped, getIcon, onEditAccount, recent, privacyMode } = props
-
-  const showMoney = (value: number) => {
-    if (!privacyMode) return formatCny(value)
-    if (value === 0) return '¥0'
-    return '¥****'
-  }
+  const { grouped, getIcon, onEditAccount, recent } = props
 
   const groupMeta = useMemo(() => {
     const map: Record<string, { textColor: string }> = {
@@ -52,23 +44,18 @@ export function AssetsScreen(props: {
         <div className="cardInner">
           <div className="row">
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
-                  我的净资产 (CNY)
-                </div>
-                <span className="muted" aria-hidden="true">
-                  {privacyMode ? <EyeOff size={16} /> : <Eye size={16} />}
-                </span>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+                我的净资产 (CNY)
               </div>
               <div className="h1" style={{ marginTop: 6 }}>
-                {showMoney(grouped.netWorth)}
+                {formatCny(grouped.netWorth)}
               </div>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-            <span className="badge">资产 {showMoney(grouped.assetsTotal)}</span>
-            <span className="badge">负债 {showMoney(grouped.debtTotal)}</span>
+            <span className="badge">资产 {formatCny(grouped.assetsTotal)}</span>
+            <span className="badge">负债 {formatCny(grouped.debtTotal)}</span>
           </div>
         </div>
       </div>
@@ -90,13 +77,13 @@ export function AssetsScreen(props: {
                 <div>
                   <div className="groupTitle">{g.group.name}</div>
                   <div className="groupSub">
-                    <span>{g.accounts.length > 0 ? (privacyMode ? '***' : accountNames) : '点击 + 添加账户'}</span>
+                    <span>{g.accounts.length > 0 ? accountNames : '点击 + 添加账户'}</span>
                     <span style={{ marginLeft: 10 }}>{formatUpdated(updatedAt)}</span>
                   </div>
                 </div>
                 <div className="groupAmount" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {g.group.id === 'debt' ? <span className="minusBadge" aria-hidden="true">−</span> : null}
-                  {showMoney(g.total)}
+                  {formatCny(g.total)}
                 </div>
               </div>
 
@@ -115,10 +102,10 @@ export function AssetsScreen(props: {
                           <Icon size={18} />
                         </span>
                         <span className="subText">
-                          <span className="subName">{privacyMode ? '***' : a.name}</span>
+                          <span className="subName">{a.name}</span>
                           <span className="subHint">修改余额</span>
                         </span>
-                        <span className="subAmount">{showMoney(a.balance)}</span>
+                        <span className="subAmount">{formatCny(a.balance)}</span>
                       </button>
                     )
                   })}
@@ -147,16 +134,16 @@ export function AssetsScreen(props: {
               {recent.map((tx) => {
                 const isExpense = tx.amount < 0
                 const color = isExpense ? 'rgba(239, 68, 68, 0.95)' : '#47d16a'
-                const amount = privacyMode ? '¥****' : formatCny(tx.amount)
+                const amount = formatCny(tx.amount)
                 return (
                   <div key={tx.id} className="assetItem" style={{ padding: '10px 12px' }}>
                     <div className="assetLeft">
                       <span className="dot" style={{ background: color }} />
                       <div>
                         <div className="assetName">
-                          {tx.category} · {privacyMode ? '***' : tx.account}
+                          {tx.category} · {tx.account}
                         </div>
-                        <div className="assetSub">{privacyMode ? '****-**-**' : tx.date}</div>
+                        <div className="assetSub">{tx.date}</div>
                       </div>
                     </div>
                     <div className="amount" style={{ color }}>

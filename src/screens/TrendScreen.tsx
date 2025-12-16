@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -33,6 +33,27 @@ export function TrendScreen() {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
+
+  const chartRef = useRef<HTMLDivElement | null>(null)
+  const [chartWidth, setChartWidth] = useState(0)
+
+  useEffect(() => {
+    if (!open) return
+    const el = chartRef.current
+    if (!el) return
+
+    const update = () => setChartWidth(el.getBoundingClientRect().width)
+    update()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', update)
+      return () => window.removeEventListener('resize', update)
+    }
+
+    const ro = new ResizeObserver(() => update())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open])
 
   const data = useMemo(() => buildMockTrend(), [])
 
@@ -110,9 +131,9 @@ export function TrendScreen() {
           />
         </div>
 
-        <div style={{ height: 210, marginTop: 14 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+        <div ref={chartRef} style={{ height: 210, marginTop: 14 }}>
+          {chartWidth > 0 ? (
+            <LineChart width={chartWidth} height={210} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
               <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="rgba(11, 15, 26, 0.25)" />
               <YAxis
                 tick={{ fontSize: 11 }}
@@ -132,7 +153,7 @@ export function TrendScreen() {
                 </>
               )}
             </LineChart>
-          </ResponsiveContainer>
+          ) : null}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
