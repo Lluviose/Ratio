@@ -18,6 +18,15 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function isDebtAccount(type: AccountTypeId) {
+  return type === 'credit_card' || type === 'loan' || type === 'payable' || type === 'other_debt'
+}
+
+function applyFlow(type: AccountTypeId, balance: number, flow: number) {
+  if (isDebtAccount(type)) return balance - flow
+  return balance + flow
+}
+
 const initialAccounts: Account[] = []
 
 export function useAccounts() {
@@ -47,15 +56,45 @@ export function useAccounts() {
     [setAccounts],
   )
 
-  const applyTransaction = useCallback(
-    (tx: { account: string; amount: number }) => {
+  const renameAccount = useCallback(
+    (id: string, name: string) => {
+      const nextName = name.trim()
+      if (!nextName) return
+      setAccounts((prev) => prev.map((a) => (a.id === id ? { ...a, name: nextName, updatedAt: nowIso() } : a)))
+    },
+    [setAccounts],
+  )
+
+  const adjustBalance = useCallback(
+    (id: string, delta: number) => {
+      if (!Number.isFinite(delta) || delta === 0) return
       setAccounts((prev) =>
-        prev.map((a) =>
-          a.name === tx.account && getGroupIdByAccountType(a.type) === 'liquid'
-            ? { ...a, balance: a.balance + tx.amount, updatedAt: nowIso() }
-            : a,
-        ),
+        prev.map((a) => (a.id === id ? { ...a, balance: a.balance + delta, updatedAt: nowIso() } : a)),
       )
+    },
+    [setAccounts],
+  )
+
+  const transfer = useCallback(
+    (fromId: string, toId: string, amount: number) => {
+      if (fromId === toId) return
+      if (!Number.isFinite(amount) || amount <= 0) return
+
+      setAccounts((prev) => {
+        const from = prev.find((a) => a.id === fromId)
+        const to = prev.find((a) => a.id === toId)
+        if (!from || !to) return prev
+
+        const fromAfter = applyFlow(from.type, from.balance, -amount)
+        const toAfter = applyFlow(to.type, to.balance, amount)
+        const ts = nowIso()
+
+        return prev.map((a) => {
+          if (a.id === fromId) return { ...a, balance: fromAfter, updatedAt: ts }
+          if (a.id === toId) return { ...a, balance: toAfter, updatedAt: ts }
+          return a
+        })
+      })
     },
     [setAccounts],
   )
@@ -111,7 +150,9 @@ export function useAccounts() {
     accounts,
     addAccount,
     updateBalance,
-    applyTransaction,
+    renameAccount,
+    adjustBalance,
+    transfer,
     grouped,
     liquidAccounts,
     getIcon,

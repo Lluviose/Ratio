@@ -5,14 +5,13 @@ import { TourScreen } from './screens/TourScreen.tsx'
 import { SettingsScreen } from './screens/SettingsScreen.tsx'
 import { StatsScreen } from './screens/StatsScreen.tsx'
 import { TrendScreen } from './screens/TrendScreen.tsx'
-import { AddTransactionSheet } from './components/AddTransactionSheet.tsx'
-import { EditBalanceSheet } from './components/EditBalanceSheet.tsx'
 import { QuickAddSheet } from './components/QuickAddSheet.tsx'
+import { AccountDetailSheet } from './components/AccountDetailSheet.tsx'
 import { AddAccountScreen } from './screens/AddAccountScreen.tsx'
 import { type Account } from './lib/accounts.ts'
 import { useAccounts } from './lib/useAccounts.ts'
-import { useLedger } from './lib/useLedger.ts'
 import { useSnapshots } from './lib/useSnapshots.ts'
+import { useAccountOps } from './lib/useAccountOps.ts'
 import { themeOptions, type ThemeId } from './lib/themes.ts'
 import { useLocalStorageState } from './lib/useLocalStorageState.ts'
 
@@ -25,12 +24,12 @@ export default function App() {
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
   const [crossPlatformSync, setCrossPlatformSync] = useLocalStorageState<boolean>('ratio.sync', false)
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
-  const [addTxOpen, setAddTxOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
-  const [editing, setEditing] = useState<Account | null>(null)
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
 
-  const ledger = useLedger()
   const accounts = useAccounts()
+  const accountOps = useAccountOps()
   const { snapshots, upsertFromAccounts } = useSnapshots()
 
   useEffect(() => {
@@ -68,7 +67,8 @@ export default function App() {
             onPick={(type, customName) => {
               const next = accounts.addAccount(type, customName)
               setView('main')
-              setEditing(next)
+              setSelectedAccountId(next.id)
+              setDetailAction('set_balance')
             }}
           />
         ) : (
@@ -96,7 +96,10 @@ export default function App() {
                 <AssetsScreen
                   grouped={accounts.grouped}
                   getIcon={accounts.getIcon}
-                  onEditAccount={(a: Account) => setEditing(a)}
+                  onEditAccount={(a: Account) => {
+                    setSelectedAccountId(a.id)
+                    setDetailAction('none')
+                  }}
                 />
               ) : null}
               {tab === 'trend' ? <TrendScreen snapshots={snapshots} /> : null}
@@ -116,29 +119,23 @@ export default function App() {
               open={quickAddOpen}
               onClose={() => setQuickAddOpen(false)}
               onAddAccount={() => setView('addAccount')}
-              onAddTransaction={() => setAddTxOpen(true)}
             />
 
-            <AddTransactionSheet
-              open={addTxOpen}
-              onClose={() => setAddTxOpen(false)}
-              onSubmit={(tx) => {
-                ledger.addTransaction(tx)
-                accounts.applyTransaction({ account: tx.account, amount: tx.amount })
+            <AccountDetailSheet
+              open={Boolean(selectedAccountId)}
+              accountId={selectedAccountId}
+              accounts={accounts.accounts}
+              ops={accountOps.ops}
+              initialAction={detailAction}
+              onClose={() => {
+                setSelectedAccountId(null)
+                setDetailAction('none')
               }}
-              accounts={accounts.liquidAccounts.map((a) => a.name)}
-            />
-
-            <EditBalanceSheet
-              open={Boolean(editing)}
-              title={editing?.name ?? '修改余额'}
-              initialValue={editing?.balance ?? 0}
-              onClose={() => setEditing(null)}
-              onSave={(next) => {
-                if (!editing) return
-                accounts.updateBalance(editing.id, next)
-                setEditing(null)
-              }}
+              onRename={accounts.renameAccount}
+              onSetBalance={accounts.updateBalance}
+              onAdjust={accounts.adjustBalance}
+              onTransfer={accounts.transfer}
+              onAddOp={accountOps.addOp}
             />
 
             <div className="navBar">
