@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useRef } from 'react'
 import { BottomSheet } from './BottomSheet'
 import { formatCny } from '../lib/format'
 
@@ -11,16 +11,10 @@ export function EditBalanceSheet(props: {
 }) {
   const { open, title, initialValue, onClose, onSave } = props
 
-  const initial = useMemo(() => String(initialValue), [initialValue])
-  const [value, setValue] = useState(initial)
-
-  useEffect(() => {
-    if (!open) return
-    setValue(initial)
-  }, [initial, open])
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   const submit = () => {
-    const num = Number(value)
+    const num = Number(inputRef.current?.value ?? '')
     if (!Number.isFinite(num)) {
       alert('请输入正确余额')
       return
@@ -41,8 +35,8 @@ export function EditBalanceSheet(props: {
           <input
             className="input"
             inputMode="decimal"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
+            defaultValue={String(initialValue)}
+            ref={inputRef}
             placeholder="0"
           />
         </label>

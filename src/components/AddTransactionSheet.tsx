@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import type { Transaction, TxType } from '../lib/ledger'
@@ -25,12 +25,7 @@ export function AddTransactionSheet(props: {
   const [date, setDate] = useState(today)
   const [note, setNote] = useState('')
 
-  useEffect(() => {
-    if (!open) return
-    if (!accountOptions.includes(account)) {
-      setAccount(accountOptions[0] ?? '现金')
-    }
-  }, [account, accountOptions, open])
+  const safeAccount = accountOptions.includes(account) ? account : (accountOptions[0] ?? '现金')
 
   const reset = () => {
     setType('expense')
@@ -52,7 +47,7 @@ export function AddTransactionSheet(props: {
       type,
       amount: normalizeAmount(type, num),
       category,
-      account,
+      account: safeAccount,
       date,
       note,
     })
@@ -100,7 +95,7 @@ export function AddTransactionSheet(props: {
 
             <label className="field">
               <div className="fieldLabel">账户</div>
-              <select className="select" value={account} onChange={(e) => setAccount(e.target.value)}>
+              <select className="select" value={safeAccount} onChange={(e) => setAccount(e.target.value)}>
                 {accountOptions.map((a) => (
                   <option key={a} value={a}>
                     {a}
