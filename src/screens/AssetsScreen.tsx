@@ -18,14 +18,20 @@ export function AssetsScreen(props: {
   const { grouped, getIcon, onEditAccount } = props
   
   return (
-    <div className="w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide">
+    <div
+      className="w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain scroll-smooth"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       {/* Page 1: Ratio Chart */}
-      <div className="w-full h-full flex-shrink-0 snap-center overflow-y-auto">
+      <div
+        className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden"
+        style={{ overscrollBehaviorY: 'none', touchAction: 'pan-x' }}
+      >
         <AssetsRatioPage grouped={grouped} />
       </div>
 
       {/* Page 2: Asset List */}
-      <div className="w-full h-full flex-shrink-0 snap-center overflow-y-auto">
+      <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
         <AssetsListPage 
           grouped={grouped} 
           getIcon={getIcon}

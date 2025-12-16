@@ -48,7 +48,7 @@ export function AssetsListPage(props: {
       </div>
 
       <div className="flex flex-col gap-3 pb-8">
-        {grouped.groupCards.filter((g) => g.total !== 0 || g.accounts.length > 0).map((g, i) => {
+        {grouped.groupCards.filter((g) => g.accounts.length > 0).map((g, i) => {
           const color = groupColors[g.group.id] || '#cbd5e1'
           const accountNames = g.accounts.map(a => a.name).join('、')
           const updatedAt = g.accounts.length > 0 
@@ -132,11 +132,6 @@ export function AssetsListPage(props: {
                        </div>
                      )
                    })}
-                   {g.accounts.length === 0 && (
-                     <div className="text-xs text-slate-400 font-bold text-center py-2">
-                       暂无账户，点击 + 添加
-                     </div>
-                   )}
                  </div>
               </div>
             </div>
