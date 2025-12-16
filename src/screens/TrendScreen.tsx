@@ -4,6 +4,7 @@ import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { formatCny } from '../lib/format'
+import type { Snapshot } from '../lib/snapshots'
 
 type TrendMode = 'netDebt' | 'cashInvest'
 
@@ -11,25 +12,99 @@ type RangeId = '30d' | '6m' | '1y' | 'custom'
 
 type TrendPoint = {
   date: string
+  dateKey: string
+  idx: number
   net: number
   debt: number
   cash: number
   invest: number
+  fixed: number
+  receivable: number
 }
 
-function buildMockTrend(): TrendPoint[] {
-  return [
-    { date: '2024/09', net: 520_000, debt: 900_000, cash: 180_000, invest: 320_000 },
-    { date: '2024/11', net: 810_000, debt: 910_000, cash: 220_000, invest: 420_000 },
-    { date: '2025/01', net: 860_000, debt: 980_000, cash: 260_000, invest: 450_000 },
-    { date: '2025/03', net: 960_000, debt: 1_000_000, cash: 280_000, invest: 520_000 },
-    { date: '2025/05', net: 1_020_000, debt: 1_000_000, cash: 310_000, invest: 560_000 },
-    { date: '2025/07', net: 1_236_600, debt: 1_005_000, cash: 330_000, invest: 640_000 },
-    { date: '2025/09', net: 1_310_000, debt: 1_010_000, cash: 350_000, invest: 700_000 },
-  ]
+function toDateKey(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
-export function TrendScreen() {
+function formatLabel(date: string) {
+  // date is stored as YYYY-MM-DD
+  const d = new Date(`${date}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return date
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${m}/${day}`
+}
+
+function pickMonthlyLast(snapshots: Snapshot[], monthCount: number) {
+  const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
+  const byMonth = new Map<string, Snapshot>()
+
+  for (const s of sorted) {
+    const monthKey = s.date.slice(0, 7) // YYYY-MM
+    const existing = byMonth.get(monthKey)
+    if (!existing || s.date > existing.date) byMonth.set(monthKey, s)
+  }
+
+  const months = Array.from(byMonth.keys()).sort((a, b) => a.localeCompare(b))
+  const picked = months.slice(Math.max(0, months.length - monthCount)).map((m) => byMonth.get(m)!)
+  return picked
+}
+
+function toPoint(s: Snapshot, idx: number): TrendPoint {
+  return {
+    date: formatLabel(s.date),
+    dateKey: s.date,
+    idx,
+    net: s.net,
+    debt: s.debt,
+    cash: s.cash,
+    invest: s.invest,
+    fixed: s.fixed,
+    receivable: s.receivable,
+  }
+}
+
+function formatDelta(value: number) {
+  const abs = Math.abs(value)
+  const text = formatCny(abs)
+  if (value > 0) return `+${text}`
+  if (value < 0) return `-${text}`
+  return text
+}
+
+function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: number) {
+  if (!prev || !prev.accounts || !curr.accounts) return null
+
+  const prevById = new Map<string, number>()
+  for (const a of prev.accounts) prevById.set(a.id, a.balance)
+
+  const currById = new Map<string, number>()
+  for (const a of curr.accounts) currById.set(a.id, a.balance)
+
+  const changes: { id: string; name: string; delta: number }[] = []
+
+  for (const a of curr.accounts) {
+    const before = prevById.get(a.id) ?? 0
+    const delta = a.balance - before
+    if (delta !== 0) changes.push({ id: a.id, name: a.name, delta })
+  }
+
+  for (const a of prev.accounts) {
+    if (!currById.has(a.id)) {
+      const delta = -a.balance
+      if (delta !== 0) changes.push({ id: a.id, name: a.name, delta })
+    }
+  }
+
+  changes.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+  return changes.slice(0, limit)
+}
+
+export function TrendScreen(props: { snapshots: Snapshot[] }) {
+  const { snapshots } = props
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
@@ -55,7 +130,30 @@ export function TrendScreen() {
     return () => ro.disconnect()
   }, [open])
 
-  const data = useMemo(() => buildMockTrend(), [])
+  const view = useMemo(() => {
+    if (!snapshots || snapshots.length === 0) return { points: [] as TrendPoint[], selected: [] as Snapshot[] }
+
+    const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
+
+    let selected: Snapshot[] = []
+
+    if (range === '30d') {
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 30)
+      const cutoffKey = toDateKey(cutoff)
+      selected = sorted.filter((s) => s.date >= cutoffKey)
+    } else if (range === '6m') {
+      selected = pickMonthlyLast(sorted, 6)
+    } else if (range === 'custom') {
+      selected = sorted.slice(Math.max(0, sorted.length - 90))
+    } else {
+      selected = pickMonthlyLast(sorted, 12)
+    }
+
+    return { points: selected.map((s, idx) => toPoint(s, idx)), selected }
+  }, [range, snapshots])
+
+  const data = view.points
 
   const tooltip = (props: unknown) => {
     const active = Boolean((props as { active?: boolean } | null)?.active)
@@ -63,6 +161,63 @@ export function TrendScreen() {
     if (!active || !payload || payload.length === 0) return null
     const p = (payload[0] as { payload?: TrendPoint } | undefined)?.payload
     if (!p) return null
+
+    const idx = p.idx
+    const currSnap = view.selected[idx]
+    const prevSnap = idx > 0 ? view.selected[idx - 1] : null
+    const topChanges = currSnap ? pickTopChangingAccounts(prevSnap, currSnap, 3) : null
+    const canCompare = Boolean(prevSnap)
+    const hasAccountDetails = Boolean(prevSnap?.accounts && currSnap?.accounts)
+
+    const breakdown = (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
+        <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>分组构成</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
+          <div style={{ color: 'var(--muted-text)' }}>流动资金</div>
+          <div>{formatCny(p.cash)}</div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+          <div style={{ color: 'var(--muted-text)' }}>投资</div>
+          <div>{formatCny(p.invest)}</div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+          <div style={{ color: 'var(--muted-text)' }}>固定资产</div>
+          <div>{formatCny(p.fixed)}</div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+          <div style={{ color: 'var(--muted-text)' }}>应收款</div>
+          <div>{formatCny(p.receivable)}</div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+          <div style={{ color: 'var(--muted-text)' }}>负债</div>
+          <div style={{ opacity: 0.75 }}>{formatDelta(-p.debt)}</div>
+        </div>
+      </div>
+    )
+
+    const topChangePanel = (
+      <div style={{ marginTop: 10 }}>
+        <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
+        <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>Top变动账户</div>
+        {!canCompare ? (
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>暂无对比快照</div>
+        ) : !hasAccountDetails ? (
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>旧快照无账户明细</div>
+        ) : !topChanges || topChanges.length === 0 ? (
+          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>无明显变动</div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {topChanges.map((c) => (
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
+                <div style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                <div style={{ color: c.delta > 0 ? '#47d16a' : c.delta < 0 ? '#ff6b57' : 'var(--muted-text)' }}>{formatDelta(c.delta)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
 
     if (mode === 'netDebt') {
       return (
@@ -78,13 +233,15 @@ export function TrendScreen() {
         >
           <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.date}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
-             <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.net)}</div>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
+            <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.net)}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
-             <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatCny(-p.debt)}</div>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
+            <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatDelta(-p.debt)}</div>
           </div>
+          {breakdown}
+          {topChangePanel}
         </div>
       )
     }
@@ -109,6 +266,8 @@ export function TrendScreen() {
              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
              <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatCny(p.invest)}</div>
         </div>
+        {breakdown}
+        {topChangePanel}
       </div>
     )
   }
@@ -145,7 +304,7 @@ export function TrendScreen() {
             </div>
 
             <div ref={chartRef} style={{ height: 240, marginTop: 24 }} className="animate-[scaleIn_0.5s_var(--ease-spring)]">
-              {chartWidth > 0 ? (
+              {chartWidth > 0 && data.length > 0 ? (
                 <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
                   <XAxis 
                     dataKey="date" 
@@ -213,7 +372,11 @@ export function TrendScreen() {
                     </>
                   )}
                 </LineChart>
-              ) : null}
+              ) : (
+                <div className="muted" style={{ textAlign: 'center', paddingTop: 80, fontSize: 13, fontWeight: 800 }}>
+                  暂无快照数据
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>

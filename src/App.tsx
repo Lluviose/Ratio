@@ -12,6 +12,7 @@ import { AddAccountScreen } from './screens/AddAccountScreen.tsx'
 import { type Account } from './lib/accounts.ts'
 import { useAccounts } from './lib/useAccounts.ts'
 import { useLedger } from './lib/useLedger.ts'
+import { useSnapshots } from './lib/useSnapshots.ts'
 import { themeOptions, type ThemeId } from './lib/themes.ts'
 import { useLocalStorageState } from './lib/useLocalStorageState.ts'
 
@@ -30,10 +31,16 @@ export default function App() {
 
   const ledger = useLedger()
   const accounts = useAccounts()
+  const { snapshots, upsertFromAccounts } = useSnapshots()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+
+  useEffect(() => {
+    if (accounts.accounts.length === 0) return
+    upsertFromAccounts(accounts.accounts)
+  }, [accounts.accounts, upsertFromAccounts])
 
   const title = useMemo(() => {
     switch (tab) {
@@ -92,8 +99,8 @@ export default function App() {
                   onEditAccount={(a: Account) => setEditing(a)}
                 />
               ) : null}
-              {tab === 'trend' ? <TrendScreen /> : null}
-              {tab === 'stats' ? <StatsScreen /> : null}
+              {tab === 'trend' ? <TrendScreen snapshots={snapshots} /> : null}
+              {tab === 'stats' ? <StatsScreen snapshots={snapshots} /> : null}
               {tab === 'settings' ? (
                 <SettingsScreen
                   themeOptions={themeOptions}
@@ -115,8 +122,11 @@ export default function App() {
             <AddTransactionSheet
               open={addTxOpen}
               onClose={() => setAddTxOpen(false)}
-              onSubmit={(tx) => ledger.addTransaction(tx)}
-              accounts={accounts.accounts.map((a) => a.name)}
+              onSubmit={(tx) => {
+                ledger.addTransaction(tx)
+                accounts.applyTransaction({ account: tx.account, amount: tx.amount })
+              }}
+              accounts={accounts.liquidAccounts.map((a) => a.name)}
             />
 
             <EditBalanceSheet

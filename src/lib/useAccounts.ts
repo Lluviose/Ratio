@@ -47,6 +47,24 @@ export function useAccounts() {
     [setAccounts],
   )
 
+  const applyTransaction = useCallback(
+    (tx: { account: string; amount: number }) => {
+      setAccounts((prev) =>
+        prev.map((a) =>
+          a.name === tx.account && getGroupIdByAccountType(a.type) === 'liquid'
+            ? { ...a, balance: a.balance + tx.amount, updatedAt: nowIso() }
+            : a,
+        ),
+      )
+    },
+    [setAccounts],
+  )
+
+  const liquidAccounts = useMemo(
+    () => accounts.filter((a) => getGroupIdByAccountType(a.type) === 'liquid'),
+    [accounts],
+  )
+
   const grouped = useMemo(() => {
     const byGroup: Record<AccountGroupId, Account[]> = {
       liquid: [],
@@ -93,7 +111,9 @@ export function useAccounts() {
     accounts,
     addAccount,
     updateBalance,
+    applyTransaction,
     grouped,
+    liquidAccounts,
     getIcon,
   }
 }

@@ -1,0 +1,38 @@
+import { useCallback, useMemo } from 'react'
+import type { Account } from './accounts'
+import { useLocalStorageState } from './useLocalStorageState'
+import { buildSnapshot, todayDateKey, type Snapshot } from './snapshots'
+
+export function useSnapshots() {
+  const [snapshots, setSnapshots] = useLocalStorageState<Snapshot[]>('ratio.snapshots', [])
+
+  const upsertFromAccounts = useCallback(
+    (accounts: Account[], date: string = todayDateKey()) => {
+      const next = buildSnapshot(date, accounts)
+      setSnapshots((prev) => {
+        const idx = prev.findIndex((s) => s.date === date)
+        if (idx >= 0) {
+          const copy = prev.slice()
+          copy[idx] = next
+          copy.sort((a, b) => a.date.localeCompare(b.date))
+          return copy
+        }
+
+        const copy = [...prev, next]
+        copy.sort((a, b) => a.date.localeCompare(b.date))
+        return copy
+      })
+    },
+    [setSnapshots],
+  )
+
+  const latest = useMemo(() => {
+    if (snapshots.length === 0) return null
+    return snapshots.reduce<Snapshot | null>((best, s) => {
+      if (!best) return s
+      return s.date > best.date ? s : best
+    }, null)
+  }, [snapshots])
+
+  return { snapshots, latest, upsertFromAccounts }
+}

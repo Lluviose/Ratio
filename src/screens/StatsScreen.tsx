@@ -1,30 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bar, BarChart, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
-import { SegmentedControl } from '../components/SegmentedControl'
 import { formatCny } from '../lib/format'
-
-type StatsMode = 'invest' | 'cash'
+import type { Snapshot } from '../lib/snapshots'
 
 type RangeId = '5w' | '6m' | '1y' | '4y'
 
-type BarPoint = { label: string; accountDelta: number; pnl: number }
-
-function buildMockBars(): BarPoint[] {
-  return [
-    { label: '4月', accountDelta: 78_000, pnl: 0 },
-    { label: '5月', accountDelta: 30_000, pnl: 10_000 },
-    { label: '6月', accountDelta: 82_600, pnl: 52_000 },
-    { label: '7月', accountDelta: 42_000, pnl: 33_000 },
-    { label: '8月', accountDelta: 6_000, pnl: 12_000 },
-    { label: '9月', accountDelta: 2_000, pnl: 20_200 },
-  ]
+type WaterfallPoint = {
+  label: string
+  range: [number, number]
+  delta: number
+  kind: 'total' | 'step'
 }
 
-export function StatsScreen() {
+function toDateKey(d: Date) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function formatDelta(value: number) {
+  const abs = Math.abs(value)
+  const text = formatCny(abs)
+  if (value > 0) return `+${text}`
+  if (value < 0) return `-${text}`
+  return text
+}
+
+export function StatsScreen(props: { snapshots: Snapshot[] }) {
+  const { snapshots } = props
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<StatsMode>('invest')
   const [range, setRange] = useState<RangeId>('6m')
 
   const chartRef = useRef<HTMLDivElement | null>(null)
@@ -48,19 +55,100 @@ export function StatsScreen() {
     return () => ro.disconnect()
   }, [open])
 
-  const data = useMemo(() => buildMockBars(), [])
+  const analysis = useMemo(() => {
+    const empty = {
+      start: null as Snapshot | null,
+      end: null as Snapshot | null,
+      points: [] as WaterfallPoint[],
+      netDelta: 0,
+      selectedCount: 0,
+    }
 
-  const totals = useMemo(() => {
-    const accountDeltaTotal = data.reduce((s, d) => s + d.accountDelta, 0)
-    const pnlTotal = data.reduce((s, d) => s + d.pnl, 0)
-    return { accountDeltaTotal, pnlTotal }
-  }, [data])
+    if (!snapshots || snapshots.length < 2) return empty
+
+    const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
+
+    const cutoff = new Date()
+    if (range === '5w') cutoff.setDate(cutoff.getDate() - 35)
+    if (range === '6m') cutoff.setMonth(cutoff.getMonth() - 6)
+    if (range === '1y') cutoff.setFullYear(cutoff.getFullYear() - 1)
+    if (range === '4y') cutoff.setFullYear(cutoff.getFullYear() - 4)
+
+    const cutoffKey = toDateKey(cutoff)
+    let selected = sorted.filter((s) => s.date >= cutoffKey)
+    if (selected.length < 2) selected = sorted
+
+    const start = selected[0]
+    const end = selected[selected.length - 1]
+
+    const deltaCash = end.cash - start.cash
+    const deltaInvest = end.invest - start.invest
+    const deltaFixed = end.fixed - start.fixed
+    const deltaReceivable = end.receivable - start.receivable
+    const deltaDebt = end.debt - start.debt
+    const debtContribution = -deltaDebt
+
+    const points: WaterfallPoint[] = []
+    const startTotal = start.net
+    const endTotal = end.net
+
+    points.push({
+      label: '起始',
+      range: [Math.min(0, startTotal), Math.max(0, startTotal)],
+      delta: startTotal,
+      kind: 'total',
+    })
+
+    let running = startTotal
+    const pushStep = (label: string, delta: number) => {
+      const next = running + delta
+      points.push({
+        label,
+        range: [Math.min(running, next), Math.max(running, next)],
+        delta,
+        kind: 'step',
+      })
+      running = next
+    }
+
+    pushStep('流动资金', deltaCash)
+    pushStep('投资', deltaInvest)
+    pushStep('固定资产', deltaFixed)
+    pushStep('应收款', deltaReceivable)
+    pushStep('负债', debtContribution)
+
+    points.push({
+      label: '期末',
+      range: [Math.min(0, endTotal), Math.max(0, endTotal)],
+      delta: endTotal,
+      kind: 'total',
+    })
+
+    return {
+      start,
+      end,
+      points,
+      netDelta: endTotal - startTotal,
+      selectedCount: selected.length,
+    }
+  }, [range, snapshots])
+
+  const liquidity = useMemo(() => {
+    if (!analysis.end) return null
+    const end = analysis.end
+    const assets = end.cash + end.invest + end.fixed + end.receivable
+    const debt = end.debt
+    const debtRatio = assets > 0 ? debt / assets : 0
+    const liquidRatio = assets > 0 ? end.cash / assets : 0
+    const netLiquid = end.cash - debt
+    return { assets, debt, debtRatio, liquidRatio, netLiquid }
+  }, [analysis.end])
 
   const tooltip = (props: unknown) => {
     const active = Boolean((props as { active?: boolean } | null)?.active)
     const payload = (props as { payload?: readonly unknown[] } | null)?.payload
     if (!active || !payload || payload.length === 0) return null
-    const p = (payload[0] as { payload?: BarPoint } | undefined)?.payload
+    const p = (payload[0] as { payload?: WaterfallPoint } | undefined)?.payload
     if (!p) return null
     return (
       <div
@@ -74,14 +162,17 @@ export function StatsScreen() {
         }}
       >
         <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.label}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-           <div style={{ width: 8, height: 8, borderRadius: '50%', background: mode === 'invest' ? 'var(--primary)' : '#47d16a' }} />
-           <div style={{ fontWeight: 900, fontSize: 14 }}>账户变动 {formatCny(p.accountDelta)}</div>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
-           <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>持仓盈亏 {formatCny(p.pnl)}</div>
-        </div>
+        {p.kind === 'total' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
+            <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.delta)}</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.delta >= 0 ? '#47d16a' : '#ff6b57' }} />
+            <div style={{ fontWeight: 900, fontSize: 14 }}>变动 {formatDelta(p.delta)}</div>
+          </div>
+        )}
       </div>
     )
   }
@@ -92,9 +183,9 @@ export function StatsScreen() {
         <div className="cardInner">
           <div className="row">
             <div>
-              <div style={{ fontWeight: 950, fontSize: 16 }}>投资损益</div>
+              <div style={{ fontWeight: 950, fontSize: 16 }}>净资产分析</div>
               <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
-                科学打理，随时调整投资策略
+                看清楚净资产变化来自哪里
               </div>
             </div>
             <button type="button" className="iconBtn iconBtnPrimary" style={{ pointerEvents: 'none' }}>
@@ -104,26 +195,51 @@ export function StatsScreen() {
         </div>
       </div>
 
-      <BottomSheet open={open} title="收支统计" onClose={() => setOpen(false)}>
+      <BottomSheet open={open} title="净资产统计" onClose={() => setOpen(false)}>
         <div className="animate-[fadeIn_0.4s_ease-out]">
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <SegmentedControl
-                options={[
-                  { value: 'invest', label: '投资变动' },
-                  { value: 'cash', label: '流动资金' },
-                ]}
-                value={mode}
-                onChange={setMode}
-              />
+            <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
+              {analysis.start && analysis.end ? (
+                <>
+                  {analysis.start.date} 至 {analysis.end.date} · 净资产变化{' '}
+                  <span style={{ color: 'var(--text)' }}>{formatDelta(analysis.netDelta)}</span>
+                </>
+              ) : (
+                <>暂无足够快照数据</>
+              )}
             </div>
 
-            <div className="muted" style={{ marginTop: 16, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
-              2025年4月至9月 · 账户变动合计 <span style={{ color: 'var(--text)' }}>{formatCny(totals.accountDeltaTotal)}</span>，持仓盈利 <span style={{ color: 'var(--text)' }}>{formatCny(totals.pnlTotal)}</span>
-            </div>
+            {liquidity ? (
+              <div
+                className="card"
+                style={{ marginTop: 16, background: 'rgba(255, 255, 255, 0.7)' }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性指标</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>负债率</div>
+                      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4 }}>{Math.round(liquidity.debtRatio * 100)}%</div>
+                    </div>
+                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>流动性占比</div>
+                      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4 }}>{Math.round(liquidity.liquidRatio * 100)}%</div>
+                    </div>
+                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>净资产</div>
+                      <div style={{ fontSize: 14, fontWeight: 950, marginTop: 4 }}>{formatCny(analysis.end?.net ?? 0)}</div>
+                    </div>
+                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>净流动资产</div>
+                      <div style={{ fontSize: 14, fontWeight: 950, marginTop: 4 }}>{formatCny(liquidity.netLiquid)}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div ref={chartRef} style={{ height: 240, marginTop: 16 }} className="animate-[scaleIn_0.5s_var(--ease-spring)]">
-              {chartWidth > 0 ? (
-                <BarChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+              {chartWidth > 0 && analysis.points.length > 0 ? (
+                <BarChart width={chartWidth} height={240} data={analysis.points} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
                   <XAxis 
                     dataKey="label" 
                     tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }} 
@@ -143,21 +259,23 @@ export function StatsScreen() {
                     cursor={{ fill: 'rgba(11, 15, 26, 0.03)', radius: 8 }}
                   />
                   <Bar 
-                    dataKey="accountDelta" 
-                    fill={mode === 'invest' ? 'var(--primary)' : '#47d16a'} 
+                    dataKey="range" 
+                    fill="rgba(11, 15, 26, 0.12)" 
                     radius={[6, 6, 6, 6]} 
                     barSize={20}
                     animationDuration={1000}
-                  />
-                  <Bar 
-                    dataKey="pnl" 
-                    fill="rgba(11, 15, 26, 0.15)" 
-                    radius={[6, 6, 6, 6]} 
-                    barSize={20}
-                    animationDuration={1000}
-                  />
+                  >
+                    {analysis.points.map((p, i) => {
+                      const fill = p.kind === 'total' ? 'rgba(11, 15, 26, 0.18)' : p.delta >= 0 ? '#47d16a' : '#ff6b57'
+                      return <Cell key={`${p.label}-${i}`} fill={fill} />
+                    })}
+                  </Bar>
                 </BarChart>
-              ) : null}
+              ) : (
+                <div className="muted" style={{ textAlign: 'center', paddingTop: 90, fontSize: 13, fontWeight: 800 }}>
+                  暂无足够快照数据
+                </div>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
