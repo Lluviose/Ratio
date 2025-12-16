@@ -24,7 +24,7 @@ export function AssetsRatioPage({ grouped }: { grouped: GroupedAccounts }) {
   }, [grouped])
 
   return (
-    <div className="h-full flex flex-col p-6 pt-10 relative overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div className="h-full flex flex-col p-6 pt-10 relative overflow-hidden" style={{ background: 'var(--bg)', overflowY: 'hidden' }}>
 
       <div className="flex-1 relative min-h-0 flex items-end pb-4">
         <div className="w-full h-full max-h-[460px] flex gap-2">
