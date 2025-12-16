@@ -1,5 +1,6 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, Pencil, Plus, Save } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import { formatCny } from '../lib/format'
@@ -96,7 +97,7 @@ export function AccountDetailSheet(props: {
     setTransferDirection('out')
     setTransferPeerId('')
     setTransferAmount('')
-  }, [account?.balance, account?.name, initialAction, open])
+  }, [account, initialAction, open])
 
   const selectablePeers = useMemo(() => {
     if (!accountId) return []
@@ -246,7 +247,13 @@ export function AccountDetailSheet(props: {
 
   return (
     <BottomSheet open={open} title={account.name} onClose={onClose}>
-      <div className="stack animate-[fadeIn_0.4s_ease-out]" style={{ gap: 16 }}>
+      <motion.div 
+        className="stack" 
+        style={{ gap: 16 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
           <div>
             <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>当前余额</div>
@@ -256,126 +263,159 @@ export function AccountDetailSheet(props: {
         </div>
 
         <div style={{ display: 'flex', gap: 10 }}>
-          <button type="button" style={actionBtnStyle} onClick={() => setAction('rename')}>
-            <Pencil size={16} strokeWidth={2.6} />
-            重命名
-          </button>
-          <button type="button" style={actionBtnStyle} onClick={() => setAction('set_balance')}>
-            <Save size={16} strokeWidth={2.6} />
-            改余额
-          </button>
-          <button type="button" style={actionBtnStyle} onClick={() => setAction('adjust')}>
-            <Plus size={16} strokeWidth={2.6} />
-            增减
-          </button>
-          <button type="button" style={actionBtnStyle} onClick={() => setAction('transfer')}>
-            <ArrowLeftRight size={16} strokeWidth={2.6} />
-            转账
-          </button>
+          {[
+            { id: 'rename', icon: Pencil, label: '重命名' },
+            { id: 'set_balance', icon: Save, label: '改余额' },
+            { id: 'adjust', icon: Plus, label: '增减' },
+            { id: 'transfer', icon: ArrowLeftRight, label: '转账' },
+          ].map((item) => (
+            <motion.button 
+              key={item.id}
+              type="button" 
+              style={actionBtnStyle} 
+              onClick={() => setAction(item.id as ActionId)}
+              whileTap={{ scale: 0.95 }}
+              whileHover={{ scale: 1.02, backgroundColor: 'var(--bg)' }}
+              animate={action === item.id ? { borderColor: 'var(--primary)', color: 'var(--primary)', backgroundColor: 'rgba(91, 107, 255, 0.05)' } : {}}
+            >
+              <item.icon size={16} strokeWidth={2.6} />
+              {item.label}
+            </motion.button>
+          ))}
         </div>
 
-        {action === 'rename' ? (
-          <div className="stack" style={{ gap: 12 }}>
-            <label className="field">
-              <div className="fieldLabel">账户名称</div>
-              <input className="input" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
-            </label>
-            <button type="button" className="primaryBtn" onClick={submitRename}>
-              保存
-            </button>
-          </div>
-        ) : null}
+        <AnimatePresence mode="wait">
+          {action === 'rename' ? (
+            <motion.div 
+              key="rename"
+              className="stack" 
+              style={{ gap: 12 }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <label className="field">
+                <div className="fieldLabel">账户名称</div>
+                <input className="input" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
+              </label>
+              <motion.button type="button" className="primaryBtn" onClick={submitRename} whileTap={{ scale: 0.98 }}>
+                保存
+              </motion.button>
+            </motion.div>
+          ) : null}
 
-        {action === 'set_balance' ? (
-          <div className="stack" style={{ gap: 12 }}>
-            <label className="field">
-              <div className="fieldLabel">修改余额</div>
-              <input className="input" inputMode="decimal" value={balanceValue} onChange={(e) => setBalanceValue(e.target.value)} autoFocus />
-            </label>
-            <button type="button" className="primaryBtn" onClick={submitSetBalance}>
-              保存
-            </button>
-          </div>
-        ) : null}
+          {action === 'set_balance' ? (
+            <motion.div 
+              key="set_balance"
+              className="stack" 
+              style={{ gap: 12 }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <label className="field">
+                <div className="fieldLabel">修改余额</div>
+                <input className="input" inputMode="decimal" value={balanceValue} onChange={(e) => setBalanceValue(e.target.value)} autoFocus />
+              </label>
+              <motion.button type="button" className="primaryBtn" onClick={submitSetBalance} whileTap={{ scale: 0.98 }}>
+                保存
+              </motion.button>
+            </motion.div>
+          ) : null}
 
-        {action === 'adjust' ? (
-          <div className="stack" style={{ gap: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <SegmentedControl
-                options={[
-                  { value: 'plus', label: '增加' },
-                  { value: 'minus', label: '减少' },
-                ]}
-                value={adjustDirection}
-                onChange={(v) => setAdjustDirection(v as AdjustDirection)}
-              />
-            </div>
-            <label className="field">
-              <div className="fieldLabel">金额</div>
-              <div className="relative">
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={adjustAmount}
-                  onChange={(e) => setAdjustAmount(e.target.value)}
-                  style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
-                  autoFocus
+          {action === 'adjust' ? (
+            <motion.div 
+              key="adjust"
+              className="stack" 
+              style={{ gap: 12 }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <SegmentedControl
+                  options={[
+                    { value: 'plus', label: '增加' },
+                    { value: 'minus', label: '减少' },
+                  ]}
+                  value={adjustDirection}
+                  onChange={(v) => setAdjustDirection(v as AdjustDirection)}
                 />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
               </div>
-            </label>
-            <button type="button" className="primaryBtn" onClick={submitAdjust}>
-              保存
-            </button>
-          </div>
-        ) : null}
+              <label className="field">
+                <div className="fieldLabel">金额</div>
+                <div className="relative">
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
+                    autoFocus
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
+                </div>
+              </label>
+              <motion.button type="button" className="primaryBtn" onClick={submitAdjust} whileTap={{ scale: 0.98 }}>
+                保存
+              </motion.button>
+            </motion.div>
+          ) : null}
 
-        {action === 'transfer' ? (
-          <div className="stack" style={{ gap: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <SegmentedControl
-                options={[
-                  { value: 'out', label: '转出' },
-                  { value: 'in', label: '转入' },
-                ]}
-                value={transferDirection}
-                onChange={(v) => setTransferDirection(v as TransferDirection)}
-              />
-            </div>
-
-            <label className="field">
-              <div className="fieldLabel">对方账户</div>
-              <select className="select" value={transferPeerId} onChange={(e) => setTransferPeerId(e.target.value)}>
-                <option value="">请选择</option>
-                {selectablePeers.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="field">
-              <div className="fieldLabel">金额</div>
-              <div className="relative">
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={transferAmount}
-                  onChange={(e) => setTransferAmount(e.target.value)}
-                  style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
+          {action === 'transfer' ? (
+            <motion.div 
+              key="transfer"
+              className="stack" 
+              style={{ gap: 12 }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'center' }}>
+                <SegmentedControl
+                  options={[
+                    { value: 'out', label: '转出' },
+                    { value: 'in', label: '转入' },
+                  ]}
+                  value={transferDirection}
+                  onChange={(v) => setTransferDirection(v as TransferDirection)}
                 />
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
               </div>
-            </label>
 
-            <button type="button" className="primaryBtn" onClick={submitTransfer}>
-              保存
-            </button>
-          </div>
-        ) : null}
+              <label className="field">
+                <div className="fieldLabel">对方账户</div>
+                <select className="select" value={transferPeerId} onChange={(e) => setTransferPeerId(e.target.value)}>
+                  <option value="">请选择</option>
+                  {selectablePeers.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <div className="fieldLabel">金额</div>
+                <div className="relative">
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
+                </div>
+              </label>
+
+              <motion.button type="button" className="primaryBtn" onClick={submitTransfer} whileTap={{ scale: 0.98 }}>
+                保存
+              </motion.button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div style={{ height: 1, background: 'var(--hairline)', margin: '6px 0' }} />
 
@@ -387,7 +427,7 @@ export function AccountDetailSheet(props: {
           </div>
         ) : (
           <div className="stack" style={{ gap: 10 }}>
-            {relatedOps.map((op) => {
+            {relatedOps.map((op, i) => {
               let title = ''
               let delta = 0
               let after = account.balance
@@ -425,8 +465,11 @@ export function AccountDetailSheet(props: {
               }
 
               return (
-                <div
+                <motion.div
                   key={op.id}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
                   style={{
                     border: '1px solid var(--hairline)',
                     borderRadius: 18,
@@ -456,16 +499,16 @@ export function AccountDetailSheet(props: {
                       余额 {formatCny(after)}
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )
             })}
           </div>
         )}
 
-        <button type="button" className="ghostBtn" onClick={onClose}>
+        <motion.button type="button" className="ghostBtn" onClick={onClose} whileTap={{ scale: 0.98 }}>
           关闭
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
     </BottomSheet>
   )
 }

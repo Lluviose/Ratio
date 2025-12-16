@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { type ReactNode, useEffect } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export function BottomSheet(props: {
   open: boolean
@@ -18,20 +19,43 @@ export function BottomSheet(props: {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [onClose, open])
 
-  if (!open) return null
-
   return (
-    <div className="sheetOverlay" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="handle" />
-        <div className="sheetHeader">
-          <div className="sheetTitle">{title}</div>
-          <button type="button" className="iconBtn" onClick={onClose} aria-label="close">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="sheetBody">{children}</div>
-      </div>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="sheetOverlay"
+          role="dialog"
+          aria-modal="true"
+          onClick={onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <motion.div
+            className="sheet"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+          >
+            <div className="handle" />
+            <div className="sheetHeader">
+              <div className="sheetTitle">{title}</div>
+              <button
+                type="button"
+                className="iconBtn hover:bg-[var(--hairline)] transition-colors"
+                onClick={onClose}
+                aria-label="close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="sheetBody">{children}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }

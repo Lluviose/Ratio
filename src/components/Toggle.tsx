@@ -1,4 +1,5 @@
 import clsx from 'clsx'
+import { motion } from 'framer-motion'
 
 export function Toggle(props: { checked: boolean; onChange: (checked: boolean) => void }) {
   const { checked, onChange } = props
@@ -9,7 +10,11 @@ export function Toggle(props: { checked: boolean; onChange: (checked: boolean) =
       onClick={() => onChange(!checked)}
       aria-pressed={checked}
     >
-      <span className="toggleKnob" />
+      <motion.span 
+        className="toggleKnob" 
+        layout
+        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+      />
     </button>
   )
 }

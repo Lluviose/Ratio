@@ -1,4 +1,5 @@
 import { Landmark, Plus, X } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 
 export function QuickAddSheet(props: {
@@ -10,10 +11,18 @@ export function QuickAddSheet(props: {
 
   return (
     <BottomSheet open={open} title="快速添加" onClose={onClose}>
-      <div className="stack animate-[fadeIn_0.4s_ease-out]" style={{ gap: 16 }}>
-        <button
+      <motion.div 
+        className="stack" 
+        style={{ gap: 16 }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <motion.button
           type="button"
-          className="actionRow transition-transform active:scale-[0.98] hover:bg-[var(--bg)]"
+          className="actionRow"
+          whileTap={{ scale: 0.98 }}
+          whileHover={{ backgroundColor: 'var(--bg)' }}
           onClick={() => {
             onAddAccount()
             onClose()
@@ -27,15 +36,20 @@ export function QuickAddSheet(props: {
             <span className="actionSub">现金、银行卡、股票、房产等</span>
           </span>
           <Plus size={20} opacity={0.4} />
-        </button>
+        </motion.button>
 
         <div style={{ height: 8 }} />
 
-        <button type="button" className="ghostBtn active:scale-[0.98]" onClick={onClose}>
+        <motion.button 
+          type="button" 
+          className="ghostBtn" 
+          whileTap={{ scale: 0.98 }}
+          onClick={onClose}
+        >
           <X size={18} strokeWidth={2.5} />
           取消
-        </button>
-      </div>
+        </motion.button>
+      </motion.div>
     </BottomSheet>
   )
 }

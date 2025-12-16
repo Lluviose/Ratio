@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
+import { motion } from 'framer-motion'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
@@ -179,7 +180,12 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
 
   return (
     <div className="stack">
-      <div className="card transition-transform active:scale-[0.98] cursor-pointer hover:shadow-lg" onClick={() => setOpen(true)}>
+      <motion.div 
+        className="card cursor-pointer" 
+        onClick={() => setOpen(true)}
+        whileHover={{ scale: 1.02, boxShadow: 'var(--shadow-hover)' }}
+        whileTap={{ scale: 0.98 }}
+      >
         <div className="cardInner">
           <div className="row">
             <div>
@@ -193,10 +199,14 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <BottomSheet open={open} title="净资产统计" onClose={() => setOpen(false)}>
-        <div className="animate-[fadeIn_0.4s_ease-out]">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
             <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
               {analysis.start && analysis.end ? (
                 <>
@@ -209,9 +219,12 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
             </div>
 
             {liquidity ? (
-              <div
+              <motion.div
                 className="card"
                 style={{ marginTop: 16, background: 'rgba(255, 255, 255, 0.7)' }}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 }}
               >
                 <div className="cardInner">
                   <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性指标</div>
@@ -234,10 +247,16 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ) : null}
 
-            <div ref={chartRef} style={{ height: 240, marginTop: 16 }} className="animate-[scaleIn_0.5s_var(--ease-spring)]">
+            <motion.div 
+              ref={chartRef} 
+              style={{ height: 240, marginTop: 16 }} 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
+            >
               {chartWidth > 0 && analysis.points.length > 0 ? (
                 <BarChart width={chartWidth} height={240} data={analysis.points} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
                   <XAxis 
@@ -276,7 +295,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
                   暂无足够快照数据
                 </div>
               )}
-            </div>
+            </motion.div>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
               <PillTabs
@@ -296,7 +315,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
                 这里可以接入更长周期统计
               </div>
             ) : null}
-        </div>
+        </motion.div>
       </BottomSheet>
     </div>
   )

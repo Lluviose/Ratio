@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
 
 export function AddAccountScreen(props: {
@@ -45,27 +46,36 @@ export function AddAccountScreen(props: {
     </div>
   )
 
-  const renderGroup = (groupId: AccountGroupId) => {
+  const renderGroup = (groupId: AccountGroupId, index: number) => {
     const group = accountGroups[groupId]
     const items = grouped[groupId]
     const iconColor = iconColors[groupId]
     const iconBg = iconBgColors[groupId]
 
     return (
-      <div key={groupId} className="animate-[slideUp_0.5s_ease-out_backwards]">
+      <motion.div 
+        key={groupId} 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.1 }}
+      >
         {header(group.name, group.tone)}
         <div className="flex flex-col mt-3 gap-2">
-          {items.map((t) => {
+          {items.map((t, i) => {
             const Icon = t.icon
             return (
-              <button 
+              <motion.button 
                 key={t.id} 
                 type="button" 
-                className="flex items-center gap-4 px-4 py-4 bg-[var(--card)] hover:bg-[var(--bg)] transition-all active:scale-[0.99] rounded-2xl shadow-sm border border-[var(--hairline)]"
+                className="flex items-center gap-4 px-4 py-4 bg-[var(--card)] hover:bg-[var(--bg)] transition-colors rounded-2xl shadow-sm border border-[var(--hairline)]"
                 onClick={() => {
                   setSelectedType(t.id)
                   setCustomName('')
                 }}
+                whileTap={{ scale: 0.98 }}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 + i * 0.05 }}
               >
                 <span 
                   className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
@@ -77,25 +87,27 @@ export function AddAccountScreen(props: {
                 <span className="w-8 h-8 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]">
                    <ChevronRight size={16} strokeWidth={3} />
                 </span>
-              </button>
+              </motion.button>
             )
           })}
         </div>
-      </div>
+      </motion.div>
     )
   }
 
   return (
     <div className="h-full overflow-auto bg-[var(--bg)]">
       <div className="sticky top-0 z-10 bg-[var(--bg)]/90 backdrop-blur-md border-b border-[var(--hairline)] px-4 py-3 flex items-center justify-between">
-          <button 
+          <motion.button 
             type="button" 
-            className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] active:scale-90 transition-transform shadow-sm"
+            className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
             onClick={onBack} 
             aria-label="back"
+            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.05 }}
           >
             <ChevronLeft size={20} strokeWidth={2.5} />
-          </button>
+          </motion.button>
           <div className="text-lg font-black text-[var(--text)] tracking-tight">
             添加账户
           </div>
@@ -103,59 +115,73 @@ export function AddAccountScreen(props: {
       </div>
 
       <div className="px-4 py-6 flex flex-col gap-6">
-        {renderGroup('liquid')}
-        {renderGroup('invest')}
-        {renderGroup('fixed')}
-        {renderGroup('receivable')}
-        {renderGroup('debt')}
+        {renderGroup('liquid', 0)}
+        {renderGroup('invest', 1)}
+        {renderGroup('fixed', 2)}
+        {renderGroup('receivable', 3)}
+        {renderGroup('debt', 4)}
       </div>
 
-      {selectedType && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 animate-[fadeIn_0.2s_ease-out]">
-          <div 
-            className="w-full max-w-md bg-[var(--card)] rounded-t-[28px] p-6 pb-8 animate-[slideUp_0.3s_ease-out]"
-            onClick={(e) => e.stopPropagation()}
+      <AnimatePresence>
+        {selectedType && (
+          <motion.div 
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedType(null)}
           >
-            <div className="text-center mb-6">
-              <div className="text-lg font-black text-[var(--text)]">
-                为"{defaultAccountName(selectedType)}"命名
+            <motion.div 
+              className="w-full max-w-md bg-[var(--card)] rounded-t-[28px] p-6 pb-8"
+              onClick={(e) => e.stopPropagation()}
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            >
+              <div className="text-center mb-6">
+                <div className="text-lg font-black text-[var(--text)]">
+                  为"{defaultAccountName(selectedType)}"命名
+                </div>
+                <div className="text-sm text-[var(--muted-text)] mt-1">
+                  输入自定义名称，如：交通银行、支付宝等
+                </div>
               </div>
-              <div className="text-sm text-[var(--muted-text)] mt-1">
-                输入自定义名称，如：交通银行、支付宝等
+              
+              <input
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder={defaultAccountName(selectedType)}
+                className="w-full px-4 py-4 rounded-2xl bg-[var(--bg)] border border-[var(--hairline)] text-[var(--text)] font-bold text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                autoFocus
+              />
+              
+              <div className="flex gap-3 mt-6">
+                <motion.button
+                  type="button"
+                  className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-black"
+                  onClick={() => setSelectedType(null)}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  取消
+                </motion.button>
+                <motion.button
+                  type="button"
+                  className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-black flex items-center justify-center gap-2"
+                  onClick={() => {
+                    onPick(selectedType, customName)
+                  }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <Check size={18} strokeWidth={3} />
+                  确认
+                </motion.button>
               </div>
-            </div>
-            
-            <input
-              type="text"
-              value={customName}
-              onChange={(e) => setCustomName(e.target.value)}
-              placeholder={defaultAccountName(selectedType)}
-              className="w-full px-4 py-4 rounded-2xl bg-[var(--bg)] border border-[var(--hairline)] text-[var(--text)] font-bold text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-              autoFocus
-            />
-            
-            <div className="flex gap-3 mt-6">
-              <button
-                type="button"
-                className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-black transition-all active:scale-[0.98]"
-                onClick={() => setSelectedType(null)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-black flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
-                onClick={() => {
-                  onPick(selectedType, customName)
-                }}
-              >
-                <Check size={18} strokeWidth={3} />
-                确认
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import clsx from 'clsx'
 import { X } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 type Slide = {
   id: string
@@ -14,7 +15,7 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
   const { kind, accent } = props
 
   return (
-    <div
+    <motion.div
       style={{
         width: 'min(320px, 92%)',
         margin: '0 auto',
@@ -23,6 +24,9 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
         background: '#111827',
         boxShadow: '0 20px 50px rgba(11, 15, 26, 0.25)',
       }}
+      initial={{ y: 50, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: 'spring', damping: 25, stiffness: 120, delay: 0.2 }}
     >
       <div
         style={{
@@ -45,15 +49,12 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
             <div style={{ fontWeight: 950, fontSize: 12, opacity: 0.7 }}>我的净资产 (CNY)</div>
             <div style={{ fontWeight: 950, fontSize: 26, marginTop: 6 }}>1,472,200</div>
             <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
-              {[
-                { label: '流动资金', value: '574,000', color: '#47d16a' },
-                { label: '投资', value: '338,200', color: accent },
-                { label: '固定资产', value: '1,520,000', color: '#6b86ff' },
-                { label: '应收款', value: '120,000', color: '#a4b5ff' },
-                { label: '负债', value: '1,080,000', color: '#cbd5e1' },
-              ].map((r) => (
-                <div
+              {[{ label: '流动资金', value: '574,000', color: '#47d16a' }, { label: '投资', value: '338,200', color: accent }, { label: '固定资产', value: '1,520,000', color: '#6b86ff' }, { label: '应收款', value: '120,000', color: '#a4b5ff' }, { label: '负债', value: '1,080,000', color: '#cbd5e1' }].map((r, i) => (
+                <motion.div
                   key={r.label}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + i * 0.05 }}
                   style={{
                     borderRadius: 16,
                     border: '1px solid rgba(11, 15, 26, 0.06)',
@@ -70,7 +71,7 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
                     <span style={{ fontWeight: 900, fontSize: 12 }}>{r.label}</span>
                   </div>
                   <span style={{ fontWeight: 950, fontSize: 12 }}>{r.value}</span>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>
@@ -128,11 +129,14 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
                   }}
                 />
                 <svg width="100%" height="100%" viewBox="0 0 320 150" style={{ position: 'relative' }}>
-                  <path
+                  <motion.path
                     d="M10 120 L60 90 L120 95 L170 70 L220 60 L280 30 L310 34"
                     fill="none"
                     stroke={accent}
                     strokeWidth="3"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 1.5, ease: "easeInOut", delay: 0.5 }}
                   />
                   <path
                     d="M10 110 L60 102 L120 98 L170 96 L220 90 L280 88 L310 86"
@@ -278,8 +282,11 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
           <div style={{ padding: 14 }}>
             <div style={{ display: 'grid', gap: 12 }}>
               {['Matisse', 'Matisse 2', 'Macke', 'Mondrian', 'Kandinsky', 'Miro'].map((t, idx) => (
-                <div
+                <motion.div
                   key={t}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.4 + idx * 0.05 }}
                   style={{
                     borderRadius: 16,
                     border: '1px solid rgba(11, 15, 26, 0.06)',
@@ -330,7 +337,7 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
                           }
                     }
                   />
-                </div>
+                </motion.div>
               ))}
             </div>
 
@@ -355,7 +362,7 @@ function PhoneMock(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent:
           </div>
         ) : null}
       </div>
-    </div>
+    </motion.div>
   )
 }
 
@@ -411,21 +418,49 @@ export function TourScreen(props: { onClose: () => void }) {
   return (
     <div style={{ height: '100%', background: slide.bg, position: 'relative', transition: 'background 0.5s ease' }}>
       <div style={{ padding: '18px 16px 12px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="button" className="iconBtn hover:scale-110 active:scale-95 transition-transform" aria-label="close" onClick={onClose} style={{ background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(10px)', border: 'none' }}>
+        <motion.button
+          type="button"
+          className="iconBtn"
+          aria-label="close"
+          onClick={onClose}
+          style={{ background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(10px)', border: 'none' }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+        >
           <X size={20} strokeWidth={2.5} />
-        </button>
+        </motion.button>
       </div>
 
-      <div style={{ padding: '10px 24px 0' }} className="animate-[slideUp_0.6s_ease-out]">
+      <div style={{ padding: '10px 24px 0' }}>
         <div style={{ fontSize: 32, fontWeight: 950, letterSpacing: '-0.02em', lineHeight: 1.15, color: '#0b0f1a' }}>
-          <div className="animate-[fadeIn_0.6s_ease-out_0.1s_backwards]">{slide.titleLines[0]}</div>
-          <div className="animate-[fadeIn_0.6s_ease-out_0.2s_backwards]">{slide.titleLines[1]}</div>
-          <div className="animate-[fadeIn_0.6s_ease-out_0.3s_backwards]">{slide.titleLines[2]}</div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={slide.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="animate-[fadeIn_0.6s_ease-out_0.1s_backwards]">{slide.titleLines[0]}</div>
+              <div className="animate-[fadeIn_0.6s_ease-out_0.2s_backwards]">{slide.titleLines[1]}</div>
+              <div className="animate-[fadeIn_0.6s_ease-out_0.3s_backwards]">{slide.titleLines[2]}</div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
 
-      <div style={{ marginTop: 32 }} className="animate-[scaleIn_0.8s_var(--ease-spring)_0.2s_backwards]">
-        <PhoneMock kind={phoneKind} accent={slide.accent === 'white' ? '#ffffff' : 'var(--primary)'} />
+      <div style={{ marginTop: 32 }}>
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={slide.id}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 1.1 }}
+            transition={{ duration: 0.4 }}
+          >
+            <PhoneMock kind={phoneKind} accent={slide.accent === 'white' ? '#ffffff' : 'var(--primary)'} />
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       <div
@@ -442,46 +477,50 @@ export function TourScreen(props: { onClose: () => void }) {
       >
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
           {slides.map((s, i) => (
-            <button
+            <motion.button
               key={s.id}
               type="button"
               aria-label={`dot-${i}`}
               onClick={() => setIndex(i)}
-              style={{
+              animate={{
                 width: i === index ? 24 : 8,
+                backgroundColor: i === index ? '#0b0f1a' : 'rgba(11,15,26,0.2)',
+              }}
+              style={{
                 height: 8,
                 borderRadius: 999,
                 border: 'none',
-                background: i === index ? '#0b0f1a' : 'rgba(11,15,26,0.2)',
                 cursor: 'pointer',
-                transition: 'all 0.4s var(--ease-spring)',
               }}
             />
           ))}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
-          <button
+          <motion.button
             type="button"
             className={clsx('ghostBtn', index === 0 && 'opacity-0 pointer-events-none')}
             onClick={() => setIndex((v) => Math.max(0, v - 1))}
             disabled={index === 0}
             style={{ width: 'auto', padding: '12px 20px', background: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
+            whileTap={{ scale: 0.95 }}
           >
             上一页
-          </button>
+          </motion.button>
 
-          <button
+          <motion.button
             type="button"
-            className="primaryBtn flex-1 shadow-lg hover:shadow-xl active:scale-[0.98] transition-all"
+            className="primaryBtn flex-1 shadow-lg"
             onClick={() => {
               if (index === slides.length - 1) onClose()
               else setIndex((v) => Math.min(slides.length - 1, v + 1))
             }}
             style={{ height: 48, fontSize: 15 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
             {index === slides.length - 1 ? '开始使用' : '下一页'}
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>

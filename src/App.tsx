@@ -1,5 +1,6 @@
 import { BarChart3, Palette, PieChart, TrendingUp, Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen.tsx'
 import { TourScreen } from './screens/TourScreen.tsx'
 import { SettingsScreen } from './screens/SettingsScreen.tsx'
@@ -59,123 +60,207 @@ export default function App() {
   return (
     <div className="appViewport">
       <div className="appFrame">
-        {!tourSeen ? (
-          <TourScreen onClose={() => setTourSeen(true)} />
-        ) : view === 'addAccount' ? (
-          <AddAccountScreen
-            onBack={() => setView('main')}
-            onPick={(type, customName) => {
-              const next = accounts.addAccount(type, customName)
-              setView('main')
-              setSelectedAccountId(next.id)
-              setDetailAction('set_balance')
-            }}
-          />
-        ) : (
-          <>
-            <div className="topBar">
-              <div className="topBarRow">
-                <div className="title animate-[fadeIn_0.4s_ease-out]">{title}</div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                  {tab === 'assets' ? (
-                    <button
-                      type="button"
-                      className="iconBtn iconBtnPrimary transition-transform active:scale-95 hover:scale-105"
-                      aria-label="add"
-                      onClick={() => setQuickAddOpen(true)}
+        <AnimatePresence mode="wait">
+          {!tourSeen ? (
+            <motion.div
+              key="tour"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 1.05 }}
+              transition={{ duration: 0.3 }}
+              style={{ height: '100%' }}
+            >
+              <TourScreen onClose={() => setTourSeen(true)} />
+            </motion.div>
+          ) : view === 'addAccount' ? (
+            <motion.div
+              key="addAccount"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%', zIndex: 10 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              style={{ height: '100%', position: 'absolute', inset: 0, background: 'var(--bg)', zIndex: 10 }}
+            >
+              <AddAccountScreen
+                onBack={() => setView('main')}
+                onPick={(type, customName) => {
+                  const next = accounts.addAccount(type, customName)
+                  setView('main')
+                  setSelectedAccountId(next.id)
+                  setDetailAction('set_balance')
+                }}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="main"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+            >
+              <div className="topBar">
+                <div className="topBarRow">
+                  <AnimatePresence mode="wait">
+                    <motion.div
+                      key={title}
+                      initial={{ y: 10, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: -10, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="title"
                     >
-                      <Plus size={22} strokeWidth={3} />
-                    </button>
-                  ) : null}
+                      {title}
+                    </motion.div>
+                  </AnimatePresence>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {tab === 'assets' ? (
+                      <motion.button
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0, opacity: 0 }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        type="button"
+                        className="iconBtn iconBtnPrimary"
+                        aria-label="add"
+                        onClick={() => setQuickAddOpen(true)}
+                      >
+                        <Plus size={22} strokeWidth={3} />
+                      </motion.button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="content">
-              {tab === 'assets' ? (
-                <AssetsScreen
-                  grouped={accounts.grouped}
-                  getIcon={accounts.getIcon}
-                  onEditAccount={(a: Account) => {
-                    setSelectedAccountId(a.id)
-                    setDetailAction('none')
-                  }}
-                />
-              ) : null}
-              {tab === 'trend' ? <TrendScreen snapshots={snapshots} /> : null}
-              {tab === 'stats' ? <StatsScreen snapshots={snapshots} /> : null}
-              {tab === 'settings' ? (
-                <SettingsScreen
-                  themeOptions={themeOptions}
-                  theme={theme}
-                  onThemeChange={setTheme}
-                  crossPlatformSync={crossPlatformSync}
-                  onCrossPlatformSyncChange={setCrossPlatformSync}
-                />
-              ) : null}
-            </div>
-
-            <QuickAddSheet
-              open={quickAddOpen}
-              onClose={() => setQuickAddOpen(false)}
-              onAddAccount={() => setView('addAccount')}
-            />
-
-            <AccountDetailSheet
-              open={Boolean(selectedAccountId)}
-              accountId={selectedAccountId}
-              accounts={accounts.accounts}
-              ops={accountOps.ops}
-              initialAction={detailAction}
-              onClose={() => {
-                setSelectedAccountId(null)
-                setDetailAction('none')
-              }}
-              onRename={accounts.renameAccount}
-              onSetBalance={accounts.updateBalance}
-              onAdjust={accounts.adjustBalance}
-              onTransfer={accounts.transfer}
-              onAddOp={accountOps.addOp}
-            />
-
-            <div className="navBar">
-              <div className="navBarGrid">
-                <button
-                  type="button"
-                  className={tab === 'assets' ? 'navItem navItemActive' : 'navItem'}
-                  onClick={() => setTab('assets')}
-                >
-                  <PieChart size={20} strokeWidth={tab === 'assets' ? 2.5 : 2} />
-                  <div className="navLabel">资产</div>
-                </button>
-                <button
-                  type="button"
-                  className={tab === 'trend' ? 'navItem navItemActive' : 'navItem'}
-                  onClick={() => setTab('trend')}
-                >
-                  <TrendingUp size={20} strokeWidth={tab === 'trend' ? 2.5 : 2} />
-                  <div className="navLabel">趋势</div>
-                </button>
-                <button
-                  type="button"
-                  className={tab === 'stats' ? 'navItem navItemActive' : 'navItem'}
-                  onClick={() => setTab('stats')}
-                >
-                  <BarChart3 size={20} strokeWidth={tab === 'stats' ? 2.5 : 2} />
-                  <div className="navLabel">统计</div>
-                </button>
-                <button
-                  type="button"
-                  className={tab === 'settings' ? 'navItem navItemActive' : 'navItem'}
-                  onClick={() => setTab('settings')}
-                >
-                  <Palette size={20} strokeWidth={tab === 'settings' ? 2.5 : 2} />
-                  <div className="navLabel">主题</div>
-                </button>
+              <div className="content relative">
+                <AnimatePresence mode="wait">
+                  {tab === 'assets' && (
+                    <motion.div
+                      key="assets"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 20 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ height: '100%' }}
+                    >
+                      <AssetsScreen
+                        grouped={accounts.grouped}
+                        getIcon={accounts.getIcon}
+                        onEditAccount={(a: Account) => {
+                          setSelectedAccountId(a.id)
+                          setDetailAction('none')
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                  {tab === 'trend' && (
+                    <motion.div
+                      key="trend"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ height: '100%' }}
+                    >
+                      <TrendScreen snapshots={snapshots} />
+                    </motion.div>
+                  )}
+                  {tab === 'stats' && (
+                    <motion.div
+                      key="stats"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ height: '100%' }}
+                    >
+                      <StatsScreen snapshots={snapshots} />
+                    </motion.div>
+                  )}
+                  {tab === 'settings' && (
+                    <motion.div
+                      key="settings"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}
+                      style={{ height: '100%' }}
+                    >
+                      <SettingsScreen
+                        themeOptions={themeOptions}
+                        theme={theme}
+                        onThemeChange={setTheme}
+                        crossPlatformSync={crossPlatformSync}
+                        onCrossPlatformSyncChange={setCrossPlatformSync}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            </div>
-          </>
-        )}
+
+              <QuickAddSheet
+                open={quickAddOpen}
+                onClose={() => setQuickAddOpen(false)}
+                onAddAccount={() => setView('addAccount')}
+              />
+
+              <AccountDetailSheet
+                open={Boolean(selectedAccountId)}
+                accountId={selectedAccountId}
+                accounts={accounts.accounts}
+                ops={accountOps.ops}
+                initialAction={detailAction}
+                onClose={() => {
+                  setSelectedAccountId(null)
+                  setDetailAction('none')
+                }}
+                onRename={accounts.renameAccount}
+                onSetBalance={accounts.updateBalance}
+                onAdjust={accounts.adjustBalance}
+                onTransfer={accounts.transfer}
+                onAddOp={accountOps.addOp}
+              />
+
+              <div className="navBar">
+                <div className="navBarGrid">
+                  {[
+                    { id: 'assets', icon: PieChart, label: '资产' },
+                    { id: 'trend', icon: TrendingUp, label: '趋势' },
+                    { id: 'stats', icon: BarChart3, label: '统计' },
+                    { id: 'settings', icon: Palette, label: '主题' },
+                  ].map((item) => {
+                    const isActive = tab === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={isActive ? 'navItem navItemActive' : 'navItem'}
+                        onClick={() => setTab(item.id as TabId)}
+                      >
+                        <motion.div
+                          animate={isActive ? { scale: 1.1, y: -2 } : { scale: 1, y: 0 }}
+                          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                        >
+                          <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+                        </motion.div>
+                        <div className="navLabel">{item.label}</div>
+                        {isActive && (
+                          <motion.div
+                            layoutId="navIndicator"
+                            className="absolute bottom-1 w-1 h-1 bg-primary rounded-full"
+                            style={{ backgroundColor: 'var(--primary)' }}
+                          />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )

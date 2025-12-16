@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { Toggle } from '../components/Toggle'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 
@@ -18,7 +19,12 @@ export function SettingsScreen(props: {
   } = props
 
   return (
-    <div className="stack animate-[fadeIn_0.4s_ease-out]">
+    <motion.div 
+      className="stack"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="card">
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>个性主题</div>
@@ -27,12 +33,12 @@ export function SettingsScreen(props: {
           </div>
 
           <div className="stack" style={{ marginTop: 16 }}>
-            {themeOptions.map((t) => {
+            {themeOptions.map((t, i) => {
               const active = t.id === theme
               return (
-                <div
+                <motion.div
                   key={t.id}
-                  className="themeRow transition-transform active:scale-[0.99]"
+                  className="themeRow"
                   onClick={() => onThemeChange(t.id)}
                   role="button"
                   tabIndex={0}
@@ -43,6 +49,10 @@ export function SettingsScreen(props: {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') onThemeChange(t.id)
                   }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  whileTap={{ scale: 0.99 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div className="swatches" aria-hidden="true">
@@ -56,14 +66,19 @@ export function SettingsScreen(props: {
                   <span className={active ? 'check checkOn' : 'check'} aria-label={active ? 'selected' : 'unselected'}>
                     {active ? <Check size={12} color="#fff" strokeWidth={4} /> : null}
                   </span>
-                </div>
+                </motion.div>
               )
             })}
           </div>
         </div>
       </div>
 
-      <div className="card">
+      <motion.div 
+        className="card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>数据同步</div>
           <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
@@ -80,7 +95,7 @@ export function SettingsScreen(props: {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }

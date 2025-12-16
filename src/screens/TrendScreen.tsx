@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
+import { motion } from 'framer-motion'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -274,7 +275,12 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
 
   return (
     <div className="stack">
-      <div className="card transition-transform active:scale-[0.98] cursor-pointer hover:shadow-lg" onClick={() => setOpen(true)}>
+      <motion.div 
+        className="card cursor-pointer" 
+        onClick={() => setOpen(true)}
+        whileHover={{ scale: 1.02, boxShadow: 'var(--shadow-hover)' }}
+        whileTap={{ scale: 0.98 }}
+      >
         <div className="cardInner">
           <div className="row">
             <div>
@@ -288,10 +294,14 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
             </button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       <BottomSheet open={open} title="趋势图" onClose={() => setOpen(false)}>
-        <div className="animate-[fadeIn_0.4s_ease-out]">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <SegmentedControl
                 options={[
@@ -303,7 +313,13 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
               />
             </div>
 
-            <div ref={chartRef} style={{ height: 240, marginTop: 24 }} className="animate-[scaleIn_0.5s_var(--ease-spring)]">
+            <motion.div 
+              ref={chartRef} 
+              style={{ height: 240, marginTop: 24 }} 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
+            >
               {chartWidth > 0 && data.length > 0 ? (
                 <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
                   <XAxis 
@@ -377,7 +393,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
                   暂无快照数据
                 </div>
               )}
-            </div>
+            </motion.div>
 
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
               <PillTabs
@@ -397,7 +413,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
                 这里可以接入自定义日期范围选择
               </div>
             ) : null}
-        </div>
+        </motion.div>
       </BottomSheet>
     </div>
   )
