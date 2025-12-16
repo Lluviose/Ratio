@@ -2,16 +2,16 @@ import { type ComponentType, useState } from 'react'
 import { Plus, Eye, ChevronDown, ChevronUp } from 'lucide-react'
 import { formatCny } from '../lib/format'
 import type { GroupedAccounts } from './AssetsScreen'
-import type { Account, AccountTypeId } from '../lib/accounts'
+import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { clsx } from 'clsx'
 
 export function AssetsListPage(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
-  onEditAccount: (account: Account) => void
   onAddAccount: () => void
+  onPickType: (type: AccountTypeId) => void
 }) {
-  const { grouped, getIcon, onEditAccount, onAddAccount } = props
+  const { grouped, getIcon, onAddAccount, onPickType } = props
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
 
   // Define colors for the side strip to match the image/theme
@@ -50,7 +50,7 @@ export function AssetsListPage(props: {
       <div className="flex flex-col gap-3 pb-8">
         {grouped.groupCards.filter((g) => g.accounts.length > 0).map((g, i) => {
           const color = groupColors[g.group.id] || '#cbd5e1'
-          const accountNames = g.accounts.map(a => a.name).join('、')
+          const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
           const updatedAt = g.accounts.length > 0 
             ? g.accounts.map(a => a.updatedAt).sort().at(-1)
             : undefined
@@ -64,6 +64,16 @@ export function AssetsListPage(props: {
 
           const isExpanded = expandedGroup === g.group.id
 
+          const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
+            .map((type) => {
+              const accounts = g.accounts.filter((a) => a.type === type)
+              const total = accounts.reduce((s, a) => s + a.balance, 0)
+              const updatedAt = accounts.map((a) => a.updatedAt).sort().at(-1)
+              const opt = getAccountTypeOption(type)
+              return { type, opt, accounts, total, updatedAt }
+            })
+            .sort((a, b) => b.total - a.total)
+
           return (
             <div 
               key={g.group.id} 
@@ -73,30 +83,33 @@ export function AssetsListPage(props: {
                  animation: `slideUp 0.5s ease-out ${i * 0.05}s backwards`
               }}
             >
-              <div 
-                className="absolute left-0 top-0 bottom-0 w-[6px]" 
-                style={{ background: color }}
-              />
-              <div className="pl-5 pr-4 py-4 flex flex-col gap-3">
+              {isExpanded ? (
+                <div 
+                  className="absolute left-0 top-0 bottom-0 w-[6px]" 
+                  style={{ background: color }}
+                />
+              ) : null}
+              <div className={isExpanded ? 'pl-5 pr-4 py-4 flex flex-col gap-3' : 'px-4 py-4 flex flex-col gap-3'}>
                 <div 
                   className="flex justify-between items-start cursor-pointer group"
                   onClick={() => toggleGroup(g.group.id)}
                 >
                    <div>
                       <div className="font-black text-[15px] text-[var(--text)] mb-1 flex items-center gap-2">
-                        {g.group.name}
-                        {g.accounts.length > 0 && (
-                          <span className="text-slate-300 group-hover:text-slate-500 transition-colors">
-                             {isExpanded ? <ChevronUp size={14} strokeWidth={3} /> : <ChevronDown size={14} strokeWidth={3} />}
-                          </span>
-                        )}
+                        <span style={isExpanded ? { color } : undefined}>{g.group.name}</span>
+                        <span className="text-slate-300 group-hover:text-slate-500 transition-colors">
+                          {isExpanded ? <ChevronUp size={14} strokeWidth={3} /> : <ChevronDown size={14} strokeWidth={3} />}
+                        </span>
                       </div>
                       <div className="text-xs font-bold text-slate-400 truncate max-w-[180px]">
-                        {accountNames || '点击展开添加账户'}
+                        {isExpanded ? '选择资产类别' : typeNames}
                       </div>
                    </div>
                    <div className="text-right">
-                      <div className="font-black text-[17px] text-[var(--text)] flex items-center justify-end gap-1">
+                      <div
+                        className="font-black text-[17px] text-[var(--text)] flex items-center justify-end gap-1"
+                        style={isExpanded ? { color } : undefined}
+                      >
                         {g.group.id === 'debt' && g.total > 0 && (
                           <span className="w-5 h-5 rounded-full border-2 border-slate-400 flex items-center justify-center text-xs font-black text-slate-500">−</span>
                         )}
@@ -112,22 +125,33 @@ export function AssetsListPage(props: {
                    "flex flex-col gap-2 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.33,1,0.68,1)]",
                    isExpanded ? "max-h-[500px] opacity-100 pt-3 border-t border-slate-50 mt-1" : "max-h-0 opacity-0"
                  )}>
-                   {g.accounts.map(account => {
-                     const Icon = getIcon(account.type)
+                   {typeCards.map((t) => {
+                     const Icon = getIcon(t.type)
                      return (
-                       <div 
-                          key={account.id} 
-                          className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors active:scale-[0.99]"
-                          onClick={() => onEditAccount(account)}
+                       <div
+                         key={t.type}
+                         className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl cursor-pointer transition-colors active:scale-[0.99]"
+                         onClick={() => onPickType(t.type)}
                        >
-                         <div className="flex items-center gap-3">
-                           <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200/50">
+                         <div className="flex items-center gap-3 min-w-0">
+                           <div
+                             className="w-9 h-9 rounded-2xl flex items-center justify-center shadow-sm border border-slate-200/50"
+                             style={{ background: color, color: 'rgba(0,0,0,0.75)' }}
+                           >
                              <Icon size={18} />
                            </div>
-                           <div className="font-bold text-sm text-slate-700">{account.name}</div>
+                           <div className="min-w-0">
+                             <div className="font-black text-sm truncate" style={{ color }}>
+                               {t.opt.name}
+                             </div>
+                             <div className="text-[10px] font-bold text-slate-300 mt-0.5">
+                               {t.updatedAt ? formatTime(t.updatedAt) : ''}
+                             </div>
+                           </div>
                          </div>
-                         <div className="font-black text-sm text-[var(--text)]">
-                           {formatCny(account.balance)}
+                         <div className="text-right">
+                           <div className="font-black text-sm text-[var(--text)]">{formatCny(t.total)}</div>
+                           <div className="text-[10px] font-bold text-slate-300 mt-0.5">{t.accounts.length} 个</div>
                          </div>
                        </div>
                      )
