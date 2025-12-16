@@ -1,0 +1,159 @@
+import { useMemo, useState } from 'react'
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { BottomSheet } from '../components/BottomSheet'
+import { PillTabs } from '../components/PillTabs'
+import { SegmentedControl } from '../components/SegmentedControl'
+import { formatCny } from '../lib/format'
+
+type TrendMode = 'netDebt' | 'cashInvest'
+
+type RangeId = '30d' | '6m' | '1y' | 'custom'
+
+type TrendPoint = {
+  date: string
+  net: number
+  debt: number
+  cash: number
+  invest: number
+}
+
+function buildMockTrend(): TrendPoint[] {
+  return [
+    { date: '2024/09', net: 520_000, debt: 900_000, cash: 180_000, invest: 320_000 },
+    { date: '2024/11', net: 810_000, debt: 910_000, cash: 220_000, invest: 420_000 },
+    { date: '2025/01', net: 860_000, debt: 980_000, cash: 260_000, invest: 450_000 },
+    { date: '2025/03', net: 960_000, debt: 1_000_000, cash: 280_000, invest: 520_000 },
+    { date: '2025/05', net: 1_020_000, debt: 1_000_000, cash: 310_000, invest: 560_000 },
+    { date: '2025/07', net: 1_236_600, debt: 1_005_000, cash: 330_000, invest: 640_000 },
+    { date: '2025/09', net: 1_310_000, debt: 1_010_000, cash: 350_000, invest: 700_000 },
+  ]
+}
+
+export function TrendScreen() {
+  const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<TrendMode>('netDebt')
+  const [range, setRange] = useState<RangeId>('1y')
+
+  const data = useMemo(() => buildMockTrend(), [])
+
+  const tooltip = (props: unknown) => {
+    const active = Boolean((props as { active?: boolean } | null)?.active)
+    const payload = (props as { payload?: readonly unknown[] } | null)?.payload
+    if (!active || !payload || payload.length === 0) return null
+    const p = (payload[0] as { payload?: TrendPoint } | undefined)?.payload
+    if (!p) return null
+
+    if (mode === 'netDebt') {
+      return (
+        <div
+          style={{
+            background: 'white',
+            border: '1px solid rgba(11, 15, 26, 0.10)',
+            padding: '10px 12px',
+            borderRadius: 14,
+            boxShadow: '0 10px 30px rgba(11, 15, 26, 0.12)',
+            minWidth: 180,
+          }}
+        >
+          <div style={{ fontWeight: 950, fontSize: 12 }}>{p.date}</div>
+          <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12 }}>我的净资产 {formatCny(p.net)}</div>
+          <div style={{ marginTop: 2, fontWeight: 900, fontSize: 12, opacity: 0.7 }}>负债 {formatCny(-p.debt)}</div>
+        </div>
+      )
+    }
+
+    return (
+      <div
+        style={{
+          background: 'white',
+          border: '1px solid rgba(11, 15, 26, 0.10)',
+          padding: '10px 12px',
+          borderRadius: 14,
+          boxShadow: '0 10px 30px rgba(11, 15, 26, 0.12)',
+          minWidth: 180,
+        }}
+      >
+        <div style={{ fontWeight: 950, fontSize: 12 }}>{p.date}</div>
+        <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12 }}>流动资金 {formatCny(p.cash)}</div>
+        <div style={{ marginTop: 2, fontWeight: 900, fontSize: 12, opacity: 0.7 }}>投资 {formatCny(p.invest)}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="stack">
+      <div className="card">
+        <div className="cardInner">
+          <div className="row">
+            <div>
+              <div style={{ fontWeight: 950, fontSize: 16 }}>观察趋势</div>
+              <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
+                关注积累，见证资产增长
+              </div>
+            </div>
+            <button type="button" className="iconBtn iconBtnPrimary" onClick={() => setOpen(true)}>
+              打开
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <BottomSheet open={open} title="趋势图" onClose={() => setOpen(false)}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <SegmentedControl
+            options={[
+              { value: 'netDebt', label: '净资产与负债' },
+              { value: 'cashInvest', label: '流动资金与投资' },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
+        </div>
+
+        <div style={{ height: 210, marginTop: 14 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="rgba(11, 15, 26, 0.25)" />
+              <YAxis
+                tick={{ fontSize: 11 }}
+                stroke="rgba(11, 15, 26, 0.25)"
+                tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
+              />
+              <Tooltip content={tooltip} />
+              {mode === 'netDebt' ? (
+                <>
+                  <Line type="monotone" dataKey="net" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="debt" stroke="rgba(11, 15, 26, 0.40)" strokeWidth={2} dot={false} />
+                </>
+              ) : (
+                <>
+                  <Line type="monotone" dataKey="cash" stroke="#47d16a" strokeWidth={2.5} dot={false} />
+                  <Line type="monotone" dataKey="invest" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
+                </>
+              )}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+          <PillTabs
+            ariaLabel="range"
+            options={[
+              { value: '30d', label: '30天' },
+              { value: '6m', label: '6月' },
+              { value: '1y', label: '1年' },
+              { value: 'custom', label: '自定义' },
+            ]}
+            value={range}
+            onChange={setRange}
+          />
+        </div>
+        {range === 'custom' ? (
+          <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
+            这里可以接入自定义日期范围选择
+          </div>
+        ) : null}
+      </BottomSheet>
+    </div>
+  )
+}
