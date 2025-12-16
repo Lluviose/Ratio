@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   --bg: #f5f6f8;
   --card: #ffffff;
@@ -12,9 +14,28 @@
   --radius-lg: 22px;
   --radius-md: 16px;
 
-  --shadow-soft: 0 10px 30px rgba(11, 15, 26, 0.10);
+  --shadow-soft: 0 10px 40px -10px rgba(11, 15, 26, 0.08);
+  --shadow-hover: 0 20px 40px -12px rgba(11, 15, 26, 0.12);
+
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.1);
+  --ease-out: cubic-bezier(0.215, 0.61, 0.355, 1);
 
   color-scheme: light;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 :root[data-theme="matisse"] {
@@ -64,6 +85,11 @@ body {
 
 button {
   font: inherit;
+  transition: transform 0.1s ease, background-color 0.2s ease;
+}
+
+button:active {
+  transform: scale(0.96);
 }
 
 a {
@@ -89,6 +115,7 @@ a {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.02), 0 20px 60px rgba(0,0,0,0.1);
 }
 
 .topBar {
@@ -141,6 +168,8 @@ a {
   background: var(--card);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-xl);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: scaleIn 0.4s var(--ease-out);
 }
 
 .cardInner {
@@ -269,23 +298,28 @@ a {
 .sheetOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(11, 15, 26, 0.36);
+  background: rgba(11, 15, 26, 0.4);
+  backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
   align-items: flex-end;
   z-index: 50;
+  animation: fadeIn 0.3s ease;
 }
 
 .sheet {
   width: min(420px, 100%);
   background: var(--card);
-  border-top-left-radius: 26px;
-  border-top-right-radius: 26px;
+  border-top-left-radius: 32px;
+  border-top-right-radius: 32px;
   box-shadow: var(--shadow-soft);
   border: 1px solid rgba(11, 15, 26, 0.10);
   border-bottom: none;
-  max-height: 84vh;
+  max-height: 85vh;
   overflow: hidden;
+  animation: slideUp 0.3s var(--ease-out);
+  display: flex;
+  flex-direction: column;
 }
 
 .sheetHeader {
@@ -466,14 +500,16 @@ a {
 .input,
 .select {
   width: 100%;
-  height: 44px;
-  border-radius: 16px;
+  height: 48px;
+  border-radius: 18px;
   border: 1px solid rgba(11, 15, 26, 0.10);
-  background: rgba(255, 255, 255, 0.9);
-  padding: 0 12px;
-  font-weight: 800;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0 16px;
+  font-weight: 700;
   color: var(--text);
   outline: none;
+  transition: all 0.2s ease;
+  font-size: 15px;
 }
 
 .select {
@@ -482,19 +518,33 @@ a {
 
 .input:focus,
 .select:focus {
-  border-color: rgba(91, 107, 255, 0.55);
-  box-shadow: 0 0 0 4px rgba(91, 107, 255, 0.14);
+  border-color: var(--primary);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(91, 107, 255, 0.15);
+  transform: translateY(-1px);
 }
 
 .primaryBtn {
   border: none;
-  height: 46px;
-  border-radius: 18px;
+  height: 52px;
+  border-radius: 20px;
   background: var(--primary);
   color: var(--primary-contrast);
-  font-weight: 950;
+  font-weight: 800;
+  font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(91, 107, 255, 0.25);
+  box-shadow: 0 8px 20px -4px rgba(91, 107, 255, 0.4);
+  transition: all 0.2s var(--ease-out);
+}
+
+.primaryBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -6px rgba(91, 107, 255, 0.5);
+}
+
+.primaryBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 12px -4px rgba(91, 107, 255, 0.3);
 }
 
 button:disabled {
@@ -677,13 +727,23 @@ button:disabled {
 }
 
 .minusBadge {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   border: 2px solid rgba(11, 15, 26, 0.22);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: 950;
+  font-weight: 900;
   line-height: 1;
+  font-size: 12px;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }

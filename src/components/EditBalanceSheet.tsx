@@ -25,9 +25,9 @@ export function EditBalanceSheet(props: {
 
   return (
     <BottomSheet open={open} title={title} onClose={onClose}>
-      <div className="stack" style={{ gap: 12 }}>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
-          当前：{formatCny(initialValue)}
+      <div className="stack animate-[fadeIn_0.4s_ease-out]" style={{ gap: 16 }}>
+        <div className="muted" style={{ fontSize: 13, fontWeight: 700 }}>
+          当前：<span style={{ color: 'var(--text)', fontWeight: 900 }}>{formatCny(initialValue)}</span>
         </div>
 
         <label className="field">
@@ -38,6 +38,7 @@ export function EditBalanceSheet(props: {
             defaultValue={String(initialValue)}
             ref={inputRef}
             placeholder="0"
+            autoFocus
           />
         </label>
 

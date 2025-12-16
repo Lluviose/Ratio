@@ -1,4 +1,4 @@
-import { BarChart3, Palette, PieChart, TrendingUp } from 'lucide-react'
+import { BarChart3, Palette, PieChart, TrendingUp, Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AssetsScreen } from './screens/AssetsScreen.tsx'
 import { TourScreen } from './screens/TourScreen.tsx'
@@ -68,16 +68,16 @@ export default function App() {
           <>
             <div className="topBar">
               <div className="topBarRow">
-                <div className="title">{title}</div>
+                <div className="title animate-[fadeIn_0.4s_ease-out]">{title}</div>
                 <div style={{ display: 'flex', gap: 10 }}>
                   {tab === 'assets' ? (
                     <button
                       type="button"
-                      className="iconBtn iconBtnPrimary"
+                      className="iconBtn iconBtnPrimary transition-transform active:scale-95 hover:scale-105"
                       aria-label="add"
                       onClick={() => setQuickAddOpen(true)}
                     >
-                      <span style={{ fontWeight: 900, fontSize: 18, lineHeight: 1 }}>+</span>
+                      <Plus size={22} strokeWidth={3} />
                     </button>
                   ) : null}
                 </div>
@@ -87,7 +87,6 @@ export default function App() {
             <div className="content">
               {tab === 'assets' ? (
                 <AssetsScreen
-                  recent={ledger.recent}
                   grouped={accounts.grouped}
                   getIcon={accounts.getIcon}
                   onEditAccount={(a: Account) => setEditing(a)}
@@ -139,7 +138,7 @@ export default function App() {
                   className={tab === 'assets' ? 'navItem navItemActive' : 'navItem'}
                   onClick={() => setTab('assets')}
                 >
-                  <PieChart size={18} />
+                  <PieChart size={20} strokeWidth={tab === 'assets' ? 2.5 : 2} />
                   <div className="navLabel">资产</div>
                 </button>
                 <button
@@ -147,7 +146,7 @@ export default function App() {
                   className={tab === 'trend' ? 'navItem navItemActive' : 'navItem'}
                   onClick={() => setTab('trend')}
                 >
-                  <TrendingUp size={18} />
+                  <TrendingUp size={20} strokeWidth={tab === 'trend' ? 2.5 : 2} />
                   <div className="navLabel">趋势</div>
                 </button>
                 <button
@@ -155,7 +154,7 @@ export default function App() {
                   className={tab === 'stats' ? 'navItem navItemActive' : 'navItem'}
                   onClick={() => setTab('stats')}
                 >
-                  <BarChart3 size={18} />
+                  <BarChart3 size={20} strokeWidth={tab === 'stats' ? 2.5 : 2} />
                   <div className="navLabel">统计</div>
                 </button>
                 <button
@@ -163,7 +162,7 @@ export default function App() {
                   className={tab === 'settings' ? 'navItem navItemActive' : 'navItem'}
                   onClick={() => setTab('settings')}
                 >
-                  <Palette size={18} />
+                  <Palette size={20} strokeWidth={tab === 'settings' ? 2.5 : 2} />
                   <div className="navLabel">主题</div>
                 </button>
               </div>

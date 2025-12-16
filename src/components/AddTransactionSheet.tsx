@@ -57,7 +57,7 @@ export function AddTransactionSheet(props: {
 
   return (
     <BottomSheet open={open} title="记一笔" onClose={onClose}>
-      <div className="stack" style={{ gap: 12 }}>
+      <div className="stack animate-[fadeIn_0.4s_ease-out]" style={{ gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <SegmentedControl
             options={[
@@ -69,19 +69,24 @@ export function AddTransactionSheet(props: {
           />
         </div>
 
-        <div className="stack" style={{ gap: 10 }}>
+        <div className="stack" style={{ gap: 16 }}>
           <label className="field">
             <div className="fieldLabel">金额</div>
-            <input
-              className="input"
-              inputMode="decimal"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-            />
+            <div className="relative">
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
+                autoFocus
+              />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
+            </div>
           </label>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <label className="field">
               <div className="fieldLabel">分类</div>
               <select className="select" value={category} onChange={(e) => setCategory(e.target.value)}>

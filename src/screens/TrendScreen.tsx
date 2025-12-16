@@ -68,17 +68,23 @@ export function TrendScreen() {
       return (
         <div
           style={{
-            background: 'white',
-            border: '1px solid rgba(11, 15, 26, 0.10)',
-            padding: '10px 12px',
-            borderRadius: 14,
-            boxShadow: '0 10px 30px rgba(11, 15, 26, 0.12)',
+            background: 'var(--card)',
+            border: '1px solid var(--hairline)',
+            padding: '12px 16px',
+            borderRadius: 18,
+            boxShadow: 'var(--shadow-hover)',
             minWidth: 180,
           }}
         >
-          <div style={{ fontWeight: 950, fontSize: 12 }}>{p.date}</div>
-          <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12 }}>我的净资产 {formatCny(p.net)}</div>
-          <div style={{ marginTop: 2, fontWeight: 900, fontSize: 12, opacity: 0.7 }}>负债 {formatCny(-p.debt)}</div>
+          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.date}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
+             <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.net)}</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
+             <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatCny(-p.debt)}</div>
+          </div>
         </div>
       )
     }
@@ -86,94 +92,149 @@ export function TrendScreen() {
     return (
       <div
         style={{
-          background: 'white',
-          border: '1px solid rgba(11, 15, 26, 0.10)',
-          padding: '10px 12px',
-          borderRadius: 14,
-          boxShadow: '0 10px 30px rgba(11, 15, 26, 0.12)',
+          background: 'var(--card)',
+          border: '1px solid var(--hairline)',
+          padding: '12px 16px',
+          borderRadius: 18,
+          boxShadow: 'var(--shadow-hover)',
           minWidth: 180,
         }}
       >
-        <div style={{ fontWeight: 950, fontSize: 12 }}>{p.date}</div>
-        <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12 }}>流动资金 {formatCny(p.cash)}</div>
-        <div style={{ marginTop: 2, fontWeight: 900, fontSize: 12, opacity: 0.7 }}>投资 {formatCny(p.invest)}</div>
+        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.date}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#47d16a' }} />
+             <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatCny(p.cash)}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
+             <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatCny(p.invest)}</div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="stack">
-      <div className="card">
+      <div className="card transition-transform active:scale-[0.98] cursor-pointer hover:shadow-lg" onClick={() => setOpen(true)}>
         <div className="cardInner">
           <div className="row">
             <div>
               <div style={{ fontWeight: 950, fontSize: 16 }}>观察趋势</div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
+              <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
                 关注积累，见证资产增长
               </div>
             </div>
-            <button type="button" className="iconBtn iconBtnPrimary" onClick={() => setOpen(true)}>
-              打开
+            <button type="button" className="iconBtn iconBtnPrimary" style={{ pointerEvents: 'none' }}>
+              <div style={{ transform: 'rotate(-45deg)', fontSize: 16, fontWeight: 900 }}>→</div>
             </button>
           </div>
         </div>
       </div>
 
       <BottomSheet open={open} title="趋势图" onClose={() => setOpen(false)}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <SegmentedControl
-            options={[
-              { value: 'netDebt', label: '净资产与负债' },
-              { value: 'cashInvest', label: '流动资金与投资' },
-            ]}
-            value={mode}
-            onChange={setMode}
-          />
-        </div>
-
-        <div ref={chartRef} style={{ height: 210, marginTop: 14 }}>
-          {chartWidth > 0 ? (
-            <LineChart width={chartWidth} height={210} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="rgba(11, 15, 26, 0.25)" />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                stroke="rgba(11, 15, 26, 0.25)"
-                tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
+        <div className="animate-[fadeIn_0.4s_ease-out]">
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <SegmentedControl
+                options={[
+                  { value: 'netDebt', label: '净资产与负债' },
+                  { value: 'cashInvest', label: '流动资金与投资' },
+                ]}
+                value={mode}
+                onChange={setMode}
               />
-              <Tooltip content={tooltip} />
-              {mode === 'netDebt' ? (
-                <>
-                  <Line type="monotone" dataKey="net" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="debt" stroke="rgba(11, 15, 26, 0.40)" strokeWidth={2} dot={false} />
-                </>
-              ) : (
-                <>
-                  <Line type="monotone" dataKey="cash" stroke="#47d16a" strokeWidth={2.5} dot={false} />
-                  <Line type="monotone" dataKey="invest" stroke="var(--primary)" strokeWidth={2.5} dot={false} />
-                </>
-              )}
-            </LineChart>
-          ) : null}
-        </div>
+            </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-          <PillTabs
-            ariaLabel="range"
-            options={[
-              { value: '30d', label: '30天' },
-              { value: '6m', label: '6月' },
-              { value: '1y', label: '1年' },
-              { value: 'custom', label: '自定义' },
-            ]}
-            value={range}
-            onChange={setRange}
-          />
+            <div ref={chartRef} style={{ height: 240, marginTop: 24 }} className="animate-[scaleIn_0.5s_var(--ease-spring)]">
+              {chartWidth > 0 ? (
+                <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }} 
+                    axisLine={false}
+                    tickLine={false}
+                    dy={10}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
+                    dx={-6}
+                  />
+                  <Tooltip 
+                    content={tooltip} 
+                    cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
+                  />
+                  {mode === 'netDebt' ? (
+                    <>
+                      <Line 
+                        type="monotone" 
+                        dataKey="net" 
+                        stroke="var(--primary)" 
+                        strokeWidth={4} 
+                        dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
+                        activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="debt" 
+                        stroke="rgba(11, 15, 26, 0.2)" 
+                        strokeWidth={3} 
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <Line 
+                        type="monotone" 
+                        dataKey="cash" 
+                        stroke="#47d16a" 
+                        strokeWidth={4} 
+                        dot={false}
+                        activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
+                      />
+                      <Line 
+                        type="monotone" 
+                        dataKey="invest" 
+                        stroke="var(--primary)" 
+                        strokeWidth={4} 
+                        dot={false}
+                        activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
+                      />
+                    </>
+                  )}
+                </LineChart>
+              ) : null}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+              <PillTabs
+                ariaLabel="range"
+                options={[
+                  { value: '30d', label: '30天' },
+                  { value: '6m', label: '6月' },
+                  { value: '1y', label: '1年' },
+                  { value: 'custom', label: '自定义' },
+                ]}
+                value={range}
+                onChange={setRange}
+              />
+            </div>
+            {range === 'custom' ? (
+              <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
+                这里可以接入自定义日期范围选择
+              </div>
+            ) : null}
         </div>
-        {range === 'custom' ? (
-          <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
-            这里可以接入自定义日期范围选择
-          </div>
-        ) : null}
       </BottomSheet>
     </div>
   )

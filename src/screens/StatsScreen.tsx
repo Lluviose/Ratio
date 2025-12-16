@@ -65,89 +65,120 @@ export function StatsScreen() {
     return (
       <div
         style={{
-          background: 'white',
-          border: '1px solid rgba(11, 15, 26, 0.10)',
-          padding: '10px 12px',
-          borderRadius: 14,
-          boxShadow: '0 10px 30px rgba(11, 15, 26, 0.12)',
+          background: 'var(--card)',
+          border: '1px solid var(--hairline)',
+          padding: '12px 16px',
+          borderRadius: 18,
+          boxShadow: 'var(--shadow-hover)',
           minWidth: 170,
         }}
       >
-        <div style={{ fontWeight: 950, fontSize: 12 }}>{p.label}</div>
-        <div style={{ marginTop: 6, fontWeight: 900, fontSize: 12 }}>账户变动 {formatCny(p.accountDelta)}</div>
-        <div style={{ marginTop: 2, fontWeight: 900, fontSize: 12, opacity: 0.7 }}>持仓盈亏 {formatCny(p.pnl)}</div>
+        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+           <div style={{ width: 8, height: 8, borderRadius: '50%', background: mode === 'invest' ? 'var(--primary)' : '#47d16a' }} />
+           <div style={{ fontWeight: 900, fontSize: 14 }}>账户变动 {formatCny(p.accountDelta)}</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
+           <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>持仓盈亏 {formatCny(p.pnl)}</div>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="stack">
-      <div className="card">
+      <div className="card transition-transform active:scale-[0.98] cursor-pointer hover:shadow-lg" onClick={() => setOpen(true)}>
         <div className="cardInner">
           <div className="row">
             <div>
               <div style={{ fontWeight: 950, fontSize: 16 }}>投资损益</div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
+              <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
                 科学打理，随时调整投资策略
               </div>
             </div>
-            <button type="button" className="iconBtn iconBtnPrimary" onClick={() => setOpen(true)}>
-              打开
+            <button type="button" className="iconBtn iconBtnPrimary" style={{ pointerEvents: 'none' }}>
+              <div style={{ transform: 'rotate(-45deg)', fontSize: 16, fontWeight: 900 }}>→</div>
             </button>
           </div>
         </div>
       </div>
 
       <BottomSheet open={open} title="收支统计" onClose={() => setOpen(false)}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <SegmentedControl
-            options={[
-              { value: 'invest', label: '投资变动' },
-              { value: 'cash', label: '流动资金' },
-            ]}
-            value={mode}
-            onChange={setMode}
-          />
-        </div>
-
-        <div className="muted" style={{ marginTop: 12, fontSize: 12, fontWeight: 800, textAlign: 'center' }}>
-          2025年4月至9月 · 账户变动合计 {formatCny(totals.accountDeltaTotal)}，持仓盈利 {formatCny(totals.pnlTotal)}
-        </div>
-
-        <div ref={chartRef} style={{ height: 210, marginTop: 12 }}>
-          {chartWidth > 0 ? (
-            <BarChart width={chartWidth} height={210} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="rgba(11, 15, 26, 0.25)" />
-              <YAxis
-                tick={{ fontSize: 11 }}
-                stroke="rgba(11, 15, 26, 0.25)"
-                tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
+        <div className="animate-[fadeIn_0.4s_ease-out]">
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <SegmentedControl
+                options={[
+                  { value: 'invest', label: '投资变动' },
+                  { value: 'cash', label: '流动资金' },
+                ]}
+                value={mode}
+                onChange={setMode}
               />
-              <Tooltip content={tooltip} />
-              <Bar dataKey="accountDelta" fill={mode === 'invest' ? 'var(--primary)' : '#47d16a'} radius={[10, 10, 0, 0]} />
-              <Bar dataKey="pnl" fill="rgba(11, 15, 26, 0.20)" radius={[10, 10, 0, 0]} />
-            </BarChart>
-          ) : null}
-        </div>
+            </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
-          <PillTabs
-            ariaLabel="range"
-            options={[
-              { value: '5w', label: '5周' },
-              { value: '6m', label: '6月' },
-              { value: '1y', label: '1年' },
-              { value: '4y', label: '4年' },
-            ]}
-            value={range}
-            onChange={setRange}
-          />
+            <div className="muted" style={{ marginTop: 16, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
+              2025年4月至9月 · 账户变动合计 <span style={{ color: 'var(--text)' }}>{formatCny(totals.accountDeltaTotal)}</span>，持仓盈利 <span style={{ color: 'var(--text)' }}>{formatCny(totals.pnlTotal)}</span>
+            </div>
+
+            <div ref={chartRef} style={{ height: 240, marginTop: 16 }} className="animate-[scaleIn_0.5s_var(--ease-spring)]">
+              {chartWidth > 0 ? (
+                <BarChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+                  <XAxis 
+                    dataKey="label" 
+                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }} 
+                    axisLine={false}
+                    tickLine={false}
+                    dy={10}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
+                    dx={-6}
+                  />
+                  <Tooltip 
+                    content={tooltip} 
+                    cursor={{ fill: 'rgba(11, 15, 26, 0.03)', radius: 8 }}
+                  />
+                  <Bar 
+                    dataKey="accountDelta" 
+                    fill={mode === 'invest' ? 'var(--primary)' : '#47d16a'} 
+                    radius={[6, 6, 6, 6]} 
+                    barSize={20}
+                    animationDuration={1000}
+                  />
+                  <Bar 
+                    dataKey="pnl" 
+                    fill="rgba(11, 15, 26, 0.15)" 
+                    radius={[6, 6, 6, 6]} 
+                    barSize={20}
+                    animationDuration={1000}
+                  />
+                </BarChart>
+              ) : null}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+              <PillTabs
+                ariaLabel="range"
+                options={[
+                  { value: '5w', label: '5周' },
+                  { value: '6m', label: '6月' },
+                  { value: '1y', label: '1年' },
+                  { value: '4y', label: '4年' },
+                ]}
+                value={range}
+                onChange={setRange}
+              />
+            </div>
+            {range === '4y' ? (
+              <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
+                这里可以接入更长周期统计
+              </div>
+            ) : null}
         </div>
-        {range === '4y' ? (
-          <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
-            这里可以接入更长周期统计
-          </div>
-        ) : null}
       </BottomSheet>
     </div>
   )

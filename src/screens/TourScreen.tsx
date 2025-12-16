@@ -409,22 +409,22 @@ export function TourScreen(props: { onClose: () => void }) {
   })()
 
   return (
-    <div style={{ height: '100%', background: slide.bg, position: 'relative' }}>
+    <div style={{ height: '100%', background: slide.bg, position: 'relative', transition: 'background 0.5s ease' }}>
       <div style={{ padding: '18px 16px 12px', display: 'flex', justifyContent: 'flex-end' }}>
-        <button type="button" className="iconBtn" aria-label="close" onClick={onClose}>
-          <X size={18} />
+        <button type="button" className="iconBtn hover:scale-110 active:scale-95 transition-transform" aria-label="close" onClick={onClose} style={{ background: 'rgba(255,255,255,0.5)', backdropFilter: 'blur(10px)', border: 'none' }}>
+          <X size={20} strokeWidth={2.5} />
         </button>
       </div>
 
-      <div style={{ padding: '2px 20px 0' }}>
-        <div style={{ fontSize: 34, fontWeight: 950, letterSpacing: '-0.03em', lineHeight: 1.12, color: '#0b0f1a' }}>
-          <div>{slide.titleLines[0]}</div>
-          <div>{slide.titleLines[1]}</div>
-          <div>{slide.titleLines[2]}</div>
+      <div style={{ padding: '10px 24px 0' }} className="animate-[slideUp_0.6s_ease-out]">
+        <div style={{ fontSize: 32, fontWeight: 950, letterSpacing: '-0.02em', lineHeight: 1.15, color: '#0b0f1a' }}>
+          <div className="animate-[fadeIn_0.6s_ease-out_0.1s_backwards]">{slide.titleLines[0]}</div>
+          <div className="animate-[fadeIn_0.6s_ease-out_0.2s_backwards]">{slide.titleLines[1]}</div>
+          <div className="animate-[fadeIn_0.6s_ease-out_0.3s_backwards]">{slide.titleLines[2]}</div>
         </div>
       </div>
 
-      <div style={{ marginTop: 18 }}>
+      <div style={{ marginTop: 32 }} className="animate-[scaleIn_0.8s_var(--ease-spring)_0.2s_backwards]">
         <PhoneMock kind={phoneKind} accent={slide.accent === 'white' ? '#ffffff' : 'var(--primary)'} />
       </div>
 
@@ -434,10 +434,10 @@ export function TourScreen(props: { onClose: () => void }) {
           left: 0,
           right: 0,
           bottom: 0,
-          padding: 16,
+          padding: '20px 24px 32px',
           display: 'grid',
-          gap: 12,
-          background: 'linear-gradient(to top, rgba(245,246,248,0.92), rgba(245,246,248,0))',
+          gap: 20,
+          background: 'linear-gradient(to top, rgba(245,246,248,0.95), rgba(245,246,248,0))',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
@@ -448,35 +448,37 @@ export function TourScreen(props: { onClose: () => void }) {
               aria-label={`dot-${i}`}
               onClick={() => setIndex(i)}
               style={{
-                width: i === index ? 20 : 8,
+                width: i === index ? 24 : 8,
                 height: 8,
                 borderRadius: 999,
                 border: 'none',
-                background: i === index ? 'rgba(11,15,26,0.65)' : 'rgba(11,15,26,0.25)',
+                background: i === index ? '#0b0f1a' : 'rgba(11,15,26,0.2)',
                 cursor: 'pointer',
-                transition: 'all 160ms ease',
+                transition: 'all 0.4s var(--ease-spring)',
               }}
             />
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
           <button
             type="button"
-            className={clsx('iconBtn', index === 0 && 'muted')}
+            className={clsx('ghostBtn', index === 0 && 'opacity-0 pointer-events-none')}
             onClick={() => setIndex((v) => Math.max(0, v - 1))}
             disabled={index === 0}
+            style={{ width: 'auto', padding: '12px 20px', background: 'white', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
           >
             上一页
           </button>
 
           <button
             type="button"
-            className="iconBtn iconBtnPrimary"
+            className="primaryBtn flex-1 shadow-lg hover:shadow-xl active:scale-[0.98] transition-all"
             onClick={() => {
               if (index === slides.length - 1) onClose()
               else setIndex((v) => Math.min(slides.length - 1, v + 1))
             }}
+            style={{ height: 48, fontSize: 15 }}
           >
             {index === slides.length - 1 ? '开始使用' : '下一页'}
           </button>
