@@ -3,11 +3,14 @@ import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
-import { lerp } from '../lib/roseChartUtils'
 import { AssetsListPage } from './AssetsListPage'
-import { AssetsRosePage } from './AssetsRosePage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
+
+/** Linear interpolation helper */
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
 
 export type GroupedAccounts = {
   groupCards: Array<{ group: AccountGroup; accounts: Account[]; total: number }>
@@ -17,7 +20,6 @@ export type GroupedAccounts = {
 }
 
 type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
-type OverlayId = GroupId | 'networth'
 
 type Rect = { x: number; y: number; w: number; h: number }
 
@@ -31,55 +33,43 @@ type Block = {
   hasCard: boolean
 }
 
-type NetWorthBlock = Omit<Block, 'id'> & { id: 'networth' }
-type OverlayBlockModel = Block | NetWorthBlock
+type OverlayBlockModel = Block
 
 type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly'
 
 function OverlayBlock(props: {
   block: OverlayBlockModel
   kind: CornerKind
-  roseRect?: Rect
-  roseRotate?: number
   ratioRect?: Rect
   listRect?: Rect
   scrollIdx: MotionValue<number>
   overlayFade: MotionValue<number>
   labelsOpacity: MotionValue<number>
-  labelScale: MotionValue<number>
   chartRadius: number
   listRadius: number
 }) {
   const {
     block,
     kind,
-    roseRect,
-    roseRotate = 0,
     ratioRect,
     listRect,
     scrollIdx,
     overlayFade,
     labelsOpacity,
-    labelScale,
     chartRadius,
     listRadius,
   } = props
 
-  const ratio = ratioRect ?? roseRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
-  const list = listRect ?? ratioRect ?? roseRect ?? ratio
-  const rose = roseRect ?? ratioRect ?? listRect ?? ratio
+  const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
+  const list = listRect ?? ratioRect ?? ratio
 
-  const isExtra = block.id === 'networth'
-  const hasRose = Boolean(roseRect && roseRect.w > 0 && roseRect.h > 0)
   const hasRatio = Boolean(ratioRect && ratioRect.w > 0 && ratioRect.h > 0)
   const hasList = Boolean(listRect && listRect.w > 0 && listRect.h > 0)
 
-  const visibleRose = hasRose ? 1 : 0
-  const visibleRatio = isExtra ? 0 : hasRatio ? 1 : 0
-  const visibleList = isExtra ? 0 : hasList ? 1 : hasRatio ? 1 : 0
+  const visibleRatio = hasRatio ? 1 : 0
+  const visibleList = hasList ? 1 : hasRatio ? 1 : 0
   const visible = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(visibleRose, visibleRatio, Math.max(0, idx))
-    return lerp(visibleRatio, visibleList, Math.max(0, idx - 1))
+    return lerp(visibleRatio, visibleList, Math.max(0, idx))
   })
   const opacity = useTransform([overlayFade, visible], (values) => {
     const [a, b] = values as number[]
@@ -87,29 +77,18 @@ function OverlayBlock(props: {
   })
 
   const x = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(rose.x, ratio.x, Math.max(0, idx))
-    return lerp(ratio.x, list.x, Math.max(0, idx - 1))
+    return lerp(ratio.x, list.x, Math.max(0, idx))
   })
   const y = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(rose.y, ratio.y, Math.max(0, idx))
-    return lerp(ratio.y, list.y, Math.max(0, idx - 1))
+    return lerp(ratio.y, list.y, Math.max(0, idx))
   })
   const w = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(rose.w, ratio.w, Math.max(0, idx))
-    return lerp(ratio.w, list.w, Math.max(0, idx - 1))
+    return lerp(ratio.w, list.w, Math.max(0, idx))
   })
   const h = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(rose.h, ratio.h, Math.max(0, idx))
-    return lerp(ratio.h, list.h, Math.max(0, idx - 1))
+    return lerp(ratio.h, list.h, Math.max(0, idx))
   })
 
-  const rotate = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(roseRotate, 0, Math.max(0, idx))
-    return 0
-  })
-
-  const roseRadius = Math.max(0, (rose.h || 0) / 2)
-  const roseCorner = { tl: roseRadius, tr: roseRadius, bl: roseRadius, br: roseRadius }
   const ratioCorner =
     kind === 'debt'
       ? { tl: chartRadius, tr: 0, bl: chartRadius, br: 0 }
@@ -124,24 +103,19 @@ function OverlayBlock(props: {
   const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(roseCorner.tl, ratioCorner.tl, Math.max(0, idx))
-    return lerp(ratioCorner.tl, listCorner.tl, Math.max(0, idx - 1))
+    return lerp(ratioCorner.tl, listCorner.tl, Math.max(0, idx))
   })
   const tr = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(roseCorner.tr, ratioCorner.tr, Math.max(0, idx))
-    return lerp(ratioCorner.tr, listCorner.tr, Math.max(0, idx - 1))
+    return lerp(ratioCorner.tr, listCorner.tr, Math.max(0, idx))
   })
   const bl = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(roseCorner.bl, ratioCorner.bl, Math.max(0, idx))
-    return lerp(ratioCorner.bl, listCorner.bl, Math.max(0, idx - 1))
+    return lerp(ratioCorner.bl, listCorner.bl, Math.max(0, idx))
   })
   const br = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(roseCorner.br, ratioCorner.br, Math.max(0, idx))
-    return lerp(ratioCorner.br, listCorner.br, Math.max(0, idx - 1))
+    return lerp(ratioCorner.br, listCorner.br, Math.max(0, idx))
   })
 
   const textColor = block.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.96)'
-  const labelRotate = useTransform(rotate, (r) => -r)
 
   return (
     <motion.div
@@ -158,11 +132,10 @@ function OverlayBlock(props: {
         borderBottomRightRadius: br,
         opacity,
         overflow: 'hidden',
-        rotate,
       }}
     >
       <motion.div
-        style={{ opacity: labelsOpacity, color: textColor, rotate: labelRotate, scale: labelScale }}
+        style={{ opacity: labelsOpacity, color: textColor }}
         className="w-full h-full"
       >
         {kind === 'debt' ? (
@@ -233,23 +206,19 @@ export function AssetsScreen(props: {
     return v / w
   })
 
-  // Page 0: Rose
-  // Page 1: Ratio (Blocks)
-  // Page 2: List
-  // Page 3: Detail
+  // Page 0: Ratio (Blocks)
+  // Page 1: List
+  // Page 2: Detail
   
-  // Transition Ratio(1) -> List(2)
-  // Clamp at 0 for Rose page to keep Ratio styles (blocks morph via scrollIdx)
-  const ratioProgress = useTransform(scrollIdx, [0, 1, 2], [0, 0, 1])
+  // Transition Ratio(0) -> List(1)
+  const ratioProgress = useTransform(scrollIdx, [0, 1], [0, 1])
 
-  // Blocks visible on Page 0-2, fade out quickly on 3
-  // MODIFIED: Hide blocks on Page 0 (Rose) because we now use a real chart there. Fade in for Page 1.
-  const overlayFade = useTransform(scrollIdx, [0, 0.4, 1, 2, 2.08, 3], [0, 0, 1, 1, 0, 0])
+  // Blocks visible on Page 0-1, fade out quickly on 2
+  const overlayFade = useTransform(scrollIdx, [0, 1, 1.08, 2], [1, 1, 0, 0])
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
   const listHeaderOpacity = ratioProgress
   const labelsOpacity = useTransform(ratioProgress, [0, 1], [1, 0])
-  const labelScale = useTransform(scrollIdx, [0, 1, 2], [0.74, 1, 1])
   const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])
   const miniBarY = useTransform(ratioProgress, [0, 1], [16, 0])
   const listHeaderPointerEvents = useTransform(ratioProgress, (p) => (p < 0.05 ? 'none' : 'auto'))
@@ -297,22 +266,6 @@ export function AssetsScreen(props: {
 
     return { assets, debt: debt && debt.hasCard ? debt : null }
   }, [grouped])
-
-  const netWorthBlock: NetWorthBlock | null = useMemo(() => {
-    const assetsTotal = grouped.assetsTotal || 0
-    const netWorth = grouped.netWorth || 0
-    if (assetsTotal <= 0 || netWorth <= 0) return null
-
-    return {
-      id: 'networth',
-      name: '净资产',
-      tone: 'linear-gradient(135deg, #4f46e5 0%, #818cf8 100%)',
-      amount: netWorth,
-      percent: Math.round((netWorth / assetsTotal) * 100),
-      darkText: false,
-      hasCard: true,
-    }
-  }, [grouped.assetsTotal, grouped.netWorth])
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -414,94 +367,6 @@ export function AssetsScreen(props: {
     }
   }, [blocks, grouped.assetsTotal, viewport.h, viewport.w])
 
-  const roseLayout = useMemo(() => {
-    const top = 64
-    const chartH = Math.max(0, viewport.h - top)
-    const chartW = viewport.w
-    const cx = chartW / 2
-    const cy = top + chartH / 2
-
-    // Match EnhancedDoubleRoseChart layout calculations
-    const size = Math.min(chartW, chartH)
-    const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
-    const sqrt01 = (v: number) => Math.sqrt(clamp(v, 0, 1))
-
-    // Match the radii from EnhancedDoubleRoseChart
-    // innerRingInnerRadius = size * 0.12
-    // innerRingOuterRadius = size * 0.20
-    // outerRoseInnerRadius = size * 0.21
-    // outerRoseMaxRadius = size * 0.42
-    const outerRoseInnerRadius = size * 0.21
-    const outerRoseMaxRadius = size * 0.42
-    const innerRingOuterRadius = size * 0.20
-
-    // For overlay blocks, we use a simplified rectangular approximation
-    const outerThickness = clamp(Math.round(size * 0.18), 56, 86)
-    const innerThickness = clamp(Math.round(size * 0.14), 44, 72)
-
-    const assetsTotal = grouped.assetsTotal || 0
-
-    const rects: Partial<Record<OverlayId, Rect>> = {}
-    const rotates: Partial<Record<OverlayId, number>> = {}
-
-    const outerAssets = blocks.assets.filter((b) => b.amount > 0)
-    const n = outerAssets.length || 1
-    const startAngle = -90 // Start from top (12 o'clock)
-
-    // Calculate radial length based on amount fraction using sqrt scaling
-    // Matches calculatePetalRadius formula: innerRadius + availableLength * (0.35 + 0.65 * sqrt(ratio))
-    const outerLen = (frac: number) => {
-      const availableLength = outerRoseMaxRadius - outerRoseInnerRadius
-      return availableLength * (0.35 + 0.65 * sqrt01(frac))
-    }
-
-    for (let i = 0; i < outerAssets.length; i += 1) {
-      const b = outerAssets[i]
-      const thetaDeg = startAngle + (360 / n) * i
-      const theta = (thetaDeg * Math.PI) / 180
-      const frac = assetsTotal > 0 ? b.amount / assetsTotal : 0
-      const w = Math.max(0, outerLen(frac))
-      const h = outerThickness
-      // Position at the middle of the petal's radial extent
-      const centerR = outerRoseInnerRadius + w / 2
-      const centerX = cx + Math.cos(theta) * centerR
-      const centerY = cy + Math.sin(theta) * centerR
-      rects[b.id] = { x: centerX - w / 2, y: centerY - h / 2, w, h }
-      rotates[b.id] = thetaDeg
-    }
-
-    // Debt block positioned on the inner ring (left side, 180 degrees)
-    const debt = blocks.debt
-    if (debt) {
-      const thetaDeg = 180
-      const theta = Math.PI
-      const frac = assetsTotal > 0 ? debt.amount / assetsTotal : 0
-      const w = Math.max(0, innerRingOuterRadius * (0.45 + 0.55 * sqrt01(frac)))
-      const h = innerThickness
-      const centerR = w / 2
-      const centerX = cx + Math.cos(theta) * centerR
-      const centerY = cy + Math.sin(theta) * centerR
-      rects.debt = { x: centerX - w / 2, y: centerY - h / 2, w, h }
-      rotates.debt = thetaDeg
-    }
-
-    // Net worth block positioned on the inner ring (right side, 0 degrees)
-    if (netWorthBlock) {
-      const thetaDeg = 0
-      const theta = 0
-      const frac = assetsTotal > 0 ? netWorthBlock.amount / assetsTotal : 0
-      const w = Math.max(0, innerRingOuterRadius * (0.45 + 0.55 * sqrt01(frac)))
-      const h = innerThickness
-      const centerR = w / 2
-      const centerX = cx + Math.cos(theta) * centerR
-      const centerY = cy + Math.sin(theta) * centerR
-      rects.networth = { x: centerX - w / 2, y: centerY - h / 2, w, h }
-      rotates.networth = thetaDeg
-    }
-
-    return { rects, rotates }
-  }, [blocks.assets, blocks.debt, grouped.assetsTotal, netWorthBlock, viewport.h, viewport.w])
-
   const blockKinds = useMemo(() => {
     const kinds: Partial<Record<GroupId, CornerKind>> = {}
     if (blocks.debt) kinds.debt = 'debt'
@@ -521,8 +386,8 @@ export function AssetsScreen(props: {
 
     const w = root.clientWidth || 1
     const idx = scrollLeft.get() / w
-    // Measure only when near list page (index 2)
-    if (Math.abs(idx - 2) > 0.12) return
+    // Measure only when near list page (index 1)
+    if (Math.abs(idx - 1) > 0.12) return
 
     const rootRect = root.getBoundingClientRect()
     const next: Partial<Record<GroupId, Rect>> = {}
@@ -616,9 +481,9 @@ export function AssetsScreen(props: {
     const raf = requestAnimationFrame(() => {
       const w = el.clientWidth || 0
       if (w <= 0) return
-      // Start at Page 2 (List) - 直接设置，不触发动画
-      el.scrollLeft = w * 2
-      scrollLeft.set(w * 2)
+      // Start at Page 1 (List) - 直接设置，不触发动画
+      el.scrollLeft = w * 1
+      scrollLeft.set(w * 1)
       // 标记初始化完成
       setInitialized(true)
       // 启动动画完成后（约600ms），重置 isInitialLoad
@@ -790,14 +655,11 @@ export function AssetsScreen(props: {
             key="debt"
             block={blocks.debt}
             kind="debt"
-            roseRect={roseLayout.rects.debt}
-            roseRotate={roseLayout.rotates.debt}
             ratioRect={ratioLayout.rects.debt}
             listRect={listRects.debt}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
-            labelScale={labelScale}
             chartRadius={chartRadius}
             listRadius={listRadius}
           />
@@ -808,34 +670,15 @@ export function AssetsScreen(props: {
             key={b.id}
             block={b}
             kind={blockKinds[b.id] ?? 'assetMiddle'}
-            roseRect={roseLayout.rects[b.id]}
-            roseRotate={roseLayout.rotates[b.id]}
             ratioRect={ratioLayout.rects[b.id]}
             listRect={listRects[b.id]}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
-            labelScale={labelScale}
             chartRadius={chartRadius}
             listRadius={listRadius}
           />
         ))}
-
-        {netWorthBlock ? (
-          <OverlayBlock
-            key="networth"
-            block={netWorthBlock}
-            kind="assetMiddle"
-            roseRect={roseLayout.rects.networth}
-            roseRotate={roseLayout.rotates.networth}
-            scrollIdx={scrollIdx}
-            overlayFade={overlayFade}
-            labelsOpacity={labelsOpacity}
-            labelScale={labelScale}
-            chartRadius={chartRadius}
-            listRadius={listRadius}
-          />
-        ) : null}
         </motion.div>
       ) : null}
 
@@ -945,11 +788,7 @@ export function AssetsScreen(props: {
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
-          <AssetsRosePage grouped={grouped} onNext={() => scrollToPage(1)} />
-        </div>
-
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
-          <AssetsRatioPage onBack={() => scrollToPage(2)} />
+          <AssetsRatioPage onBack={() => scrollToPage(1)} />
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
@@ -958,7 +797,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             onPickType={(type) => {
               setSelectedType(type)
-              scrollToPage(3)
+              scrollToPage(2)
             }}
             expandedGroup={expandedGroup}
             onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
@@ -976,7 +815,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             hideAmounts={hideAmounts}
             onBack={() => {
-              scrollToPage(2)
+              scrollToPage(1)
               setSelectedType(null)
             }}
             onEditAccount={onEditAccount}
