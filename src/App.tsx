@@ -1,4 +1,4 @@
-import { BarChart3, Palette, PieChart, TrendingUp, Plus } from 'lucide-react'
+import { ChevronLeft } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen.tsx'
@@ -100,41 +100,37 @@ export default function App() {
               transition={{ duration: 0.2 }}
               style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
             >
-              <div className="topBar">
-                <div className="topBarRow">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={title}
-                      initial={{ y: 10, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: -10, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="title"
-                    >
-                      {title}
-                    </motion.div>
-                  </AnimatePresence>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    {tab === 'assets' ? (
-                      <motion.button
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
+              {tab !== 'assets' ? (
+                <div className="topBar">
+                  <div className="topBarRow">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <button
                         type="button"
-                        className="iconBtn iconBtnPrimary"
-                        aria-label="add"
-                        onClick={() => setQuickAddOpen(true)}
+                        className="iconBtn"
+                        aria-label="back"
+                        onClick={() => setTab('assets')}
                       >
-                        <Plus size={22} strokeWidth={3} />
-                      </motion.button>
-                    ) : null}
+                        <ChevronLeft size={20} strokeWidth={2.5} />
+                      </button>
+                      <AnimatePresence mode="wait">
+                        <motion.div
+                          key={title}
+                          initial={{ y: 10, opacity: 0 }}
+                          animate={{ y: 0, opacity: 1 }}
+                          exit={{ y: -10, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="title"
+                        >
+                          {title}
+                        </motion.div>
+                      </AnimatePresence>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10 }} />
                   </div>
                 </div>
-              </div>
+              ) : null}
 
-              <div className="content relative">
+              <div className={tab === 'assets' ? 'relative flex-1 min-h-0' : 'content relative'}>
                 <AnimatePresence mode="wait">
                   {tab === 'assets' && (
                     <motion.div
@@ -148,6 +144,8 @@ export default function App() {
                       <AssetsScreen
                         grouped={accounts.grouped}
                         getIcon={accounts.getIcon}
+                        onAddAccount={() => setQuickAddOpen(true)}
+                        onNavigate={(next) => setTab(next)}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
                           setDetailAction('none')
@@ -222,42 +220,6 @@ export default function App() {
                 onTransfer={accounts.transfer}
                 onAddOp={accountOps.addOp}
               />
-
-              <div className="navBar">
-                <div className="navBarGrid">
-                  {[
-                    { id: 'assets', icon: PieChart, label: '资产' },
-                    { id: 'trend', icon: TrendingUp, label: '趋势' },
-                    { id: 'stats', icon: BarChart3, label: '统计' },
-                    { id: 'settings', icon: Palette, label: '主题' },
-                  ].map((item) => {
-                    const isActive = tab === item.id
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={isActive ? 'navItem navItemActive' : 'navItem'}
-                        onClick={() => setTab(item.id as TabId)}
-                      >
-                        <motion.div
-                          animate={isActive ? { scale: 1.1, y: -2 } : { scale: 1, y: 0 }}
-                          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                        >
-                          <item.icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                        </motion.div>
-                        <div className="navLabel">{item.label}</div>
-                        {isActive && (
-                          <motion.div
-                            layoutId="navIndicator"
-                            className="absolute bottom-1 w-1 h-1 bg-primary rounded-full"
-                            style={{ backgroundColor: 'var(--primary)' }}
-                          />
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
             </motion.div>
           )}
         </AnimatePresence>

@@ -1,203 +1,160 @@
-import { type ComponentType, useState } from 'react'
-import { Plus, Eye, ChevronDown, ChevronUp } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { clsx } from 'clsx'
+import { AnimatePresence, motion } from 'framer-motion'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+import { type ComponentType, useMemo, useState } from 'react'
+import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import type { GroupedAccounts } from './AssetsScreen'
-import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
-import { clsx } from 'clsx'
 
 export function AssetsListPage(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
-  onAddAccount: () => void
   onPickType: (type: AccountTypeId) => void
 }) {
-  const { grouped, getIcon, onAddAccount, onPickType } = props
+  const { grouped, getIcon, onPickType } = props
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
 
-  // Define colors for the side strip to match the image/theme
-  const groupColors: Record<string, string> = {
-    liquid: '#4ade80',    // Green
-    invest: '#6366f1',    // Purple
-    fixed: '#3b82f6',     // Blue
-    receivable: '#93c5fd',// Light Blue
-    debt: '#94a3b8',      // Grey
-  }
+  const groups = useMemo(() => {
+    const order = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+    const rank = new Map(order.map((id, i) => [id, i]))
+    return grouped.groupCards
+      .filter((g) => g.accounts.length > 0)
+      .slice()
+      .sort((a, b) => (rank.get(a.group.id) ?? 999) - (rank.get(b.group.id) ?? 999))
+  }, [grouped.groupCards])
 
   const toggleGroup = (id: string) => {
-    setExpandedGroup(current => current === id ? null : id)
+    setExpandedGroup((current) => (current === id ? null : id))
+  }
+
+  const formatTime = (iso?: string) => {
+    if (!iso) return ''
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return ''
+    return `${d.getMonth() + 1}月${d.getDate()}日 更新`
   }
 
   return (
-    <div className="h-full flex flex-col p-4 overflow-y-auto" style={{ background: 'var(--bg)' }}>
-      <motion.div 
-        className="mb-6 mt-2 px-2"
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-extrabold text-slate-500/80">我的净资产 (CNY)</span>
-          <Eye size={14} className="text-slate-400" />
-        </div>
-        <div className="flex items-center justify-between">
-          <motion.div 
-            className="text-3xl font-black tracking-tight text-[var(--text)]"
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-          >
-            {formatCny(grouped.netWorth)}
-          </motion.div>
-          <motion.button 
-            onClick={onAddAccount}
-            className="w-10 h-10 rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] flex items-center justify-center shadow-lg"
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Plus size={22} strokeWidth={3} />
-          </motion.button>
-        </div>
-      </motion.div>
+    <div className="h-full overflow-y-auto bg-transparent">
+      <div className="px-4 pt-24 pb-24">
+        <div className="flex flex-col gap-3 pl-24">
+          {groups.map((g, i) => {
+            const isExpanded = expandedGroup === g.group.id
 
-      <div className="flex flex-col gap-3 pb-8">
-        {grouped.groupCards.filter((g) => g.accounts.length > 0).map((g, i) => {
-          const color = groupColors[g.group.id] || '#cbd5e1'
-          const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
-          const updatedAt = g.accounts.length > 0 
-            ? g.accounts.map(a => a.updatedAt).sort().at(-1)
-            : undefined
-            
-          const formatTime = (iso?: string) => {
-             if (!iso) return ''
-             const d = new Date(iso)
-             if (Number.isNaN(d.getTime())) return ''
-             return `${d.getMonth() + 1}月${d.getDate()}日 更新`
-          }
+            const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
+            const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().at(-1) : undefined
 
-          const isExpanded = expandedGroup === g.group.id
+            const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
+              .map((type) => {
+                const accounts = g.accounts.filter((a) => a.type === type)
+                const total = accounts.reduce((s, a) => s + a.balance, 0)
+                const updatedAt = accounts.map((a) => a.updatedAt).sort().at(-1)
+                const opt = getAccountTypeOption(type)
+                return { type, opt, accounts, total, updatedAt }
+              })
+              .sort((a, b) => b.total - a.total)
 
-          const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
-            .map((type) => {
-              const accounts = g.accounts.filter((a) => a.type === type)
-              const total = accounts.reduce((s, a) => s + a.balance, 0)
-              const updatedAt = accounts.map((a) => a.updatedAt).sort().at(-1)
-              const opt = getAccountTypeOption(type)
-              return { type, opt, accounts, total, updatedAt }
-            })
-            .sort((a, b) => b.total - a.total)
-
-          return (
-            <motion.div 
-              key={g.group.id} 
-              className="relative bg-[var(--card)] rounded-[24px] overflow-hidden border border-[var(--hairline)]"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 + 0.1 }}
-              style={{
-                 boxShadow: isExpanded ? 'var(--shadow-hover)' : 'var(--shadow-soft)',
-              }}
-            >
-              <AnimatePresence>
-                {isExpanded && (
-                  <motion.div 
-                    className="absolute left-0 top-0 bottom-0 w-[6px]" 
-                    style={{ background: color }}
-                    initial={{ scaleY: 0 }}
-                    animate={{ scaleY: 1 }}
-                    exit={{ scaleY: 0 }}
-                    transition={{ duration: 0.2 }}
-                  />
-                )}
-              </AnimatePresence>
-              
-              <div className={isExpanded ? 'pl-5 pr-4 py-4 flex flex-col gap-3' : 'px-4 py-4 flex flex-col gap-3'}>
-                <div 
-                  className="flex justify-between items-start cursor-pointer group"
+            return (
+              <motion.div
+                key={g.group.id}
+                className="relative rounded-[22px] border border-white/70 overflow-hidden"
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08 + i * 0.03 }}
+                style={{
+                  background: g.group.id === 'debt' ? 'rgba(217, 212, 246, 0.75)' : 'rgba(255, 255, 255, 0.85)',
+                  boxShadow: 'var(--shadow-soft)',
+                }}
+              >
+                <button
+                  type="button"
+                  className="w-full text-left"
                   onClick={() => toggleGroup(g.group.id)}
+                  aria-expanded={isExpanded}
                 >
-                  <div>
-                    <div className="font-black text-[15px] text-[var(--text)] mb-1 flex items-center gap-2">
-                      <span style={isExpanded ? { color } : undefined}>{g.group.name}</span>
-                      <span className="text-slate-300 group-hover:text-slate-500 transition-colors">
-                        {isExpanded ? <ChevronUp size={14} strokeWidth={3} /> : <ChevronDown size={14} strokeWidth={3} />}
-                      </span>
+                  <div className="px-4 py-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="text-[15px] font-semibold tracking-tight text-slate-900">{g.group.name}</div>
+                          <div className="text-slate-400">
+                            {isExpanded ? (
+                              <ChevronUp size={14} strokeWidth={2.5} />
+                            ) : (
+                              <ChevronDown size={14} strokeWidth={2.5} />
+                            )}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-[11px] font-medium text-slate-500 truncate max-w-[220px]">
+                          {isExpanded ? '选择资产类别' : typeNames}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-[17px] font-semibold tracking-tight text-slate-900">{formatCny(g.total)}</div>
+                        <div className="mt-1 text-[10px] font-medium text-slate-400">{formatTime(updatedAt)}</div>
+                      </div>
                     </div>
-                    <div className="text-xs font-bold text-slate-400 truncate max-w-[180px]">
-                      {isExpanded ? '选择资产类别' : typeNames}
-                    </div>
+
+                    {!isExpanded ? <div className="mt-2 text-[12px] text-slate-300 leading-none">...</div> : null}
                   </div>
-                  <div className="text-right">
-                    <div
-                      className="font-black text-[17px] text-[var(--text)] flex items-center justify-end gap-1"
-                      style={isExpanded ? { color } : undefined}
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {isExpanded ? (
+                    <motion.div
+                      key="types"
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeInOut' }}
+                      className="overflow-hidden"
                     >
-                      {g.group.id === 'debt' && g.total > 0 && (
-                        <span className="w-5 h-5 rounded-full border-2 border-slate-400 flex items-center justify-center text-xs font-black text-slate-500">−</span>
-                      )}
-                      {formatCny(g.total)}
-                    </div>
-                    <div className="text-[10px] font-bold text-slate-300 mt-1">
-                      {formatTime(updatedAt)}
-                    </div>
-                  </div>
-                </div>
-                
-                <motion.div
-                  initial={false}
-                  animate={{ height: isExpanded ? 'auto' : 0, opacity: isExpanded ? 1 : 0 }}
-                  transition={{ duration: 0.3, ease: 'easeInOut' }}
-                  className={clsx(
-                    "flex flex-col gap-2 overflow-hidden"
-                  )}
-                >
-                  {isExpanded && (
-                    <motion.div 
-                      className="pt-3 border-t border-slate-50 mt-1 flex flex-col gap-2"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.2, delay: 0.1 }}
-                    >
-                      {typeCards.map((t) => {
-                        const Icon = getIcon(t.type)
-                        return (
-                          <motion.div
-                            key={t.type}
-                            className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl cursor-pointer"
-                            onClick={() => onPickType(t.type)}
-                            whileTap={{ scale: 0.98 }}
-                            whileHover={{ backgroundColor: 'var(--hairline)' }}
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div
-                                className="w-9 h-9 rounded-2xl flex items-center justify-center shadow-sm border border-slate-200/50"
-                                style={{ background: color, color: 'rgba(0,0,0,0.75)' }}
+                      <div className="px-3 pb-3">
+                        <div className="h-px bg-white/60 mb-2" />
+                        <div className="flex flex-col gap-2">
+                          {typeCards.map((t) => {
+                            const Icon = getIcon(t.type)
+                            return (
+                              <motion.button
+                                key={t.type}
+                                type="button"
+                                className={clsx(
+                                  'flex items-center justify-between rounded-[18px] px-3 py-3 text-left',
+                                  'bg-white/70 hover:bg-white/85 transition-colors',
+                                )}
+                                onClick={() => onPickType(t.type)}
+                                whileTap={{ scale: 0.99 }}
                               >
-                                <Icon size={18} />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="font-black text-sm truncate" style={{ color }}>
-                                  {t.opt.name}
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div
+                                    className="w-9 h-9 rounded-2xl flex items-center justify-center border border-black/5"
+                                    style={{ background: g.group.tone, color: 'rgba(0,0,0,0.78)' }}
+                                  >
+                                    <Icon size={18} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-[13px] font-semibold truncate text-slate-900">{t.opt.name}</div>
+                                    <div className="text-[10px] font-medium text-slate-400 mt-0.5">
+                                      {t.updatedAt ? formatTime(t.updatedAt) : ''}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="text-[10px] font-bold text-slate-300 mt-0.5">
-                                  {t.updatedAt ? formatTime(t.updatedAt) : ''}
+                                <div className="text-right shrink-0">
+                                  <div className="text-[13px] font-semibold text-slate-900">{formatCny(t.total)}</div>
+                                  <div className="text-[10px] font-medium text-slate-400 mt-0.5">{t.accounts.length} 项</div>
                                 </div>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-black text-sm text-[var(--text)]">{formatCny(t.total)}</div>
-                              <div className="text-[10px] font-bold text-slate-300 mt-0.5">{t.accounts.length} 个</div>
-                            </div>
-                          </motion.div>
-                        )
-                      })}
+                              </motion.button>
+                            )
+                          })}
+                        </div>
+                      </div>
                     </motion.div>
-                  )}
-                </motion.div>
-              </div>
-            </motion.div>
-          )
-        })}
+                  ) : null}
+                </AnimatePresence>
+              </motion.div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )
