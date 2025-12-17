@@ -933,6 +933,8 @@ export function AssetsScreen(props: {
               onNext={() => scrollToPage(1)}
               nodes={bubbleNodes}
               positions={bubblePositions}
+              width={viewport.w}
+              height={viewport.h}
             />
           </div>
         </div>
