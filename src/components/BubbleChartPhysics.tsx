@@ -34,7 +34,6 @@ export function useBubblePhysics(
   const engineRef = useRef<Matter.Engine | null>(null)
   const runnerRef = useRef<Matter.Runner | null>(null)
   const knownIdsRef = useRef(new Set<string>())
-  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
@@ -123,10 +122,7 @@ export function useBubblePhysics(
       }
     })
 
-    setIsReady(true)
-
     return () => {
-      setIsReady(false)
       Matter.Runner.stop(runner)
       Matter.Engine.clear(engine)
       engineRef.current = null
@@ -173,6 +169,5 @@ export function useBubblePhysics(
     return () => window.removeEventListener('deviceorientation', handleOrientation)
   }, [isActive])
 
-  return { positions, isReady }
+  return positions
 }
-

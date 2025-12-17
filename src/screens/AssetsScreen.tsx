@@ -398,7 +398,7 @@ export function AssetsScreen(props: {
     return nodes
   }, [grouped.groupCards])
 
-  const { positions: bubblePositions, isReady: isPhysicsReady } = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
+  const bubblePositions = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -933,9 +933,6 @@ export function AssetsScreen(props: {
               onNext={() => scrollToPage(1)}
               nodes={bubbleNodes}
               positions={bubblePositions}
-              width={viewport.w}
-              height={viewport.h}
-              isPhysicsReady={isPhysicsReady}
             />
           </div>
         </div>
