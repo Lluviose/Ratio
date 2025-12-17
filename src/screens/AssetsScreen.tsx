@@ -243,7 +243,8 @@ export function AssetsScreen(props: {
   const ratioProgress = useTransform(scrollIdx, [0, 1, 2], [0, 0, 1])
 
   // Blocks visible on Page 0-2, fade out quickly on 3
-  const overlayFade = useTransform(scrollIdx, [0, 2, 2.08, 3], [1, 1, 0, 0])
+  // MODIFIED: Hide blocks on Page 0 (Rose) because we now use a real chart there. Fade in for Page 1.
+  const overlayFade = useTransform(scrollIdx, [0, 0.4, 1, 2, 2.08, 3], [0, 0, 1, 1, 0, 0])
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
   const listHeaderOpacity = ratioProgress
