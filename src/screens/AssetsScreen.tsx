@@ -1,6 +1,6 @@
-import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
-import { BarChart3, Eye, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
-import { type ComponentType, useEffect, useMemo, useRef, useState } from 'react'
+import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
+import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { AssetsListPage } from './AssetsListPage'
@@ -14,6 +14,114 @@ export type GroupedAccounts = {
   netWorth: number
 }
 
+type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
+
+type Rect = { x: number; y: number; w: number; h: number }
+
+type Block = {
+  id: GroupId
+  name: string
+  tone: string
+  amount: number
+  percent: number
+  darkText: boolean
+  hasCard: boolean
+}
+
+type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly'
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+function OverlayBlock(props: {
+  block: Block
+  kind: CornerKind
+  ratioRect?: Rect
+  listRect?: Rect
+  progress: MotionValue<number>
+  overlayFade: MotionValue<number>
+  labelsOpacity: MotionValue<number>
+  chartRadius: number
+  listRadius: number
+}) {
+  const { block, kind, ratioRect, listRect, progress, overlayFade, labelsOpacity, chartRadius, listRadius } = props
+
+  const from = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
+  const to = listRect ?? ratioRect ?? from
+
+  const visibleFrom = ratioRect ? 1 : 0
+  const visibleTo = listRect ? 1 : 0
+  const visible = useTransform(progress, (p) => lerp(visibleFrom, visibleTo, p))
+  const opacity = useTransform([overlayFade, visible], (values) => {
+    const [a, b] = values as number[]
+    return a * b
+  })
+
+  const x = useTransform(progress, (p) => lerp(from.x, to.x, p))
+  const y = useTransform(progress, (p) => lerp(from.y, to.y, p))
+  const w = useTransform(progress, (p) => lerp(from.w, to.w, p))
+  const h = useTransform(progress, (p) => lerp(from.h, to.h, p))
+
+  const toCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
+  const fromCorner =
+    kind === 'debt'
+      ? { tl: chartRadius, tr: 0, bl: chartRadius, br: 0 }
+      : kind === 'assetOnly'
+        ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
+      : kind === 'assetTop'
+        ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+        : kind === 'assetBottom'
+          ? { tl: 0, tr: 0, bl: 0, br: chartRadius }
+          : { tl: 0, tr: 0, bl: 0, br: 0 }
+
+  const tl = useTransform(progress, (p) => lerp(fromCorner.tl, toCorner.tl, p))
+  const tr = useTransform(progress, (p) => lerp(fromCorner.tr, toCorner.tr, p))
+  const bl = useTransform(progress, (p) => lerp(fromCorner.bl, toCorner.bl, p))
+  const br = useTransform(progress, (p) => lerp(fromCorner.br, toCorner.br, p))
+
+  const textColor = block.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.96)'
+
+  return (
+    <motion.div
+      className="absolute pointer-events-none"
+      style={{
+        left: x,
+        top: y,
+        width: w,
+        height: h,
+        background: block.tone,
+        borderTopLeftRadius: tl,
+        borderTopRightRadius: tr,
+        borderBottomLeftRadius: bl,
+        borderBottomRightRadius: br,
+        opacity,
+        overflow: 'hidden',
+      }}
+    >
+      <motion.div style={{ opacity: labelsOpacity, color: textColor }} className="w-full h-full">
+        {kind === 'debt' ? (
+          <div className="h-full flex flex-col justify-center p-4">
+            <div className="text-[34px] font-semibold tracking-tight leading-none">
+              {block.percent}
+              <span className="text-[14px] align-top ml-0.5">%</span>
+            </div>
+            <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
+          </div>
+        ) : (
+          <div className="p-4">
+            <div className="text-[38px] font-semibold tracking-tight leading-none">
+              {block.percent}
+              <span className="text-[14px] align-top ml-0.5">%</span>
+            </div>
+            <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  )
+}
+
 export function AssetsScreen(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
@@ -25,13 +133,25 @@ export function AssetsScreen(props: {
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const listScrollRef = useRef<HTMLDivElement | null>(null)
   const moreRef = useRef<HTMLDivElement | null>(null)
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const measureRafRef = useRef<number | null>(null)
+  const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
+
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
+  const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [hideAmounts, setHideAmounts] = useState(false)
+  const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
+
   const scrollLeft = useMotionValue(0)
 
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
+
+  const maskedText = '*****'
+  const maskedClass = 'tracking-[0.28em]'
 
   const scrollToPage = (index: number) => {
     const el = scrollerRef.current
@@ -39,6 +159,158 @@ export function AssetsScreen(props: {
     const w = el.clientWidth || 0
     el.scrollTo({ left: w * index, behavior: 'smooth' })
   }
+
+  const ratioProgress = useTransform(scrollLeft, (v) => {
+    const w = viewport.w || 1
+    const p = v / w
+    return Math.max(0, Math.min(1, p))
+  })
+
+  const overlayFade = useTransform(scrollLeft, (v) => {
+    const w = viewport.w || 1
+    const idx = v / w
+    if (idx <= 1) return 1
+    const t = (idx - 1) / 0.08
+    return Math.max(0, 1 - t)
+  })
+
+  const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
+  const listHeaderOpacity = ratioProgress
+  const labelsOpacity = useTransform(ratioProgress, [0, 1], [1, 0])
+  const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])
+  const miniBarY = useTransform(ratioProgress, [0, 1], [16, 0])
+
+  const blocks = useMemo(() => {
+    const byId = new Map<GroupId, { group: AccountGroup; accountsCount: number; total: number }>()
+    for (const g of grouped.groupCards) {
+      byId.set(g.group.id as GroupId, { group: g.group, accountsCount: g.accounts.length, total: g.total })
+    }
+
+    const assetsTotal = grouped.assetsTotal || 0
+    const pct = (amount: number, total: number) => (total > 0 ? Math.round((amount / total) * 100) : 0)
+
+    const assetOrder: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable']
+    const assets: Block[] = assetOrder
+      .map((id) => {
+        const g = byId.get(id)
+        if (!g) return null
+        return {
+          id,
+          name: g.group.name,
+          tone: g.group.tone,
+          amount: g.total,
+          percent: pct(g.total, assetsTotal),
+          darkText: id === 'liquid' || id === 'receivable',
+          hasCard: g.accountsCount > 0,
+        } satisfies Block
+      })
+      .filter((v): v is Block => Boolean(v))
+      .filter((b) => b.hasCard)
+
+    const debtRaw = byId.get('debt')
+    const debt: Block | null = debtRaw
+      ? {
+          id: 'debt',
+          name: debtRaw.group.name,
+          tone: debtRaw.group.tone,
+          amount: debtRaw.total,
+          percent: pct(debtRaw.total, assetsTotal),
+          darkText: true,
+          hasCard: debtRaw.accountsCount > 0,
+        }
+      : null
+
+    return { assets, debt: debt && debt.hasCard ? debt : null }
+  }, [grouped])
+
+  const ratioLayout = useMemo(() => {
+    const top = 64
+    const chartH = Math.max(0, viewport.h - top)
+    const chartW = viewport.w
+    const debtW = Math.round(chartW * 0.24)
+    const assetX = debtW
+    const assetW = Math.max(0, chartW - debtW)
+
+    const rects: Partial<Record<GroupId, Rect>> = {}
+    if (blocks.debt) rects.debt = { x: 0, y: top, w: debtW, h: chartH }
+
+    const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
+    const total = ratioAssets.reduce((s, b) => s + b.amount, 0)
+    let y = top
+
+    for (let i = 0; i < ratioAssets.length; i += 1) {
+      const b = ratioAssets[i]
+      const isLast = i === ratioAssets.length - 1
+      const rawH = total > 0 ? (chartH * b.amount) / total : 0
+      const height = isLast ? top + chartH - y : rawH
+      rects[b.id] = { x: assetX, y, w: assetW, h: Math.max(0, height) }
+      y += height
+    }
+
+    return {
+      rects,
+      topAssetId: ratioAssets.at(0)?.id ?? null,
+      bottomAssetId: ratioAssets.at(-1)?.id ?? null,
+    }
+  }, [blocks, viewport.h, viewport.w])
+
+  const blockKinds = useMemo(() => {
+    const kinds: Partial<Record<GroupId, CornerKind>> = {}
+    if (blocks.debt) kinds.debt = 'debt'
+    const singleAsset = Boolean(ratioLayout.topAssetId && ratioLayout.topAssetId === ratioLayout.bottomAssetId)
+    for (const b of blocks.assets) {
+      if (singleAsset && b.id === ratioLayout.topAssetId) kinds[b.id] = 'assetOnly'
+      else if (b.id === ratioLayout.topAssetId) kinds[b.id] = 'assetTop'
+      else if (b.id === ratioLayout.bottomAssetId) kinds[b.id] = 'assetBottom'
+      else kinds[b.id] = 'assetMiddle'
+    }
+    return kinds
+  }, [blocks.assets, blocks.debt, ratioLayout.bottomAssetId, ratioLayout.topAssetId])
+
+  const measureListRects = useCallback(() => {
+    const root = viewportRef.current
+    if (!root) return
+
+    const w = root.clientWidth || 1
+    const idx = scrollLeft.get() / w
+    if (Math.abs(idx - 1) > 0.12) return
+
+    const rootRect = root.getBoundingClientRect()
+    const next: Partial<Record<GroupId, Rect>> = {}
+
+    for (const id of Object.keys(groupElsRef.current) as GroupId[]) {
+      const el = groupElsRef.current[id]
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      next[id] = {
+        x: 0,
+        y: r.top - rootRect.top,
+        w: r.width,
+        h: r.height,
+      }
+    }
+
+    setListRects(next)
+  }, [scrollLeft])
+
+  const scheduleMeasure = useCallback(() => {
+    if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current)
+    measureRafRef.current = requestAnimationFrame(() => measureListRects())
+  }, [measureListRects])
+
+  const onGroupEl = useCallback(
+    (id: GroupId, el: HTMLDivElement | null) => {
+      const ro = resizeObserverRef.current
+      const prev = groupElsRef.current[id]
+
+      if (ro && prev) ro.unobserve(prev)
+      groupElsRef.current[id] = el
+      if (ro && el) ro.observe(el)
+
+      scheduleMeasure()
+    },
+    [scheduleMeasure],
+  )
 
   useEffect(() => {
     const el = viewportRef.current
@@ -56,6 +328,23 @@ export function AssetsScreen(props: {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+
+    const ro = new ResizeObserver(() => scheduleMeasure())
+    resizeObserverRef.current = ro
+
+    for (const id of Object.keys(groupElsRef.current) as GroupId[]) {
+      const el = groupElsRef.current[id]
+      if (el) ro.observe(el)
+    }
+
+    return () => {
+      ro.disconnect()
+      resizeObserverRef.current = null
+    }
+  }, [scheduleMeasure])
 
   useEffect(() => {
     if (!moreOpen) return
@@ -92,9 +381,7 @@ export function AssetsScreen(props: {
     let raf = 0
     const onScroll = () => {
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        scrollLeft.set(el.scrollLeft)
-      })
+      raf = requestAnimationFrame(() => scrollLeft.set(el.scrollLeft))
     }
 
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -104,121 +391,61 @@ export function AssetsScreen(props: {
     }
   }, [scrollLeft])
 
-  const ratioProgress = useTransform(scrollLeft, (v) => {
-    const w = viewport.w || 1
-    const p = v / w
-    return Math.max(0, Math.min(1, p))
-  })
+  useEffect(() => {
+    const el = listScrollRef.current
+    if (!el) return
 
-  const overlayFade = useTransform(scrollLeft, (v) => {
-    const w = viewport.w || 1
-    const idx = v / w
-    if (idx <= 1) return 1
-    const t = (idx - 1) / 0.08
-    return Math.max(0, 1 - t)
-  })
-
-  const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
-  const listHeaderOpacity = ratioProgress
-
-  const labelsOpacity = useTransform(ratioProgress, [0, 1], [1, 0])
-
-  const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])
-  const miniBarY = useTransform(ratioProgress, [0, 1], [16, 0])
-
-  const chart = useMemo(() => {
-    const assetsTotal = grouped.assetsTotal || 0
-    const debtTotal = grouped.debtTotal || 0
-    const pct = (amount: number, total: number) => (total > 0 ? Math.round((amount / total) * 100) : 0)
-
-    const order = ['liquid', 'invest', 'fixed', 'receivable']
-    const rank = new Map(order.map((id, i) => [id, i]))
-
-    const assets = grouped.groupCards
-      .filter((g) => g.group.id !== 'debt' && g.total > 0)
-      .slice()
-      .sort((a, b) => (rank.get(a.group.id) ?? 999) - (rank.get(b.group.id) ?? 999))
-      .map((g) => ({
-        id: g.group.id,
-        name: g.group.name,
-        tone: g.group.tone,
-        amount: g.total,
-        percent: pct(g.total, assetsTotal),
-        darkText: g.group.id === 'liquid' || g.group.id === 'receivable',
-      }))
-
-    const debtTone = grouped.groupCards.find((g) => g.group.id === 'debt')?.group.tone ?? '#d9d4f6'
-
-    const debt = {
-      name: '负债',
-      tone: debtTone,
-      amount: debtTotal,
-      percent: pct(debtTotal, assetsTotal),
+    let raf = 0
+    const onScroll = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => scheduleMeasure())
     }
 
-    return { assets, debt }
-  }, [grouped])
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      cancelAnimationFrame(raf)
+      el.removeEventListener('scroll', onScroll)
+    }
+  }, [scheduleMeasure])
 
-  const fullTop = 64
-  const collapsedTop = 104
-  const peekWidth = Math.round(Math.min(140, Math.max(96, viewport.w * 0.28)))
-  const fullHeight = Math.max(0, viewport.h - fullTop)
-  const collapsedHeight = Math.round(Math.min(460, Math.max(260, viewport.h * 0.58)))
+  useEffect(() => scheduleMeasure(), [expandedGroup, scheduleMeasure])
 
-  const chartTop = useTransform(ratioProgress, [0, 1], [fullTop, collapsedTop])
-  const chartWidth = useTransform(ratioProgress, [0, 1], [viewport.w, peekWidth])
-  const chartHeight = useTransform(ratioProgress, [0, 1], [fullHeight, collapsedHeight])
+  const chartRadius = 32
+  const listRadius = 30
 
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
-      {/* Ratio blocks background (collapses into left peek on list page) */}
-      {viewport.w > 0 && viewport.h > 0 ? (
-        <motion.div className="absolute inset-0 z-0 pointer-events-none" style={{ opacity: overlayFade }}>
-          <motion.div
-            className="absolute left-0 rounded-[32px] overflow-hidden"
-            style={{
-              top: chartTop,
-              width: chartWidth,
-              height: chartHeight,
-            }}
-          >
-            <div className="w-full h-full flex">
-              <div className="h-full flex flex-col justify-center p-4" style={{ background: chart.debt.tone, width: '24%' }}>
-                <motion.div style={{ opacity: labelsOpacity }}>
-                  <div className="text-[34px] font-semibold tracking-tight leading-none text-slate-900">
-                    {chart.debt.percent}
-                    <span className="text-[14px] align-top ml-0.5">%</span>
-                  </div>
-                  <div className="mt-1 text-[12px] font-medium text-slate-800/80">{chart.debt.name}</div>
-                </motion.div>
-              </div>
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        {blocks.debt ? (
+          <OverlayBlock
+            key="debt"
+            block={blocks.debt}
+            kind="debt"
+            ratioRect={ratioLayout.rects.debt}
+            listRect={listRects.debt}
+            progress={ratioProgress}
+            overlayFade={overlayFade}
+            labelsOpacity={labelsOpacity}
+            chartRadius={chartRadius}
+            listRadius={listRadius}
+          />
+        ) : null}
 
-              <div className="flex-1 h-full flex flex-col">
-                {chart.assets.map((s) => (
-                  <div
-                    key={s.id}
-                    className="p-4"
-                    style={{
-                      background: s.tone,
-                      flexGrow: s.amount,
-                      minHeight: 72,
-                      color: s.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.95)',
-                    }}
-                  >
-                    <motion.div style={{ opacity: labelsOpacity }}>
-                      <div className="text-[38px] font-semibold tracking-tight leading-none">
-                        {s.percent}
-                        <span className="text-[14px] align-top ml-0.5">%</span>
-                      </div>
-                      <div className="mt-1 text-[12px] font-medium opacity-85">{s.name}</div>
-                    </motion.div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </motion.div>
-      ) : null}
+        {blocks.assets.map((b) => (
+          <OverlayBlock
+            key={b.id}
+            block={b}
+            kind={blockKinds[b.id] ?? 'assetMiddle'}
+            ratioRect={ratioLayout.rects[b.id]}
+            listRect={listRects[b.id]}
+            progress={ratioProgress}
+            overlayFade={overlayFade}
+            labelsOpacity={labelsOpacity}
+            chartRadius={chartRadius}
+            listRadius={listRadius}
+          />
+        ))}
+      </div>
 
       <motion.div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none" style={{ opacity: overlayFade }}>
         <motion.div
@@ -228,9 +455,18 @@ export function AssetsScreen(props: {
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
-              <Eye size={14} className="text-slate-400" />
+              <button
+                type="button"
+                className="w-6 h-6 -m-1 rounded-full flex items-center justify-center text-slate-400 hover:bg-black/5"
+                onClick={() => setHideAmounts((v) => !v)}
+                aria-label={hideAmounts ? 'show amounts' : 'hide amounts'}
+              >
+                {hideAmounts ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
             </div>
-            <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">{formatCny(grouped.netWorth)}</div>
+            <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">
+              {hideAmounts ? <span className={maskedClass}>{maskedText}</span> : formatCny(grouped.netWorth)}
+            </div>
           </div>
 
           <button
@@ -306,14 +542,11 @@ export function AssetsScreen(props: {
         className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain scroll-smooth"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
-        <div
-          className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden"
-          style={{ overscrollBehaviorY: 'none', touchAction: 'pan-x' }}
-        >
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
           <AssetsRatioPage onBack={() => scrollToPage(1)} />
         </div>
 
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
           <AssetsListPage
             grouped={grouped}
             getIcon={getIcon}
@@ -321,6 +554,11 @@ export function AssetsScreen(props: {
               setSelectedType(type)
               scrollToPage(2)
             }}
+            expandedGroup={expandedGroup}
+            onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
+            hideAmounts={hideAmounts}
+            scrollRef={listScrollRef}
+            onGroupEl={onGroupEl}
           />
         </div>
 
@@ -329,6 +567,7 @@ export function AssetsScreen(props: {
             type={selectedType}
             accounts={accounts}
             getIcon={getIcon}
+            hideAmounts={hideAmounts}
             onBack={() => {
               scrollToPage(1)
               setSelectedType(null)

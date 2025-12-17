@@ -10,8 +10,9 @@ export function AssetsTypeDetailPage(props: {
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
   onBack: () => void
   onEditAccount: (account: Account) => void
+  hideAmounts: boolean
 }) {
-  const { type, accounts, onBack, onEditAccount } = props
+  const { type, accounts, onBack, onEditAccount, hideAmounts } = props
 
   const info = useMemo(() => {
     if (!type) return null
@@ -26,6 +27,8 @@ export function AssetsTypeDetailPage(props: {
   }, [accounts, type])
 
   const total = useMemo(() => list.reduce((s, a) => s + a.balance, 0), [list])
+  const maskedText = '*****'
+  const maskedClass = 'tracking-[0.28em]'
 
   if (!type || !info) {
     return <div className="h-full" style={{ background: 'var(--bg)' }} />
@@ -58,7 +61,9 @@ export function AssetsTypeDetailPage(props: {
             <div className="text-xs font-bold text-[var(--muted-text)] truncate">{info.group.name}</div>
           </div>
           <div className="text-right">
-            <div className="font-black text-[15px] text-[var(--text)]">{formatCny(total)}</div>
+            <div className={hideAmounts ? `font-black text-[15px] text-[var(--text)] ${maskedClass}` : 'font-black text-[15px] text-[var(--text)]'}>
+              {hideAmounts ? maskedText : formatCny(total)}
+            </div>
           </div>
         </div>
       </motion.div>
@@ -101,7 +106,9 @@ export function AssetsTypeDetailPage(props: {
                   </div>
                   <div className="font-bold text-sm text-slate-700 truncate">{account.name}</div>
                 </div>
-                <div className="font-black text-sm text-[var(--text)]">{formatCny(account.balance)}</div>
+                <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
+                  {hideAmounts ? maskedText : formatCny(account.balance)}
+                </div>
               </motion.div>
             ))}
           </div>

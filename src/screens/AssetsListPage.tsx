@@ -1,31 +1,36 @@
 import { clsx } from 'clsx'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronDown, ChevronUp } from 'lucide-react'
-import { type ComponentType, useMemo, useState } from 'react'
+import { type ComponentType, type Ref, useMemo } from 'react'
 import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import type { GroupedAccounts } from './AssetsScreen'
+
+type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
 
 export function AssetsListPage(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
   onPickType: (type: AccountTypeId) => void
+  expandedGroup: GroupId | null
+  onToggleGroup: (id: GroupId) => void
+  hideAmounts: boolean
+  scrollRef?: Ref<HTMLDivElement>
+  onGroupEl?: (id: GroupId, el: HTMLDivElement | null) => void
 }) {
-  const { grouped, getIcon, onPickType } = props
-  const [expandedGroup, setExpandedGroup] = useState<string | null>(null)
+  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl } = props
 
   const groups = useMemo(() => {
-    const order = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+    const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
     const rank = new Map(order.map((id, i) => [id, i]))
     return grouped.groupCards
       .filter((g) => g.accounts.length > 0)
       .slice()
-      .sort((a, b) => (rank.get(a.group.id) ?? 999) - (rank.get(b.group.id) ?? 999))
+      .sort((a, b) => (rank.get(a.group.id as GroupId) ?? 999) - (rank.get(b.group.id as GroupId) ?? 999))
   }, [grouped.groupCards])
 
-  const toggleGroup = (id: string) => {
-    setExpandedGroup((current) => (current === id ? null : id))
-  }
+  const maskedText = '*****'
+  const maskedClass = 'tracking-[0.28em]'
 
   const formatTime = (iso?: string) => {
     if (!iso) return ''
@@ -35,11 +40,12 @@ export function AssetsListPage(props: {
   }
 
   return (
-    <div className="h-full overflow-y-auto bg-transparent">
+    <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">
       <div className="px-4 pt-24 pb-24">
         <div className="flex flex-col gap-3 pl-24">
           {groups.map((g, i) => {
-            const isExpanded = expandedGroup === g.group.id
+            const id = g.group.id as GroupId
+            const isExpanded = expandedGroup === id
 
             const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
             const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().at(-1) : undefined
@@ -56,20 +62,21 @@ export function AssetsListPage(props: {
 
             return (
               <motion.div
-                key={g.group.id}
+                key={id}
+                ref={(el) => onGroupEl?.(id, el)}
                 className="relative rounded-[22px] border border-white/70 overflow-hidden"
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.08 + i * 0.03 }}
                 style={{
-                  background: g.group.id === 'debt' ? 'rgba(217, 212, 246, 0.75)' : 'rgba(255, 255, 255, 0.85)',
+                  background: id === 'debt' ? 'rgba(217, 212, 246, 0.70)' : 'rgba(255, 255, 255, 0.86)',
                   boxShadow: 'var(--shadow-soft)',
                 }}
               >
                 <button
                   type="button"
                   className="w-full text-left"
-                  onClick={() => toggleGroup(g.group.id)}
+                  onClick={() => onToggleGroup(id)}
                   aria-expanded={isExpanded}
                 >
                   <div className="px-4 py-4">
@@ -78,11 +85,7 @@ export function AssetsListPage(props: {
                         <div className="flex items-center gap-2">
                           <div className="text-[15px] font-semibold tracking-tight text-slate-900">{g.group.name}</div>
                           <div className="text-slate-400">
-                            {isExpanded ? (
-                              <ChevronUp size={14} strokeWidth={2.5} />
-                            ) : (
-                              <ChevronDown size={14} strokeWidth={2.5} />
-                            )}
+                            {isExpanded ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
                           </div>
                         </div>
                         <div className="mt-1 text-[11px] font-medium text-slate-500 truncate max-w-[220px]">
@@ -90,7 +93,9 @@ export function AssetsListPage(props: {
                         </div>
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="text-[17px] font-semibold tracking-tight text-slate-900">{formatCny(g.total)}</div>
+                        <div className={clsx('text-[17px] font-semibold tracking-tight text-slate-900', hideAmounts && maskedClass)}>
+                          {hideAmounts ? maskedText : formatCny(g.total)}
+                        </div>
                         <div className="mt-1 text-[10px] font-medium text-slate-400">{formatTime(updatedAt)}</div>
                       </div>
                     </div>
@@ -140,8 +145,14 @@ export function AssetsListPage(props: {
                                   </div>
                                 </div>
                                 <div className="text-right shrink-0">
-                                  <div className="text-[13px] font-semibold text-slate-900">{formatCny(t.total)}</div>
-                                  <div className="text-[10px] font-medium text-slate-400 mt-0.5">{t.accounts.length} 项</div>
+                                  <div
+                                    className={clsx('text-[13px] font-semibold text-slate-900', hideAmounts && maskedClass)}
+                                  >
+                                    {hideAmounts ? maskedText : formatCny(t.total)}
+                                  </div>
+                                  <div className={clsx('text-[10px] font-medium text-slate-400 mt-0.5', hideAmounts && maskedClass)}>
+                                    {hideAmounts ? maskedText : String(t.accounts.length)} 项
+                                  </div>
                                 </div>
                               </motion.button>
                             )
