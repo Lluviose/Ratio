@@ -3,6 +3,7 @@ import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
+import { lerp } from '../lib/roseChartUtils'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRosePage } from './AssetsRosePage'
 import { AssetsRatioPage } from './AssetsRatioPage'
@@ -34,10 +35,6 @@ type NetWorthBlock = Omit<Block, 'id'> & { id: 'networth' }
 type OverlayBlockModel = Block | NetWorthBlock
 
 type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly'
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t
-}
 
 function OverlayBlock(props: {
   block: OverlayBlockModel
@@ -213,8 +210,11 @@ export function AssetsScreen(props: {
   const [hideAmounts, setHideAmounts] = useState(false)
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
+  const [initialized, setInitialized] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
 
-  const scrollLeft = useMotionValue(0)
+  // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
+  const scrollLeft = useMotionValue(99999)
 
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
 
@@ -323,17 +323,83 @@ export function AssetsScreen(props: {
     const assetW = Math.max(0, chartW - debtW)
 
     const rects: Partial<Record<GroupId, Rect>> = {}
-    if (blocks.debt) rects.debt = { x: 0, y: top, w: debtW, h: chartH }
+    
+    // 计算负债占资产的百分比
+    const assetsTotal = grouped.assetsTotal || 0
+    const debtTotal = blocks.debt?.amount || 0
+    const debtPercent = assetsTotal > 0 ? debtTotal / assetsTotal : 0
+    
+    // 决定哪边是100%高度的基准
+    const debtExceeds = debtPercent > 1
+    
+    // 计算实际显示高度
+    let assetDisplayH: number
+    let debtDisplayH: number
+    let assetStartY: number
+    let debtStartY: number
+    
+    if (debtExceeds) {
+      // 负债超过100%：负债占满，资产按比例缩小（资产高度 = 100% / 负债百分比）
+      debtDisplayH = chartH
+      debtStartY = top
+      assetDisplayH = chartH / debtPercent
+      assetStartY = top // 资产从顶部开始
+    } else {
+      // 负债不超过100%：资产占满，负债按比例缩小
+      assetDisplayH = chartH
+      assetStartY = top
+      debtDisplayH = chartH * debtPercent
+      debtStartY = top + chartH - debtDisplayH // 负债底部对齐，与资产底部平齐
+    }
+    
+    if (blocks.debt) {
+      rects.debt = { x: 0, y: debtStartY, w: debtW, h: debtDisplayH }
+    }
 
     const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
     const total = ratioAssets.reduce((s, b) => s + b.amount, 0)
-    let y = top
-
+    
+    // 最小高度阈值（确保文字可见）
+    const minHeight = 52
+    
+    // 第一遍：找出需要使用最小高度的资产
+    const assetHeights: { id: GroupId; rawH: number; useMin: boolean }[] = []
+    let minHeightSum = 0
+    
+    for (const b of ratioAssets) {
+      const rawH = total > 0 ? (assetDisplayH * b.amount) / total : 0
+      const useMin = rawH < minHeight && rawH > 0
+      if (useMin) minHeightSum += minHeight
+      assetHeights.push({ id: b.id, rawH, useMin })
+    }
+    
+    // 第二遍：计算剩余高度给非最小高度的资产
+    const remainingH = Math.max(0, assetDisplayH - minHeightSum)
+    const nonMinTotal = assetHeights
+      .filter((a) => !a.useMin)
+      .reduce((sum, a) => sum + a.rawH, 0)
+    
+    // 第三遍：分配最终高度
+    let y = assetStartY
     for (let i = 0; i < ratioAssets.length; i += 1) {
       const b = ratioAssets[i]
+      const info = assetHeights[i]
       const isLast = i === ratioAssets.length - 1
-      const rawH = total > 0 ? (chartH * b.amount) / total : 0
-      const height = isLast ? top + chartH - y : rawH
+      
+      let height: number
+      if (info.useMin) {
+        height = minHeight
+      } else if (nonMinTotal > 0) {
+        height = (remainingH * info.rawH) / nonMinTotal
+      } else {
+        height = info.rawH
+      }
+      
+      // 最后一个资产填满剩余空间
+      if (isLast) {
+        height = assetStartY + assetDisplayH - y
+      }
+      
       rects[b.id] = { x: assetX, y, w: assetW, h: Math.max(0, height) }
       y += height
     }
@@ -342,8 +408,11 @@ export function AssetsScreen(props: {
       rects,
       topAssetId: ratioAssets.at(0)?.id ?? null,
       bottomAssetId: ratioAssets.at(-1)?.id ?? null,
+      debtExceeds,
+      assetDisplayH,
+      assetStartY,
     }
-  }, [blocks, viewport.h, viewport.w])
+  }, [blocks, grouped.assetsTotal, viewport.h, viewport.w])
 
   const roseLayout = useMemo(() => {
     const top = 64
@@ -352,18 +421,23 @@ export function AssetsScreen(props: {
     const cx = chartW / 2
     const cy = top + chartH / 2
 
-    const r = Math.max(0, Math.min(chartW, chartH) / 2 - 26)
+    // Match EnhancedDoubleRoseChart layout calculations
+    const size = Math.min(chartW, chartH)
     const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
     const sqrt01 = (v: number) => Math.sqrt(clamp(v, 0, 1))
 
-    const gap = 16
-    const outerBase = r * 0.58
-    const innerBase = r * 0.32
-    const innerAvail = Math.max(0, outerBase - gap - innerBase)
-    const outerAvail = Math.max(0, r - outerBase)
+    // Match the radii from EnhancedDoubleRoseChart
+    // innerRingInnerRadius = size * 0.12
+    // innerRingOuterRadius = size * 0.20
+    // outerRoseInnerRadius = size * 0.21
+    // outerRoseMaxRadius = size * 0.42
+    const outerRoseInnerRadius = size * 0.21
+    const outerRoseMaxRadius = size * 0.42
+    const innerRingOuterRadius = size * 0.20
 
-    const outerThickness = clamp(Math.round(r * 0.28), 56, 86)
-    const innerThickness = clamp(Math.round(r * 0.22), 44, 72)
+    // For overlay blocks, we use a simplified rectangular approximation
+    const outerThickness = clamp(Math.round(size * 0.18), 56, 86)
+    const innerThickness = clamp(Math.round(size * 0.14), 44, 72)
 
     const assetsTotal = grouped.assetsTotal || 0
 
@@ -372,10 +446,14 @@ export function AssetsScreen(props: {
 
     const outerAssets = blocks.assets.filter((b) => b.amount > 0)
     const n = outerAssets.length || 1
-    const startAngle = -90
+    const startAngle = -90 // Start from top (12 o'clock)
 
-    const outerLen = (frac: number) => outerAvail * (0.35 + 0.65 * sqrt01(frac))
-    const innerLen = (frac: number) => innerAvail * (0.45 + 0.55 * sqrt01(frac))
+    // Calculate radial length based on amount fraction using sqrt scaling
+    // Matches calculatePetalRadius formula: innerRadius + availableLength * (0.35 + 0.65 * sqrt(ratio))
+    const outerLen = (frac: number) => {
+      const availableLength = outerRoseMaxRadius - outerRoseInnerRadius
+      return availableLength * (0.35 + 0.65 * sqrt01(frac))
+    }
 
     for (let i = 0; i < outerAssets.length; i += 1) {
       const b = outerAssets[i]
@@ -384,34 +462,37 @@ export function AssetsScreen(props: {
       const frac = assetsTotal > 0 ? b.amount / assetsTotal : 0
       const w = Math.max(0, outerLen(frac))
       const h = outerThickness
-      const centerR = outerBase + w / 2
+      // Position at the middle of the petal's radial extent
+      const centerR = outerRoseInnerRadius + w / 2
       const centerX = cx + Math.cos(theta) * centerR
       const centerY = cy + Math.sin(theta) * centerR
       rects[b.id] = { x: centerX - w / 2, y: centerY - h / 2, w, h }
       rotates[b.id] = thetaDeg
     }
 
+    // Debt block positioned on the inner ring (left side, 180 degrees)
     const debt = blocks.debt
     if (debt) {
       const thetaDeg = 180
       const theta = Math.PI
       const frac = assetsTotal > 0 ? debt.amount / assetsTotal : 0
-      const w = Math.max(0, innerLen(frac))
+      const w = Math.max(0, innerRingOuterRadius * (0.45 + 0.55 * sqrt01(frac)))
       const h = innerThickness
-      const centerR = innerBase + w / 2
+      const centerR = w / 2
       const centerX = cx + Math.cos(theta) * centerR
       const centerY = cy + Math.sin(theta) * centerR
       rects.debt = { x: centerX - w / 2, y: centerY - h / 2, w, h }
       rotates.debt = thetaDeg
     }
 
+    // Net worth block positioned on the inner ring (right side, 0 degrees)
     if (netWorthBlock) {
       const thetaDeg = 0
       const theta = 0
       const frac = assetsTotal > 0 ? netWorthBlock.amount / assetsTotal : 0
-      const w = Math.max(0, innerLen(frac))
+      const w = Math.max(0, innerRingOuterRadius * (0.45 + 0.55 * sqrt01(frac)))
       const h = innerThickness
-      const centerR = innerBase + w / 2
+      const centerR = w / 2
       const centerX = cx + Math.cos(theta) * centerR
       const centerY = cy + Math.sin(theta) * centerR
       rects.networth = { x: centerX - w / 2, y: centerY - h / 2, w, h }
@@ -535,9 +616,13 @@ export function AssetsScreen(props: {
     const raf = requestAnimationFrame(() => {
       const w = el.clientWidth || 0
       if (w <= 0) return
-      // Start at Page 2 (List)
+      // Start at Page 2 (List) - 直接设置，不触发动画
       el.scrollLeft = w * 2
       scrollLeft.set(w * 2)
+      // 标记初始化完成
+      setInitialized(true)
+      // 启动动画完成后（约600ms），重置 isInitialLoad
+      setTimeout(() => setIsInitialLoad(false), 700)
     })
 
     return () => cancelAnimationFrame(raf)
@@ -582,9 +667,124 @@ export function AssetsScreen(props: {
   const chartRadius = 32
   const listRadius = 30
 
+  // 计算负债上方的白色填充块（负债比例低于100%时）
+  const debtFillerRect = useMemo(() => {
+    if (!blocks.debt || ratioLayout.debtExceeds) return null
+    const debtRect = ratioLayout.rects.debt
+    if (!debtRect) return null
+    
+    const top = 64
+    const fillerH = debtRect.y - top
+    if (fillerH <= 0) return null
+    
+    return { x: 0, y: top, w: debtRect.w, h: fillerH }
+  }, [blocks.debt, ratioLayout])
+
+  // 计算资产底部的白色填充块（负债比例超过100%时）
+  const assetFillerRect = useMemo(() => {
+    if (!blocks.debt || !ratioLayout.debtExceeds) return null
+    
+    const top = 64
+    const chartH = Math.max(0, viewport.h - top)
+    const debtW = Math.round(viewport.w * 0.24)
+    const assetX = debtW
+    const assetW = Math.max(0, viewport.w - debtW)
+    
+    const assetEndY = ratioLayout.assetStartY + ratioLayout.assetDisplayH
+    const fillerH = top + chartH - assetEndY
+    if (fillerH <= 0) return null
+    
+    return { x: assetX, y: assetEndY, w: assetW, h: fillerH }
+  }, [blocks.debt, ratioLayout, viewport.h, viewport.w])
+
+  // 负债上方白色填充块的动画值
+  const debtFillerLeft = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return 0
+    return lerp(debtFillerRect.x, 0, Math.max(0, idx - 1))
+  })
+  const debtFillerTop = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return lerp(0, debtFillerRect.y, Math.max(0, idx))
+    return debtFillerRect.y
+  })
+  const debtFillerWidth = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return lerp(0, debtFillerRect.w, Math.max(0, idx))
+    return debtFillerRect.w
+  })
+  const debtFillerHeight = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return lerp(0, debtFillerRect.h, Math.max(0, idx))
+    return lerp(debtFillerRect.h, 0, Math.max(0, idx - 1))
+  })
+  const debtFillerOpacity = useTransform(scrollIdx, [0, 0.4, 1, 2, 2.08], [0, 0, 1, 1, 0])
+
+  // 资产底部白色填充块的动画值
+  const assetFillerLeft = useTransform(scrollIdx, (idx) => {
+    if (!assetFillerRect) return 0
+    if (idx < 1) return lerp(0, assetFillerRect.x, Math.max(0, idx))
+    return assetFillerRect.x
+  })
+  const assetFillerTop = useTransform(scrollIdx, (idx) => {
+    if (!assetFillerRect) return 0
+    if (idx < 1) return lerp(0, assetFillerRect.y, Math.max(0, idx))
+    return assetFillerRect.y
+  })
+  const assetFillerWidth = useTransform(scrollIdx, (idx) => {
+    if (!assetFillerRect) return 0
+    if (idx < 1) return lerp(0, assetFillerRect.w, Math.max(0, idx))
+    return assetFillerRect.w
+  })
+  const assetFillerHeight = useTransform(scrollIdx, (idx) => {
+    if (!assetFillerRect) return 0
+    if (idx < 1) return lerp(0, assetFillerRect.h, Math.max(0, idx))
+    return lerp(assetFillerRect.h, 0, Math.max(0, idx - 1))
+  })
+  const assetFillerOpacity = useTransform(scrollIdx, [0, 0.4, 1, 2, 2.08], [0, 0, 1, 1, 0])
+
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
-      <div className="absolute inset-0 z-0 pointer-events-none">
+      {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
+      {initialized ? (
+        <motion.div
+          className="absolute inset-0 z-0 pointer-events-none"
+          initial={{ x: -100, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
+        >
+          {/* 负债上方的白色填充块（负债比例低于100%时） */}
+          {debtFillerRect ? (
+          <motion.div
+            className="absolute pointer-events-none"
+            style={{
+              left: debtFillerLeft,
+              top: debtFillerTop,
+              width: debtFillerWidth,
+              height: debtFillerHeight,
+              background: 'white',
+              borderTopLeftRadius: chartRadius,
+              opacity: debtFillerOpacity,
+            }}
+          />
+        ) : null}
+
+        {/* 资产底部的白色填充块（负债比例超过100%时） */}
+        {assetFillerRect ? (
+          <motion.div
+            className="absolute pointer-events-none"
+            style={{
+              left: assetFillerLeft,
+              top: assetFillerTop,
+              width: assetFillerWidth,
+              height: assetFillerHeight,
+              background: 'white',
+              borderBottomRightRadius: chartRadius,
+              opacity: assetFillerOpacity,
+            }}
+          />
+        ) : null}
+
         {blocks.debt ? (
           <OverlayBlock
             key="debt"
@@ -636,14 +836,21 @@ export function AssetsScreen(props: {
             listRadius={listRadius}
           />
         ) : null}
-      </div>
+        </motion.div>
+      ) : null}
 
       <motion.div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none" style={{ opacity: overlayFade }}>
         <motion.div
           className="flex items-start justify-between gap-3"
           style={{ y: listHeaderY, opacity: listHeaderOpacity, pointerEvents: listHeaderPointerEvents }}
         >
-          <div className="min-w-0">
+          {/* 净资产标题 - 从上滑入 */}
+          <motion.div
+            className="min-w-0"
+            initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
+            animate={initialized ? { y: 0, opacity: 1 } : false}
+            transition={{ duration: 0.5, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
             <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
               <button
@@ -658,16 +865,20 @@ export function AssetsScreen(props: {
             <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">
               {hideAmounts ? <span className={maskedClass}>{maskedText}</span> : formatCny(grouped.netWorth)}
             </div>
-          </div>
+          </motion.div>
 
-          <button
+          {/* 添加按钮 - 从上滑入，稍微延迟 */}
+          <motion.button
             type="button"
             onClick={onAddAccount}
             className="w-10 h-10 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
             aria-label="add"
+            initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
+            animate={initialized ? { y: 0, opacity: 1 } : false}
+            transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <Plus size={22} strokeWidth={2.75} />
-          </button>
+          </motion.button>
         </motion.div>
       </motion.div>
 
@@ -754,6 +965,7 @@ export function AssetsScreen(props: {
             hideAmounts={hideAmounts}
             scrollRef={listScrollRef}
             onGroupEl={onGroupEl}
+            isInitialLoad={isInitialLoad}
           />
         </div>
 

@@ -2,11 +2,27 @@ import { ChevronRight } from 'lucide-react'
 import { useState } from 'react'
 import { formatCny } from '../lib/format'
 import { type GroupedAccounts } from './AssetsScreen'
-import { DoubleRoseChart } from '../components/DoubleRoseChart'
+import { EnhancedDoubleRoseChart } from '../components/EnhancedDoubleRoseChart'
 import { type AccountGroupId } from '../lib/accounts'
 
-export function AssetsRosePage(props: { grouped: GroupedAccounts; onNext: () => void }) {
-  const { grouped, onNext } = props
+export type AssetsRosePageProps = {
+  grouped: GroupedAccounts
+  onNext: () => void
+  isAnimating?: boolean
+}
+
+/**
+ * AssetsRosePage displays the enhanced double rose chart visualization.
+ * 
+ * Features:
+ * - Uses EnhancedDoubleRoseChart for improved visuals and animations
+ * - Passes animation trigger prop for mount animation
+ * - Shows bottom summary text for net worth and debt
+ * 
+ * **Validates: Requirements 5.5**
+ */
+export function AssetsRosePage(props: AssetsRosePageProps) {
+  const { grouped, onNext, isAnimating = true } = props
   
   const [selectedGroupId, setSelectedGroupId] = useState<AccountGroupId | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
@@ -26,24 +42,22 @@ export function AssetsRosePage(props: { grouped: GroupedAccounts; onNext: () => 
       </div>
 
       <div className="flex-1 w-full h-full min-h-0 relative">
-        <DoubleRoseChart
+        <EnhancedDoubleRoseChart
           grouped={grouped}
           selectedGroupId={selectedGroupId}
           onSelectGroup={setSelectedGroupId}
           selectedAccountId={selectedAccountId}
           onSelectAccount={setSelectedAccountId}
+          isAnimating={isAnimating}
         />
         
-        {/* Bottom Legend / Summary when nothing selected? */}
-        {/* Or maybe just leave the chart's center text. The previous code had net worth/debt summary at bottom. */}
-        {/* Let's restore the bottom summary if space permits, or overlay it. */}
-        
+        {/* Bottom summary text for net worth and debt */}
         {!selectedGroupId && !selectedAccountId && (
-           <div className="absolute bottom-8 inset-x-0 text-center pointer-events-none">
-             <div className="text-[12px] text-slate-500/70 font-medium">
-               净资产 {formatCny(grouped.netWorth)} · 负债 {formatCny(grouped.debtTotal)}
-             </div>
-           </div>
+          <div className="absolute bottom-8 inset-x-0 text-center pointer-events-none">
+            <div className="text-[12px] text-slate-500/70 font-medium">
+              净资产 {formatCny(grouped.netWorth)} · 负债 {formatCny(grouped.debtTotal)}
+            </div>
+          </div>
         )}
       </div>
     </div>

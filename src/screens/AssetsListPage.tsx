@@ -17,8 +17,9 @@ export function AssetsListPage(props: {
   hideAmounts: boolean
   scrollRef?: Ref<HTMLDivElement>
   onGroupEl?: (id: GroupId, el: HTMLDivElement | null) => void
+  isInitialLoad?: boolean
 }) {
-  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl } = props
+  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad } = props
 
   const groups = useMemo(() => {
     const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
@@ -65,9 +66,13 @@ export function AssetsListPage(props: {
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
                 className="relative rounded-[22px] border border-white/70 overflow-hidden"
-                initial={{ opacity: 0, y: 14 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.08 + i * 0.03 }}
+                initial={isInitialLoad ? { opacity: 0, x: 80 } : { opacity: 0, y: 14 }}
+                animate={{ opacity: 1, x: 0, y: 0 }}
+                transition={{
+                  duration: isInitialLoad ? 0.5 : 0.3,
+                  delay: isInitialLoad ? 0.05 + i * 0.06 : 0.08 + i * 0.03,
+                  ease: [0.25, 0.46, 0.45, 0.94],
+                }}
                 style={{
                   background: id === 'debt' ? 'rgba(217, 212, 246, 0.70)' : 'rgba(255, 255, 255, 0.86)',
                   boxShadow: 'var(--shadow-soft)',
