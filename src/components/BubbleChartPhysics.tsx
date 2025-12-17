@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useMemo } from 'react'
-import Matter from 'matter-js'
+import { useEffect, useRef, useState } from 'react'
+import * as Matter from 'matter-js'
 import { motionValue, type MotionValue } from 'framer-motion'
 
 export type BubbleNode = {
@@ -33,11 +33,7 @@ export function useBubblePhysics(
 
   const engineRef = useRef<Matter.Engine | null>(null)
   const runnerRef = useRef<Matter.Runner | null>(null)
-  
-  // Stable key for nodes to avoid unnecessary physics engine rebuilds
-  const nodesKey = useMemo(() => {
-    return nodes.map(n => `${n.id}:${n.radius.toFixed(0)}`).join('|')
-  }, [nodes])
+  const knownIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
@@ -49,15 +45,27 @@ export function useBubblePhysics(
 
     // Create bodies
     const bodies = nodes.map(node => {
-      // Check if we have existing position for this node
-      const existingPos = positions.get(node.id)
-      const x = existingPos ? existingPos.x.get() : Math.random() * (width - 100) + 50
-      const y = existingPos ? existingPos.y.get() : Math.random() * (height - 100) + 50
+      const isKnown = knownIdsRef.current.has(node.id)
+      const mv = positions.get(node.id)
+      const prevX = mv?.x.get()
+      const prevY = mv?.y.get()
+      const hasPrev =
+        isKnown &&
+        typeof prevX === 'number' &&
+        Number.isFinite(prevX) &&
+        typeof prevY === 'number' &&
+        Number.isFinite(prevY)
+
+      const x0 = hasPrev ? (prevX as number) : Math.random() * (width - 100) + 50
+      const y0 = hasPrev ? (prevY as number) : Math.random() * (height - 100) + 50
+
+      const x = Math.min(Math.max(x0, node.radius), width - node.radius)
+      const y = Math.min(Math.max(y0, node.radius), height - node.radius)
       
       const body = Matter.Bodies.circle(x, y, node.radius, {
         label: node.id,
-        frictionAir: 0.03, // Slightly higher for smoother motion
-        restitution: 0.6,  // Lower bounce for calmer feel
+        frictionAir: 0.02,
+        restitution: 0.9,
         density: 0.001,
         render: { fillStyle: node.color }
       })
@@ -76,7 +84,9 @@ export function useBubblePhysics(
     Matter.World.add(world, [...bodies, ...walls])
     engineRef.current = engine
 
-    // Attractor - slightly stronger for better centering
+    knownIdsRef.current = new Set(nodes.map((n) => n.id))
+
+    // Attractor
     Matter.Events.on(engine, 'beforeUpdate', () => {
        bodies.forEach(body => {
          // Gentle force towards center
@@ -84,8 +94,8 @@ export function useBubblePhysics(
          const dy = (height / 2) - body.position.y
          
          Matter.Body.applyForce(body, body.position, {
-           x: dx * 0.000015,
-           y: dy * 0.000015
+           x: dx * 0.00001,
+           y: dy * 0.00001
          })
        })
     })
@@ -104,19 +114,35 @@ export function useBubblePhysics(
        })
     })
 
-    if (isActive) {
-        Matter.Runner.run(runner, engine)
-    }
+    bodies.forEach(body => {
+      const m = positions.get(body.label)
+      if (m) {
+        m.x.set(body.position.x)
+        m.y.set(body.position.y)
+      }
+    })
 
     return () => {
       Matter.Runner.stop(runner)
-      Matter.World.clear(world, false)
       Matter.Engine.clear(engine)
       engineRef.current = null
       runnerRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [width, height, nodesKey, isActive, positions]) // Use nodesKey instead of nodes
+  }, [width, height, nodes, positions]) // Added nodes to deps
+
+  useEffect(() => {
+    if (!width || !height || nodes.length === 0) return
+
+    const engine = engineRef.current
+    const runner = runnerRef.current
+    if (!engine || !runner) return
+
+    if (isActive) {
+      Matter.Runner.run(runner, engine)
+    } else {
+      Matter.Runner.stop(runner)
+    }
+  }, [isActive, width, height, nodes])
 
   // Gyroscope / DeviceOrientation
   useEffect(() => {

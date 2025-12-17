@@ -161,8 +161,8 @@ function OverlayBlock(props: {
 
   // Content Centering for Bubbles
   const padding = useTransform(scrollIdx, [0, 1], [0, 16])
-  const textAlign = useTransform(scrollIdx, (v) => v < 0.5 ? 'center' : 'left')
-  const flexJustify = useTransform(scrollIdx, (v) => v < 0.5 ? 'center' : 'flex-start') // For debt col layout
+  const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
+  const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start')) // For debt col layout
   const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
   
   // Sphere visual effects (fade out as we scroll to ratio)
@@ -215,14 +215,14 @@ function OverlayBlock(props: {
             className="w-full h-full flex flex-col relative"
             style={{ 
                 justifyContent: kind === 'debt' ? 'center' : flexJustify,
-                alignItems: textAlign,
+                alignItems: flexAlign,
                 scale: contentScale
             }}
         >
             {/* Amount View (Bubble) */}
             <motion.div 
                 className="absolute inset-0 flex flex-col justify-center"
-                style={{ opacity: amountOpacity, alignItems: textAlign }}
+                style={{ opacity: amountOpacity, alignItems: flexAlign }}
             >
                 <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
                 <div className="text-[20px] font-bold tracking-tight leading-none">
@@ -236,7 +236,7 @@ function OverlayBlock(props: {
                  style={{ 
                      opacity: percentOpacity, 
                      justifyContent: kind === 'debt' ? 'center' : 'flex-start',
-                     alignItems: textAlign 
+                     alignItems: flexAlign 
                  }}
             >
                  <div className="text-[34px] font-semibold tracking-tight leading-none">
