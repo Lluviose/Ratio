@@ -6,7 +6,7 @@ export function AssetsRosePage(props: { grouped: GroupedAccounts; onNext: () => 
   const { grouped, onNext } = props
 
   return (
-    <div className="w-full h-full relative flex flex-col">
+    <div className="w-full h-full relative flex flex-col pt-[64px]">
       <div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 flex items-center justify-between pointer-events-none">
         <div className="text-[15px] font-semibold tracking-tight text-slate-900">资产分配比</div>
         <button
@@ -28,8 +28,6 @@ export function AssetsRosePage(props: { grouped: GroupedAccounts; onNext: () => 
           </div>
         </div>
       </div>
-
-      <div className="h-20 shrink-0" />
     </div>
   )
 }

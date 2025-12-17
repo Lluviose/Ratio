@@ -356,8 +356,8 @@ export function AssetsScreen(props: {
     const sqrt01 = (v: number) => Math.sqrt(clamp(v, 0, 1))
 
     const gap = 16
-    const outerBase = r * 0.44
-    const innerBase = r * 0.1
+    const outerBase = r * 0.58
+    const innerBase = r * 0.32
     const innerAvail = Math.max(0, outerBase - gap - innerBase)
     const outerAvail = Math.max(0, r - outerBase)
 
