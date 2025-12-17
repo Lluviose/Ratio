@@ -1159,9 +1159,6 @@ describe('Property 12: Color contrast accessibility', () => {
     fc.integer({ min: 0, max: 255 })
   ).map(([r, g, b]) => '#' + [r, g, b].map(c => c.toString(16).padStart(2, '0')).join(''))
 
-  // Common background colors used in the app (from index.css)
-  const appBackground = '#f2f4f7'  // Light theme background (--bg)
-
   test('hexToRgb correctly parses hex colors', () => {
     fc.assert(
       fc.property(
