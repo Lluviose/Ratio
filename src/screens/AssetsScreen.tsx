@@ -271,10 +271,9 @@ export function AssetsScreen(props: {
     const top = 64
     const chartH = Math.max(0, viewport.h - top)
     const chartW = viewport.w
-    // 色块只占屏幕左侧约1/6
-    const debtW = Math.round(chartW * 0.08)
+    const debtW = Math.round(chartW * 0.24)
     const assetX = debtW
-    const assetW = Math.round(chartW * 0.08)
+    const assetW = Math.max(0, chartW - debtW)
 
     const rects: Partial<Record<GroupId, Rect>> = {}
     
@@ -533,7 +532,18 @@ export function AssetsScreen(props: {
   const chartRadius = 32
   const listRadius = 30
 
-
+  // 计算负债上方的白色填充块（负债比例低于100%时）
+  const debtFillerRect = useMemo(() => {
+    if (!blocks.debt || ratioLayout.debtExceeds) return null
+    const debtRect = ratioLayout.rects.debt
+    if (!debtRect) return null
+    
+    const top = 64
+    const fillerH = debtRect.y - top
+    if (fillerH <= 0) return null
+    
+    return { x: 0, y: top, w: debtRect.w, h: fillerH }
+  }, [blocks.debt, ratioLayout])
 
   // 计算资产底部的白色填充块（负债比例超过100%时）
   const assetFillerRect = useMemo(() => {
@@ -541,9 +551,9 @@ export function AssetsScreen(props: {
     
     const top = 64
     const chartH = Math.max(0, viewport.h - top)
-    const debtW = Math.round(viewport.w * 0.08)
+    const debtW = Math.round(viewport.w * 0.24)
     const assetX = debtW
-    const assetW = Math.round(viewport.w * 0.08)
+    const assetW = Math.max(0, viewport.w - debtW)
     
     const assetEndY = ratioLayout.assetStartY + ratioLayout.assetDisplayH
     const fillerH = top + chartH - assetEndY
@@ -552,7 +562,29 @@ export function AssetsScreen(props: {
     return { x: assetX, y: assetEndY, w: assetW, h: fillerH }
   }, [blocks.debt, ratioLayout, viewport.h, viewport.w])
 
-
+  // 负债上方白色填充块的动画值
+  const debtFillerLeft = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return 0
+    return lerp(debtFillerRect.x, 0, Math.max(0, idx - 1))
+  })
+  const debtFillerTop = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return lerp(0, debtFillerRect.y, Math.max(0, idx))
+    return debtFillerRect.y
+  })
+  const debtFillerWidth = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return lerp(0, debtFillerRect.w, Math.max(0, idx))
+    return debtFillerRect.w
+  })
+  const debtFillerHeight = useTransform(scrollIdx, (idx) => {
+    if (!debtFillerRect) return 0
+    if (idx < 1) return lerp(0, debtFillerRect.h, Math.max(0, idx))
+    return lerp(debtFillerRect.h, 0, Math.max(0, idx - 1))
+  })
+  // 白色填充块只在 ratio 页面（page 0）显示，在 list 页面（page 1）完全隐藏
+  const debtFillerOpacity = useTransform(scrollIdx, [0, 0.8, 1], [1, 0.5, 0])
 
   // 资产底部白色填充块的动画值
   const assetFillerLeft = useTransform(scrollIdx, (idx) => {
@@ -575,7 +607,8 @@ export function AssetsScreen(props: {
     if (idx < 1) return lerp(0, assetFillerRect.h, Math.max(0, idx))
     return lerp(assetFillerRect.h, 0, Math.max(0, idx - 1))
   })
-  const assetFillerOpacity = useTransform(scrollIdx, [0, 0.4, 1, 2, 2.08], [0, 0, 1, 1, 0])
+  // 白色填充块只在 ratio 页面（page 0）显示，在 list 页面（page 1）完全隐藏
+  const assetFillerOpacity = useTransform(scrollIdx, [0, 0.8, 1], [1, 0.5, 0])
 
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -587,6 +620,22 @@ export function AssetsScreen(props: {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
+          {/* 负债上方的白色填充块（负债比例低于100%时） */}
+          {debtFillerRect ? (
+          <motion.div
+            className="absolute pointer-events-none"
+            style={{
+              left: debtFillerLeft,
+              top: debtFillerTop,
+              width: debtFillerWidth,
+              height: debtFillerHeight,
+              background: 'white',
+              borderTopLeftRadius: chartRadius,
+              opacity: debtFillerOpacity,
+            }}
+          />
+        ) : null}
+
         {/* 资产底部的白色填充块（负债比例超过100%时） */}
         {assetFillerRect ? (
           <motion.div
