@@ -122,6 +122,8 @@ function OverlayBlock(props: {
   )
 }
 
+import { AssetsSunburstPage } from './AssetsSunburstPage'
+
 export function AssetsScreen(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
@@ -160,19 +162,22 @@ export function AssetsScreen(props: {
     el.scrollTo({ left: w * index, behavior: 'smooth' })
   }
 
-  const ratioProgress = useTransform(scrollLeft, (v) => {
+  const scrollIdx = useTransform(scrollLeft, (v) => {
     const w = viewport.w || 1
-    const p = v / w
-    return Math.max(0, Math.min(1, p))
+    return v / w
   })
 
-  const overlayFade = useTransform(scrollLeft, (v) => {
-    const w = viewport.w || 1
-    const idx = v / w
-    if (idx <= 1) return 1
-    const t = (idx - 1) / 0.08
-    return Math.max(0, 1 - t)
-  })
+  // Page 0: Sunburst
+  // Page 1: Ratio (Blocks)
+  // Page 2: List
+  // Page 3: Detail
+  
+  // Transition Ratio(1) -> List(2)
+  // Clamp at 0 for Sunburst page to keep Ratio styles (hidden by overlayFade anyway)
+  const ratioProgress = useTransform(scrollIdx, [0, 1, 2], [0, 0, 1])
+
+  // Blocks visible on Page 1 & 2, fade out on 0 and 3
+  const overlayFade = useTransform(scrollIdx, [0.2, 1, 2, 2.08], [0, 1, 1, 0])
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
   const listHeaderOpacity = ratioProgress
@@ -273,7 +278,8 @@ export function AssetsScreen(props: {
 
     const w = root.clientWidth || 1
     const idx = scrollLeft.get() / w
-    if (Math.abs(idx - 1) > 0.12) return
+    // Measure only when near list page (index 2)
+    if (Math.abs(idx - 2) > 0.12) return
 
     const rootRect = root.getBoundingClientRect()
     const next: Partial<Record<GroupId, Rect>> = {}
@@ -367,8 +373,9 @@ export function AssetsScreen(props: {
     const raf = requestAnimationFrame(() => {
       const w = el.clientWidth || 0
       if (w <= 0) return
-      el.scrollLeft = w
-      scrollLeft.set(w)
+      // Start at Page 2 (List)
+      el.scrollLeft = w * 2
+      scrollLeft.set(w * 2)
     })
 
     return () => cancelAnimationFrame(raf)
@@ -543,7 +550,11 @@ export function AssetsScreen(props: {
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
-          <AssetsRatioPage onBack={() => scrollToPage(1)} />
+          <AssetsSunburstPage grouped={grouped} onNext={() => scrollToPage(1)} />
+        </div>
+
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
+          <AssetsRatioPage onBack={() => scrollToPage(2)} />
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
@@ -552,7 +563,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             onPickType={(type) => {
               setSelectedType(type)
-              scrollToPage(2)
+              scrollToPage(3)
             }}
             expandedGroup={expandedGroup}
             onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
@@ -569,7 +580,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             hideAmounts={hideAmounts}
             onBack={() => {
-              scrollToPage(1)
+              scrollToPage(2)
               setSelectedType(null)
             }}
             onEditAccount={onEditAccount}
