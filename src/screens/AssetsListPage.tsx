@@ -43,7 +43,7 @@ export function AssetsListPage(props: {
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">
       <div className="px-4 pt-24 pb-24">
-        <div className="flex flex-col gap-3 pl-24">
+        <div className="flex flex-col gap-3" style={{ paddingLeft: 'calc(16.67% + 12px)' }}>
           {groups.map((g, i) => {
             const id = g.group.id as GroupId
             const isExpanded = expandedGroup === id
@@ -65,7 +65,7 @@ export function AssetsListPage(props: {
               <motion.div
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
-                className="relative rounded-[22px] border border-white/70 overflow-hidden"
+                className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
                 initial={isInitialLoad ? { opacity: 0, x: 80 } : { opacity: 0, y: 14 }}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{
@@ -74,8 +74,11 @@ export function AssetsListPage(props: {
                   ease: [0.25, 0.46, 0.45, 0.94],
                 }}
                 style={{
-                  background: id === 'debt' ? 'rgba(217, 212, 246, 0.70)' : 'rgba(255, 255, 255, 0.86)',
-                  boxShadow: 'var(--shadow-soft)',
+                  background: id === 'debt' 
+                    ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.75) 0%, rgba(230, 225, 255, 0.65) 100%)' 
+                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.70) 100%)',
+                  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -1px 0 rgba(255, 255, 255, 0.3)',
+                  border: '1px solid rgba(255, 255, 255, 0.6)',
                 }}
               >
                 <button
@@ -130,10 +133,18 @@ export function AssetsListPage(props: {
                                 type="button"
                                 className={clsx(
                                   'flex items-center justify-between rounded-[18px] px-3 py-3 text-left',
-                                  'bg-white/70 hover:bg-white/85 transition-colors',
+                                  'backdrop-blur-md transition-all duration-200',
                                 )}
+                                style={{
+                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.80) 0%, rgba(255, 255, 255, 0.60) 100%)',
+                                  boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.8)',
+                                  border: '1px solid rgba(255, 255, 255, 0.5)',
+                                }}
                                 onClick={() => onPickType(t.type)}
                                 whileTap={{ scale: 0.99 }}
+                                whileHover={{ 
+                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.80) 100%)',
+                                }}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div
