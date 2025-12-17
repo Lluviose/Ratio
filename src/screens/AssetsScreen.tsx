@@ -6,6 +6,8 @@ import { formatCny } from '../lib/format'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
+import { BubbleChartPage } from './BubbleChartPage'
+import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
 
 /** Linear interpolation helper */
 function lerp(a: number, b: number, t: number): number {
@@ -42,6 +44,8 @@ function OverlayBlock(props: {
   kind: CornerKind
   ratioRect?: Rect
   listRect?: Rect
+  bubblePos?: { x: MotionValue<number>; y: MotionValue<number> }
+  bubbleRadius?: number
   scrollIdx: MotionValue<number>
   overlayFade: MotionValue<number>
   labelsOpacity: MotionValue<number>
@@ -53,6 +57,8 @@ function OverlayBlock(props: {
     kind,
     ratioRect,
     listRect,
+    bubblePos,
+    bubbleRadius,
     scrollIdx,
     overlayFade,
     labelsOpacity,
@@ -62,32 +68,63 @@ function OverlayBlock(props: {
 
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
   const list = listRect ?? ratioRect ?? ratio
+  const bRadius = bubbleRadius ?? 60
+  
+  // Fallback for bubble pos if missing (shouldn't happen if initialized)
+  const defaultBX = useMotionValue(ratio.x + ratio.w / 2)
+  const defaultBY = useMotionValue(ratio.y + ratio.h / 2)
+  
+  const bX = bubblePos?.x ?? defaultBX
+  const bY = bubblePos?.y ?? defaultBY
 
-  const hasRatio = Boolean(ratioRect && ratioRect.w > 0 && ratioRect.h > 0)
-  const hasList = Boolean(listRect && listRect.w > 0 && listRect.h > 0)
+  // Interpolate Layout
+  // 0 -> 1: Bubble -> Ratio
+  // 1 -> 2: Ratio -> List
+  
+  const x = useTransform([scrollIdx, bX], (values) => {
+    const idx = values[0] as number
+    const bx = values[1] as number
+    
+    // Phase 1: Bubble -> Ratio
+    if (idx < 1) {
+      const t = Math.max(0, idx)
+      // Bubble center is bx, by. Top-left is bx - r, by - r
+      const bubbleLeft = bx - bRadius
+      return lerp(bubbleLeft, ratio.x, t)
+    }
+    // Phase 2: Ratio -> List
+    const t = Math.min(1, Math.max(0, idx - 1))
+    return lerp(ratio.x, list.x, t)
+  })
 
-  const visibleRatio = hasRatio ? 1 : 0
-  const visibleList = hasList ? 1 : hasRatio ? 1 : 0
-  const visible = useTransform(scrollIdx, (idx) => {
-    return lerp(visibleRatio, visibleList, Math.max(0, idx))
-  })
-  const opacity = useTransform([overlayFade, visible], (values) => {
-    const [a, b] = values as number[]
-    return a * b
+  const y = useTransform([scrollIdx, bY], (values) => {
+    const idx = values[0] as number
+    const by = values[1] as number
+
+    if (idx < 1) {
+      const t = Math.max(0, idx)
+      const bubbleTop = by - bRadius
+      return lerp(bubbleTop, ratio.y, t)
+    }
+    const t = Math.min(1, Math.max(0, idx - 1))
+    return lerp(ratio.y, list.y, t)
   })
 
-  const x = useTransform(scrollIdx, (idx) => {
-    return lerp(ratio.x, list.x, Math.max(0, idx))
-  })
-  const y = useTransform(scrollIdx, (idx) => {
-    return lerp(ratio.y, list.y, Math.max(0, idx))
-  })
   const w = useTransform(scrollIdx, (idx) => {
-    return lerp(ratio.w, list.w, Math.max(0, idx))
+    if (idx < 1) {
+      return lerp(bRadius * 2, ratio.w, Math.max(0, idx))
+    }
+    return lerp(ratio.w, list.w, Math.min(1, Math.max(0, idx - 1)))
   })
+
   const h = useTransform(scrollIdx, (idx) => {
-    return lerp(ratio.h, list.h, Math.max(0, idx))
+    if (idx < 1) {
+      return lerp(bRadius * 2, ratio.h, Math.max(0, idx))
+    }
+    return lerp(ratio.h, list.h, Math.min(1, Math.max(0, idx - 1)))
   })
+  
+  const opacity = useTransform([overlayFade], ([a]) => a)
 
   const ratioCorner =
     kind === 'debt'
@@ -101,21 +138,43 @@ function OverlayBlock(props: {
           : { tl: 0, tr: 0, bl: 0, br: 0 }
 
   const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
+  const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
-    return lerp(ratioCorner.tl, listCorner.tl, Math.max(0, idx))
+    if (idx < 1) return lerp(bubbleCorner.tl, ratioCorner.tl, Math.max(0, idx))
+    return lerp(ratioCorner.tl, listCorner.tl, Math.min(1, Math.max(0, idx - 1)))
   })
   const tr = useTransform(scrollIdx, (idx) => {
-    return lerp(ratioCorner.tr, listCorner.tr, Math.max(0, idx))
+    if (idx < 1) return lerp(bubbleCorner.tr, ratioCorner.tr, Math.max(0, idx))
+    return lerp(ratioCorner.tr, listCorner.tr, Math.min(1, Math.max(0, idx - 1)))
   })
   const bl = useTransform(scrollIdx, (idx) => {
-    return lerp(ratioCorner.bl, listCorner.bl, Math.max(0, idx))
+    if (idx < 1) return lerp(bubbleCorner.bl, ratioCorner.bl, Math.max(0, idx))
+    return lerp(ratioCorner.bl, listCorner.bl, Math.min(1, Math.max(0, idx - 1)))
   })
   const br = useTransform(scrollIdx, (idx) => {
-    return lerp(ratioCorner.br, listCorner.br, Math.max(0, idx))
+    if (idx < 1) return lerp(bubbleCorner.br, ratioCorner.br, Math.max(0, idx))
+    return lerp(ratioCorner.br, listCorner.br, Math.min(1, Math.max(0, idx - 1)))
   })
 
   const textColor = block.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.96)'
+
+  // Content Centering for Bubbles
+  const padding = useTransform(scrollIdx, [0, 1], [0, 16])
+  const textAlign = useTransform(scrollIdx, (v) => v < 0.5 ? 'center' : 'left')
+  const flexJustify = useTransform(scrollIdx, (v) => v < 0.5 ? 'center' : 'flex-start') // For debt col layout
+  const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
+  
+  // Sphere visual effects (fade out as we scroll to ratio)
+  const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.6], [1, 0])
+
+  // Text Crossfade
+  // 0 -> 0.5: Show Amount (Bubble)
+  // 0.5 -> 1: Show Percent (Ratio)
+  const amountOpacity = useTransform(scrollIdx, [0, 0.4, 0.6], [1, 1, 0])
+  const percentOpacity = useTransform(scrollIdx, [0.4, 0.6, 1], [0, 1, 1])
+  
+  // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
   return (
     <motion.div
@@ -134,27 +193,60 @@ function OverlayBlock(props: {
         overflow: 'hidden',
       }}
     >
-      <motion.div
-        style={{ opacity: labelsOpacity, color: textColor }}
-        className="w-full h-full"
+      {/* Sphere 3D Effects Overlay */}
+      <motion.div 
+        className="absolute inset-0 z-0"
+        style={{ opacity: sphereEffectOpacity }}
       >
-        {kind === 'debt' ? (
-          <div className="h-full flex flex-col justify-center p-4">
-            <div className="text-[34px] font-semibold tracking-tight leading-none">
-              {block.percent}
-              <span className="text-[14px] align-top ml-0.5">%</span>
-            </div>
-            <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
-          </div>
-        ) : (
-          <div className="p-4">
-            <div className="text-[38px] font-semibold tracking-tight leading-none">
-              {block.percent}
-              <span className="text-[14px] align-top ml-0.5">%</span>
-            </div>
-            <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
-          </div>
-        )}
+        {/* Inner Highlight/Shadow using CSS gradients/shadows */}
+        <div className="absolute inset-0" style={{ 
+            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
+        }} />
+        <div className="absolute inset-0" style={{ 
+            boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
+        }} />
+      </motion.div>
+
+      <motion.div
+        style={{ opacity: labelsOpacity, color: textColor, padding }}
+        className="w-full h-full flex flex-col relative z-10"
+      >
+        <motion.div 
+            className="w-full h-full flex flex-col relative"
+            style={{ 
+                justifyContent: kind === 'debt' ? 'center' : flexJustify,
+                alignItems: textAlign,
+                scale: contentScale
+            }}
+        >
+            {/* Amount View (Bubble) */}
+            <motion.div 
+                className="absolute inset-0 flex flex-col justify-center"
+                style={{ opacity: amountOpacity, alignItems: textAlign }}
+            >
+                <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
+                <div className="text-[20px] font-bold tracking-tight leading-none">
+                    {formatCny(block.amount)}
+                </div>
+            </motion.div>
+
+            {/* Percent View (Ratio) */}
+            <motion.div 
+                 className="absolute inset-0 flex flex-col"
+                 style={{ 
+                     opacity: percentOpacity, 
+                     justifyContent: kind === 'debt' ? 'center' : 'flex-start',
+                     alignItems: textAlign 
+                 }}
+            >
+                 <div className="text-[34px] font-semibold tracking-tight leading-none">
+                    {block.percent}
+                    <span className="text-[14px] align-top ml-0.5">%</span>
+                </div>
+                <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
+            </motion.div>
+
+        </motion.div>
       </motion.div>
     </motion.div>
   )
@@ -206,15 +298,26 @@ export function AssetsScreen(props: {
     return v / w
   })
 
-  // Page 0: Ratio (Blocks)
-  // Page 1: List
-  // Page 2: Detail
+  // Page 0: Bubble
+  // Page 1: Ratio (Blocks)
+  // Page 2: List
+  // Page 3: Detail
   
-  // Transition Ratio(0) -> List(1)
-  const ratioProgress = useTransform(scrollIdx, [0, 1], [0, 1])
+  // Transition Ratio(1) -> List(2)
+  const ratioProgress = useTransform(scrollIdx, [1, 2], [0, 1])
 
-  // Blocks visible on Page 0-1, fade out quickly on 2
-  const overlayFade = useTransform(scrollIdx, [0, 1, 1.08, 2], [1, 1, 0, 0])
+  // Blocks visible on Page 1-2, fade out quickly on 3
+  // Also visible on Page 0 (Bubble)
+  const overlayFade = useTransform(scrollIdx, [0, 1, 2, 2.08, 3], [1, 1, 1, 0, 0])
+  
+  // Bubble chart visibility
+  const [isBubblePageActive, setIsBubblePageActive] = useState(true)
+  
+  useEffect(() => {
+    return scrollIdx.on('change', (v) => {
+        setIsBubblePageActive(v < 0.8)
+    })
+  }, [scrollIdx])
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
   const listHeaderOpacity = ratioProgress
@@ -266,6 +369,36 @@ export function AssetsScreen(props: {
 
     return { assets, debt: debt && debt.hasCard ? debt : null }
   }, [grouped])
+
+  const bubbleNodes = useMemo(() => {
+    const nodes: BubbleNode[] = []
+    const groups = grouped.groupCards
+    
+    // Find max total to scale
+    const maxTotal = Math.max(...groups.map(g => g.total), 1)
+    const maxRadius = 130 // Base max radius
+    
+    // Fixed / Liquid / Debt / Invest / Receivable
+    for (const g of groups) {
+      if (g.total <= 0) continue
+      
+      // Calculate radius roughly proportional to sqrt of area (value)
+      // clamp min size so small assets are still visible bubbles
+      const r = Math.sqrt(g.total / maxTotal) * maxRadius
+      const radius = Math.max(r, 55)
+
+      nodes.push({
+        id: g.group.id,
+        radius,
+        color: g.group.tone,
+        label: g.group.name,
+        value: g.total
+      })
+    }
+    return nodes
+  }, [grouped.groupCards])
+
+  const bubblePositions = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -386,8 +519,8 @@ export function AssetsScreen(props: {
 
     const w = root.clientWidth || 1
     const idx = scrollLeft.get() / w
-    // Measure only when near list page (index 1)
-    if (Math.abs(idx - 1) > 0.12) return
+    // Measure only when near list page (index 2)
+    if (Math.abs(idx - 2) > 0.12) return
 
     const rootRect = root.getBoundingClientRect()
     const next: Partial<Record<GroupId, Rect>> = {}
@@ -481,9 +614,9 @@ export function AssetsScreen(props: {
     const raf = requestAnimationFrame(() => {
       const w = el.clientWidth || 0
       if (w <= 0) return
-      // Start at Page 1 (List) - 直接设置，不触发动画
-      el.scrollLeft = w * 1
-      scrollLeft.set(w * 1)
+      // Start at Page 2 (List) - 直接设置，不触发动画
+      el.scrollLeft = w * 2
+      scrollLeft.set(w * 2)
       // 标记初始化完成
       setInitialized(true)
       // 启动动画完成后（约600ms），重置 isInitialLoad
@@ -565,50 +698,50 @@ export function AssetsScreen(props: {
   // 负债上方白色填充块的动画值
   const debtFillerLeft = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
-    if (idx < 1) return 0
-    return lerp(debtFillerRect.x, 0, Math.max(0, idx - 1))
+    if (idx < 2) return 0
+    return lerp(debtFillerRect.x, 0, Math.max(0, idx - 2))
   })
   const debtFillerTop = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
-    if (idx < 1) return lerp(0, debtFillerRect.y, Math.max(0, idx))
+    if (idx < 2) return lerp(0, debtFillerRect.y, Math.max(0, idx - 1))
     return debtFillerRect.y
   })
   const debtFillerWidth = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
-    if (idx < 1) return lerp(0, debtFillerRect.w, Math.max(0, idx))
+    if (idx < 2) return lerp(0, debtFillerRect.w, Math.max(0, idx - 1))
     return debtFillerRect.w
   })
   const debtFillerHeight = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
-    if (idx < 1) return lerp(0, debtFillerRect.h, Math.max(0, idx))
-    return lerp(debtFillerRect.h, 0, Math.max(0, idx - 1))
+    if (idx < 2) return lerp(0, debtFillerRect.h, Math.max(0, idx - 1))
+    return lerp(debtFillerRect.h, 0, Math.max(0, idx - 2))
   })
-  // 白色填充块只在 ratio 页面（page 0）显示，在 list 页面（page 1）完全隐藏
-  const debtFillerOpacity = useTransform(scrollIdx, [0, 0.8, 1], [1, 0.5, 0])
+  // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
+  const debtFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
   // 资产底部白色填充块的动画值
   const assetFillerLeft = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
-    if (idx < 1) return lerp(0, assetFillerRect.x, Math.max(0, idx))
+    if (idx < 2) return lerp(0, assetFillerRect.x, Math.max(0, idx - 1))
     return assetFillerRect.x
   })
   const assetFillerTop = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
-    if (idx < 1) return lerp(0, assetFillerRect.y, Math.max(0, idx))
+    if (idx < 2) return lerp(0, assetFillerRect.y, Math.max(0, idx - 1))
     return assetFillerRect.y
   })
   const assetFillerWidth = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
-    if (idx < 1) return lerp(0, assetFillerRect.w, Math.max(0, idx))
+    if (idx < 2) return lerp(0, assetFillerRect.w, Math.max(0, idx - 1))
     return assetFillerRect.w
   })
   const assetFillerHeight = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
-    if (idx < 1) return lerp(0, assetFillerRect.h, Math.max(0, idx))
-    return lerp(assetFillerRect.h, 0, Math.max(0, idx - 1))
+    if (idx < 2) return lerp(0, assetFillerRect.h, Math.max(0, idx - 1))
+    return lerp(assetFillerRect.h, 0, Math.max(0, idx - 2))
   })
-  // 白色填充块只在 ratio 页面（page 0）显示，在 list 页面（page 1）完全隐藏
-  const assetFillerOpacity = useTransform(scrollIdx, [0, 0.8, 1], [1, 0.5, 0])
+  // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
+  const assetFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
@@ -659,6 +792,8 @@ export function AssetsScreen(props: {
             kind="debt"
             ratioRect={ratioLayout.rects.debt}
             listRect={listRects.debt}
+            bubblePos={bubblePositions.get('debt')}
+            bubbleRadius={bubbleNodes.find(n => n.id === 'debt')?.radius}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
@@ -674,6 +809,8 @@ export function AssetsScreen(props: {
             kind={blockKinds[b.id] ?? 'assetMiddle'}
             ratioRect={ratioLayout.rects[b.id]}
             listRect={listRects[b.id]}
+            bubblePos={bubblePositions.get(b.id)}
+            bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
@@ -790,7 +927,16 @@ export function AssetsScreen(props: {
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
-          <AssetsRatioPage onBack={() => scrollToPage(1)} />
+          <div className="w-full h-full relative">
+            <BubbleChartPage
+              isActive={isBubblePageActive}
+              onNext={() => scrollToPage(1)}
+            />
+          </div>
+        </div>
+
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
+          <AssetsRatioPage onBack={() => scrollToPage(2)} />
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
@@ -799,7 +945,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             onPickType={(type) => {
               setSelectedType(type)
-              scrollToPage(2)
+              scrollToPage(3)
             }}
             expandedGroup={expandedGroup}
             onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
@@ -817,7 +963,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             hideAmounts={hideAmounts}
             onBack={() => {
-              scrollToPage(1)
+              scrollToPage(2)
               setSelectedType(null)
             }}
             onEditAccount={onEditAccount}
