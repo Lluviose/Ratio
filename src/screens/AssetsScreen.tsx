@@ -931,6 +931,7 @@ export function AssetsScreen(props: {
             <BubbleChartPage
               isActive={isBubblePageActive}
               onNext={() => scrollToPage(1)}
+              nodes={bubbleNodes}
             />
           </div>
         </div>
