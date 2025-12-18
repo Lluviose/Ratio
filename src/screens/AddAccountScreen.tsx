@@ -125,18 +125,18 @@ export function AddAccountScreen(props: {
       <AnimatePresence>
         {selectedType && (
           <motion.div 
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/40"
+            className="fixed inset-0 z-50 flex flex-col bg-white"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setSelectedType(null)}
           >
             <motion.div 
-              className="w-full max-w-md bg-[var(--card)] rounded-t-[28px] p-6 pb-8"
+              className="w-full max-w-md mx-auto bg-[var(--card)] rounded-b-[28px] p-6 pb-8"
               onClick={(e) => e.stopPropagation()}
-              initial={{ y: '100%' }}
+              initial={{ y: '-100%' }}
               animate={{ y: 0 }}
-              exit={{ y: '100%' }}
+              exit={{ y: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             >
               <div className="text-center mb-6">
@@ -179,6 +179,8 @@ export function AddAccountScreen(props: {
                 </motion.button>
               </div>
             </motion.div>
+
+            <div className="flex-1 bg-white" />
           </motion.div>
         )}
       </AnimatePresence>

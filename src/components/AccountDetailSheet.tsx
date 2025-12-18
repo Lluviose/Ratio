@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, Pencil, Plus, Save } from 'lucide-react'
+import { ArrowLeftRight, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
@@ -78,6 +78,7 @@ export function AccountDetailSheet(props: {
   }, [accounts])
 
   const [action, setAction] = useState<ActionId>('none')
+  const [moreOpen, setMoreOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
@@ -90,6 +91,7 @@ export function AccountDetailSheet(props: {
     if (!open) return
     const nextAction = initialAction ?? 'none'
     setAction(nextAction)
+    setMoreOpen(false)
     setRenameValue(account?.name ?? '')
     setBalanceValue(account ? String(account.balance) : '')
     setAdjustDirection('plus')
@@ -122,11 +124,11 @@ export function AccountDetailSheet(props: {
 
   const actionBtnStyle: CSSProperties = {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: 999,
     border: '1px solid var(--hairline)',
     background: 'var(--card)',
-    padding: '10px 10px',
-    fontWeight: 900,
+    padding: '10px 14px',
+    fontWeight: 950,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -248,40 +250,123 @@ export function AccountDetailSheet(props: {
   return (
     <BottomSheet open={open} title={account.name} onClose={onClose}>
       <motion.div 
-        className="stack" 
-        style={{ gap: 16 }}
+        className="flex flex-col"
+        style={{ gap: 16, minHeight: '62vh' }}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
+        onClick={() => setMoreOpen(false)}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-          <div>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>当前余额</div>
-            <div style={{ fontSize: 24, fontWeight: 950, marginTop: 4 }}>{formatCny(account.balance)}</div>
-          </div>
-          <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>{account.type}</div>
-        </div>
+        <div style={{ position: 'sticky', top: 0, zIndex: 6, background: 'var(--card)', paddingBottom: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', position: 'relative' }}>
+            <div>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>当前余额</div>
+              <div style={{ fontSize: 24, fontWeight: 950, marginTop: 4 }}>{formatCny(account.balance)}</div>
+            </div>
 
-        <div style={{ display: 'flex', gap: 10 }}>
-          {[
-            { id: 'rename', icon: Pencil, label: '重命名' },
-            { id: 'set_balance', icon: Save, label: '改余额' },
-            { id: 'adjust', icon: Plus, label: '增减' },
-            { id: 'transfer', icon: ArrowLeftRight, label: '转账' },
-          ].map((item) => (
-            <motion.button 
-              key={item.id}
-              type="button" 
-              style={actionBtnStyle} 
-              onClick={() => setAction(item.id as ActionId)}
-              whileTap={{ scale: 0.95 }}
-              whileHover={{ scale: 1.02, backgroundColor: 'var(--bg)' }}
-              animate={action === item.id ? { borderColor: 'var(--primary)', color: 'var(--primary)', backgroundColor: 'rgba(91, 107, 255, 0.05)' } : {}}
-            >
-              <item.icon size={16} strokeWidth={2.6} />
-              {item.label}
-            </motion.button>
-          ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>{account.type}</div>
+              <motion.button
+                type="button"
+                className="iconBtn hover:bg-[var(--hairline)] transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMoreOpen((v) => !v)
+                }}
+                whileTap={{ scale: 0.92 }}
+                aria-label="more"
+              >
+                <MoreHorizontal size={18} />
+              </motion.button>
+            </div>
+
+            <AnimatePresence>
+              {moreOpen ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                  transition={{ duration: 0.16 }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: '100%',
+                    marginTop: 10,
+                    background: 'var(--card)',
+                    border: '1px solid var(--hairline)',
+                    borderRadius: 18,
+                    padding: 6,
+                    boxShadow: 'var(--shadow-hover)',
+                    minWidth: 160,
+                    zIndex: 10,
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      setAction('rename')
+                    }}
+                    style={{
+                      width: '100%',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      fontWeight: 900,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                    className="hover:bg-[var(--bg)] transition-colors"
+                  >
+                    <Pencil size={16} strokeWidth={2.6} />
+                    重命名
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      setAction('transfer')
+                    }}
+                    style={{
+                      width: '100%',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      fontWeight: 900,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                    className="hover:bg-[var(--bg)] transition-colors"
+                  >
+                    <ArrowLeftRight size={16} strokeWidth={2.6} />
+                    转账
+                  </button>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            {[
+              { id: 'adjust', icon: Plus, label: '增减金额' },
+              { id: 'set_balance', icon: Save, label: '修改余额' },
+            ].map((item) => (
+              <motion.button 
+                key={item.id}
+                type="button" 
+                style={actionBtnStyle} 
+                onClick={() => setAction(item.id as ActionId)}
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02, backgroundColor: 'var(--bg)' }}
+                animate={action === item.id ? { borderColor: 'var(--primary)', color: 'var(--primary)', backgroundColor: 'rgba(91, 107, 255, 0.05)' } : {}}
+              >
+                <item.icon size={16} strokeWidth={2.6} />
+                {item.label}
+              </motion.button>
+            ))}
+          </div>
         </div>
 
         <AnimatePresence mode="wait">
@@ -419,95 +504,95 @@ export function AccountDetailSheet(props: {
 
         <div style={{ height: 1, background: 'var(--hairline)', margin: '6px 0' }} />
 
-        <div style={{ fontWeight: 950, fontSize: 14 }}>操作记录</div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontWeight: 950, fontSize: 14 }}>操作记录</div>
 
-        {relatedOps.length === 0 ? (
-          <div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: '14px 0' }}>
-            暂无操作
-          </div>
-        ) : (
-          <div className="stack" style={{ gap: 10 }}>
-            {relatedOps.map((op, i) => {
-              let title = ''
-              let delta = 0
-              let after = account.balance
+          <div style={{ marginTop: 12, flex: 1 }}>
+            {relatedOps.length === 0 ? (
+              <div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: '14px 0' }}>
+                暂无操作
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: 10 }}>
+                {relatedOps.map((op, i) => {
+                  let title = ''
+                  let delta = 0
+                  let after = account.balance
 
-              if (op.kind === 'rename') {
-                title = `重命名：${op.beforeName} → ${op.afterName}`
-                delta = 0
-                after = account.balance
-              }
+                  if (op.kind === 'rename') {
+                    title = `重命名：${op.beforeName} → ${op.afterName}`
+                    delta = 0
+                    after = account.balance
+                  }
 
-              if (op.kind === 'set_balance') {
-                title = '修改余额'
-                delta = op.after - op.before
-                after = op.after
-              }
+                  if (op.kind === 'set_balance') {
+                    title = '修改余额'
+                    delta = op.after - op.before
+                    after = op.after
+                  }
 
-              if (op.kind === 'adjust') {
-                title = op.delta >= 0 ? '增加金额' : '减少金额'
-                delta = op.delta
-                after = op.after
-              }
+                  if (op.kind === 'adjust') {
+                    title = op.delta >= 0 ? '增加金额' : '减少金额'
+                    delta = op.delta
+                    after = op.after
+                  }
 
-              if (op.kind === 'transfer') {
-                const from = byId.get(op.fromId)
-                const to = byId.get(op.toId)
-                if (account.id === op.fromId) {
-                  title = `转出到 ${to?.name ?? '账户'}`
-                  delta = op.fromAfter - op.fromBefore
-                  after = op.fromAfter
-                } else {
-                  title = `从 ${from?.name ?? '账户'} 转入`
-                  delta = op.toAfter - op.toBefore
-                  after = op.toAfter
-                }
-              }
+                  if (op.kind === 'transfer') {
+                    const from = byId.get(op.fromId)
+                    const to = byId.get(op.toId)
+                    if (account.id === op.fromId) {
+                      title = `转出到 ${to?.name ?? '账户'}`
+                      delta = op.fromAfter - op.fromBefore
+                      after = op.fromAfter
+                    } else {
+                      title = `从 ${from?.name ?? '账户'} 转入`
+                      delta = op.toAfter - op.toBefore
+                      after = op.toAfter
+                    }
+                  }
 
-              return (
-                <motion.div
-                  key={op.id}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  style={{
-                    border: '1px solid var(--hairline)',
-                    borderRadius: 18,
-                    background: 'rgba(255, 255, 255, 0.7)',
-                    padding: 12,
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
-                    <div style={{ fontWeight: 950, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {title}
-                    </div>
-                    <div
+                  return (
+                    <motion.div
+                      key={op.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.05 }}
                       style={{
-                        fontWeight: 950,
-                        fontSize: 13,
-                        color: delta > 0 ? '#47d16a' : delta < 0 ? '#ff6b57' : 'var(--muted-text)',
+                        border: '1px solid var(--hairline)',
+                        borderRadius: 18,
+                        background: 'rgba(255, 255, 255, 0.7)',
+                        padding: 12,
                       }}
                     >
-                      {formatSigned(delta)}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 6 }}>
-                    <div className="muted" style={{ fontSize: 11, fontWeight: 800 }}>
-                      {formatTime(op.at)}
-                    </div>
-                    <div className="muted" style={{ fontSize: 11, fontWeight: 800 }}>
-                      余额 {formatCny(after)}
-                    </div>
-                  </div>
-                </motion.div>
-              )
-            })}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
+                        <div style={{ fontWeight: 950, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {title}
+                        </div>
+                        <div
+                          style={{
+                            fontWeight: 950,
+                            fontSize: 13,
+                            color: delta > 0 ? '#47d16a' : delta < 0 ? '#ff6b57' : 'var(--muted-text)',
+                          }}
+                        >
+                          {formatSigned(delta)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 6 }}>
+                        <div className="muted" style={{ fontSize: 11, fontWeight: 800 }}>
+                          {formatTime(op.at)}
+                        </div>
+                        <div className="muted" style={{ fontSize: 11, fontWeight: 800 }}>
+                          余额 {formatCny(after)}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        )}
-
-        <motion.button type="button" className="ghostBtn" onClick={onClose} whileTap={{ scale: 0.98 }}>
-          关闭
-        </motion.button>
+        </div>
       </motion.div>
     </BottomSheet>
   )

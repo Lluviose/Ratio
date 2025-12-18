@@ -8,6 +8,7 @@ import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
+import { WaterImpactRipples, type RippleImpact } from '../components/WaterImpactRipples'
 
 /** Linear interpolation helper */
 function lerp(a: number, b: number, t: number): number {
@@ -128,14 +129,14 @@ function OverlayBlock(props: {
 
   const ratioCorner =
     kind === 'debt'
-      ? { tl: chartRadius, tr: 0, bl: chartRadius, br: 0 }
+      ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: 0 }
       : kind === 'assetOnly'
         ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
       : kind === 'assetTop'
         ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
         : kind === 'assetBottom'
-          ? { tl: 0, tr: 0, bl: 0, br: chartRadius }
-          : { tl: 0, tr: 0, bl: 0, br: 0 }
+          ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
+          : { tl: 0, tr: chartRadius, bl: 0, br: 0 }
 
   const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
@@ -277,6 +278,8 @@ export function AssetsScreen(props: {
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [rippleImpacts, setRippleImpacts] = useState<RippleImpact[]>([])
+  const [rippleToken, setRippleToken] = useState(0)
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
@@ -298,6 +301,17 @@ export function AssetsScreen(props: {
     return v / w
   })
 
+  useEffect(() => {
+    if (!selectedType) return
+    const el = scrollerRef.current
+    if (!el) return
+    const w = el.clientWidth || 0
+    if (w <= 0) return
+    requestAnimationFrame(() => {
+      el.scrollTo({ left: w * 3, behavior: 'smooth' })
+    })
+  }, [selectedType])
+
   // Page 0: Bubble
   // Page 1: Ratio (Blocks)
   // Page 2: List
@@ -312,6 +326,7 @@ export function AssetsScreen(props: {
   
   // Bubble chart visibility
   const [isBubblePageActive, setIsBubblePageActive] = useState(true)
+  const bubbleWasActiveRef = useRef(false)
   
   useEffect(() => {
     return scrollIdx.on('change', (v) => {
@@ -399,6 +414,33 @@ export function AssetsScreen(props: {
   }, [grouped.groupCards])
 
   const bubblePositions = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
+
+  useEffect(() => {
+    if (!initialized) return
+    if (!viewport.w || !viewport.h) return
+    if (bubbleNodes.length === 0) return
+
+    if (isBubblePageActive && !bubbleWasActiveRef.current) {
+      const maxR = Math.max(...bubbleNodes.map((n) => n.radius), 1)
+      const nodes = bubbleNodes.slice().sort(() => Math.random() - 0.5)
+
+      const impacts: RippleImpact[] = nodes.map((n, i) => {
+        const p = bubblePositions.get(n.id)
+        const x = p?.x.get() ?? viewport.w / 2
+        const y = p?.y.get() ?? viewport.h / 2
+        const t = Math.min(1, Math.max(0, n.radius / maxR))
+        const strength = 0.65 + t * 0.75
+        const radius = Math.max(28, n.radius * 0.92)
+        const delayMs = i * 140 + Math.random() * 140
+        return { x, y, radius, strength, delayMs }
+      })
+
+      setRippleImpacts(impacts)
+      setRippleToken((v) => v + 1)
+    }
+
+    bubbleWasActiveRef.current = isBubblePageActive
+  }, [bubbleNodes, bubblePositions, initialized, isBubblePageActive, viewport.h, viewport.w])
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -747,6 +789,15 @@ export function AssetsScreen(props: {
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
       {initialized ? (
+        <WaterImpactRipples
+          active={isBubblePageActive}
+          impacts={rippleImpacts}
+          replayToken={rippleToken}
+          className="absolute inset-0 z-0"
+        />
+      ) : null}
+
+      {initialized ? (
         <motion.div
           className="absolute inset-0 z-0 pointer-events-none"
           initial={{ x: -100, opacity: 0 }}
@@ -764,6 +815,7 @@ export function AssetsScreen(props: {
               height: debtFillerHeight,
               background: 'white',
               borderTopLeftRadius: chartRadius,
+              borderTopRightRadius: chartRadius,
               opacity: debtFillerOpacity,
             }}
           />
@@ -779,6 +831,7 @@ export function AssetsScreen(props: {
               width: assetFillerWidth,
               height: assetFillerHeight,
               background: 'white',
+              borderTopRightRadius: chartRadius,
               borderBottomRightRadius: chartRadius,
               opacity: assetFillerOpacity,
             }}
@@ -931,10 +984,6 @@ export function AssetsScreen(props: {
             <BubbleChartPage
               isActive={isBubblePageActive}
               onNext={() => scrollToPage(1)}
-              nodes={bubbleNodes}
-              positions={bubblePositions}
-              width={viewport.w}
-              height={viewport.h}
             />
           </div>
         </div>
@@ -949,7 +998,6 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             onPickType={(type) => {
               setSelectedType(type)
-              scrollToPage(3)
             }}
             expandedGroup={expandedGroup}
             onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
@@ -960,19 +1008,21 @@ export function AssetsScreen(props: {
           />
         </div>
 
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
-          <AssetsTypeDetailPage
-            type={selectedType}
-            accounts={accounts}
-            getIcon={getIcon}
-            hideAmounts={hideAmounts}
-            onBack={() => {
-              scrollToPage(2)
-              setSelectedType(null)
-            }}
-            onEditAccount={onEditAccount}
-          />
-        </div>
+        {selectedType ? (
+          <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
+            <AssetsTypeDetailPage
+              type={selectedType}
+              accounts={accounts}
+              getIcon={getIcon}
+              hideAmounts={hideAmounts}
+              onBack={() => {
+                scrollToPage(2)
+                setSelectedType(null)
+              }}
+              onEditAccount={onEditAccount}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   )
