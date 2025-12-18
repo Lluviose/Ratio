@@ -288,7 +288,12 @@ function ImpactRipples(props: {
     >
       <defs>
         <filter id="rippleBlur" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="0.8" />
+          <feGaussianBlur stdDeviation="1.05" />
+        </filter>
+
+        <filter id="rippleGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1" stdDeviation="1" floodColor="#0f172a" floodOpacity="0.22" />
+          <feDropShadow dx="0" dy="0" stdDeviation="1.35" floodColor="#ffffff" floodOpacity="0.22" />
         </filter>
       </defs>
 
@@ -297,8 +302,10 @@ function ImpactRipples(props: {
         const pulseStart = Math.max(4, imp.bubbleRadius * 0.14)
         const pulseEnd = Math.max(pulseStart + 8, imp.bubbleRadius * 0.62)
 
-        const strokeBase = 1.15 + imp.energy * 1.55
-        const alpha = 0.22 * (0.35 + 0.65 * imp.energy)
+        const strokeBase = 1.25 + imp.energy * 1.75
+        const alphaDark = 0.32 * (0.35 + 0.65 * imp.energy)
+        const alphaLight = alphaDark * 0.72
+        const pulseAlpha = alphaLight * 0.78
         const ease = [0.215, 0.61, 0.355, 1] as const
 
         const d0 = imp.delay
@@ -315,10 +322,10 @@ function ImpactRipples(props: {
             <motion.circle
               cx={imp.x}
               cy={imp.y}
-              fill="rgba(255,255,255,0.30)"
+              fill="#ffffff"
               filter="url(#rippleBlur)"
               initial={{ r: pulseStart, opacity: 0 }}
-              animate={{ r: pulseEnd, opacity: [0, alpha * 0.55, 0] }}
+              animate={{ r: pulseEnd, opacity: [0, pulseAlpha, 0] }}
               transition={{ delay: d0, duration: 0.42, ease }}
             />
 
@@ -326,20 +333,23 @@ function ImpactRipples(props: {
               cx={imp.x}
               cy={imp.y}
               fill="none"
-              stroke="rgba(15,23,42,0.22)"
+              stroke="#0f172a"
               strokeWidth={strokeBase}
+              style={{ mixBlendMode: 'multiply' }}
               initial={{ r: ringStart, opacity: 0 }}
-              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha, 0] }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alphaDark, 0] }}
               transition={{ delay: d1, duration: dur1, ease }}
             />
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
-              stroke="rgba(255,255,255,0.75)"
+              stroke="#ffffff"
               strokeWidth={Math.max(1, strokeBase * 0.62)}
+              filter="url(#rippleGlow)"
+              style={{ mixBlendMode: 'screen' }}
               initial={{ r: ringStart, opacity: 0 }}
-              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.7, 0] }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alphaLight, 0] }}
               transition={{ delay: d1, duration: dur1, ease }}
             />
 
@@ -347,20 +357,23 @@ function ImpactRipples(props: {
               cx={imp.x}
               cy={imp.y}
               fill="none"
-              stroke="rgba(15,23,42,0.20)"
+              stroke="#0f172a"
               strokeWidth={strokeBase * 0.95}
+              style={{ mixBlendMode: 'multiply' }}
               initial={{ r: ringStart, opacity: 0 }}
-              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.75, 0] }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alphaDark * 0.78, 0] }}
               transition={{ delay: d2, duration: dur2, ease }}
             />
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
-              stroke="rgba(255,255,255,0.70)"
+              stroke="#ffffff"
               strokeWidth={Math.max(1, strokeBase * 0.55)}
+              filter="url(#rippleGlow)"
+              style={{ mixBlendMode: 'screen' }}
               initial={{ r: ringStart, opacity: 0 }}
-              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.5, 0] }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alphaLight * 0.7, 0] }}
               transition={{ delay: d2, duration: dur2, ease }}
             />
 
@@ -368,20 +381,23 @@ function ImpactRipples(props: {
               cx={imp.x}
               cy={imp.y}
               fill="none"
-              stroke="rgba(15,23,42,0.18)"
+              stroke="#0f172a"
               strokeWidth={strokeBase * 0.85}
+              style={{ mixBlendMode: 'multiply' }}
               initial={{ r: ringStart, opacity: 0 }}
-              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.55, 0] }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alphaDark * 0.62, 0] }}
               transition={{ delay: d3, duration: dur3, ease }}
             />
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
-              stroke="rgba(255,255,255,0.62)"
+              stroke="#ffffff"
               strokeWidth={Math.max(1, strokeBase * 0.48)}
+              filter="url(#rippleGlow)"
+              style={{ mixBlendMode: 'screen' }}
               initial={{ r: ringStart, opacity: 0 }}
-              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.36, 0] }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alphaLight * 0.5, 0] }}
               transition={{ delay: d3, duration: dur3, ease }}
             />
           </g>
