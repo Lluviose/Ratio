@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
-import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentType, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { AssetsListPage } from './AssetsListPage'
@@ -279,6 +279,14 @@ function ImpactRipples(props: {
 }) {
   const { width, height, impacts, opacity } = props
 
+  const rawId = useId()
+  const rid = rawId.replace(/:/g, '')
+  const organicId = `rippleOrganic-${rid}`
+  const glowId = `rippleGlow-${rid}`
+  const filterRes = `${Math.round(Math.min(760, Math.max(220, width * 0.55)))} ${Math.round(
+    Math.min(760, Math.max(220, height * 0.55)),
+  )}`
+
   return (
     <motion.svg
       className="absolute inset-0 pointer-events-none"
@@ -287,13 +295,13 @@ function ImpactRipples(props: {
       preserveAspectRatio="none"
     >
       <defs>
-        <filter id="rippleOrganic" x="-50%" y="-50%" width="200%" height="200%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" result="noise" seed="0" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="80" xChannelSelector="R" yChannelSelector="G" />
-          <feGaussianBlur stdDeviation="6" />
+        <filter id={organicId} x="-50%" y="-50%" width="200%" height="200%" filterRes={filterRes}>
+          <feTurbulence type="fractalNoise" baseFrequency="0.013" numOctaves="1" result="noise" seed="0" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="56" xChannelSelector="R" yChannelSelector="G" />
+          <feGaussianBlur stdDeviation="4.2" />
         </filter>
-        <filter id="rippleGlow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="8" />
+        <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%" filterRes={filterRes}>
+          <feGaussianBlur stdDeviation="6" />
         </filter>
       </defs>
 
@@ -304,38 +312,36 @@ function ImpactRipples(props: {
 
         return (
           <g key={imp.id}>
-            {/* Secondary dark pressure wave for contrast */}
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
               stroke="#000000"
-              strokeWidth={40}
-              filter="url(#rippleGlow)"
+              strokeWidth={32}
+              filter={`url(#${glowId})`}
               style={{ mixBlendMode: 'soft-light' }}
               initial={{ r: imp.bubbleRadius * 0.5, opacity: 0 }}
               animate={{ 
                 r: imp.maxWaveRadius * 0.95, 
                 opacity: [0, 0.3 * imp.energy, 0],
-                strokeWidth: [40, 80]
+                strokeWidth: [32, 64]
               }}
               transition={{ delay: d0, duration: dur, ease }}
             />
             
-            {/* Main expanding organic wave (white/light) */}
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
               stroke="#ffffff"
-              strokeWidth={60}
-              filter="url(#rippleOrganic)"
+              strokeWidth={54}
+              filter={`url(#${organicId})`}
               style={{ mixBlendMode: 'overlay' }}
               initial={{ r: imp.bubbleRadius * 0.5, opacity: 0 }}
               animate={{ 
                 r: imp.maxWaveRadius, 
                 opacity: [0, 0.6 * imp.energy, 0],
-                strokeWidth: [60, 120]
+                strokeWidth: [54, 108]
               }}
               transition={{ delay: d0, duration: dur, ease }}
             />
@@ -381,10 +387,10 @@ export function AssetsScreen(props: {
     if (ripple.impacts.length === 0) return
 
     const key = ripple.key
-    const maxEnd = Math.max(...ripple.impacts.map((i) => i.delay + i.duration + 0.34), 0)
+    const maxEnd = Math.max(...ripple.impacts.map((i) => i.delay + i.duration * 1.2), 0)
     const t = window.setTimeout(() => {
       setRipple((curr) => (curr && curr.key === key ? null : curr))
-    }, (maxEnd + 0.25) * 1000)
+    }, (maxEnd + 0.35) * 1000)
 
     return () => window.clearTimeout(t)
   }, [ripple])
@@ -546,6 +552,8 @@ export function AssetsScreen(props: {
         } satisfies RippleImpact
       })
       .filter((v): v is RippleImpact => Boolean(v))
+      .sort((a, b) => b.energy - a.energy)
+      .slice(0, 3)
 
     if (impacts.length === 0) return
 
