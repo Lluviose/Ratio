@@ -26,8 +26,6 @@ export function BubbleChartPage(props: {
           <ChevronRight size={20} strokeWidth={2.5} />
         </motion.button>
       </div>
-
-      {/* Background Ripples */}
     </div>
   )
 }

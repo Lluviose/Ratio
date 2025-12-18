@@ -8,7 +8,6 @@ import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
-import { WaterImpactRipples, type RippleImpact } from '../components/WaterImpactRipples'
 
 /** Linear interpolation helper */
 function lerp(a: number, b: number, t: number): number {
@@ -253,6 +252,145 @@ function OverlayBlock(props: {
   )
 }
 
+type RippleImpact = {
+  id: string
+  x: number
+  y: number
+  bubbleRadius: number
+  energy: number
+  maxWaveRadius: number
+  delay: number
+  duration: number
+}
+
+function maxCornerDistance(x: number, y: number, w: number, h: number) {
+  const d1 = Math.hypot(x, y)
+  const d2 = Math.hypot(w - x, y)
+  const d3 = Math.hypot(x, h - y)
+  const d4 = Math.hypot(w - x, h - y)
+  return Math.max(d1, d2, d3, d4)
+}
+
+function ImpactRipples(props: {
+  width: number
+  height: number
+  impacts: RippleImpact[]
+  opacity: MotionValue<number>
+}) {
+  const { width, height, impacts, opacity } = props
+
+  return (
+    <motion.svg
+      className="absolute inset-0"
+      style={{ opacity }}
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+    >
+      <defs>
+        <filter id="rippleBlur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="0.8" />
+        </filter>
+      </defs>
+
+      {impacts.map((imp) => {
+        const ringStart = Math.max(10, imp.bubbleRadius * 0.82)
+        const pulseStart = Math.max(4, imp.bubbleRadius * 0.14)
+        const pulseEnd = Math.max(pulseStart + 8, imp.bubbleRadius * 0.62)
+
+        const strokeBase = 1.15 + imp.energy * 1.55
+        const alpha = 0.22 * (0.35 + 0.65 * imp.energy)
+        const ease = [0.215, 0.61, 0.355, 1] as const
+
+        const d0 = imp.delay
+        const d1 = imp.delay + 0.04
+        const d2 = imp.delay + 0.18
+        const d3 = imp.delay + 0.34
+
+        const dur1 = imp.duration
+        const dur2 = imp.duration * 0.96
+        const dur3 = imp.duration * 0.92
+
+        return (
+          <g key={imp.id}>
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="rgba(255,255,255,0.30)"
+              filter="url(#rippleBlur)"
+              initial={{ r: pulseStart, opacity: 0 }}
+              animate={{ r: pulseEnd, opacity: [0, alpha * 0.55, 0] }}
+              transition={{ delay: d0, duration: 0.42, ease }}
+            />
+
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="none"
+              stroke="rgba(15,23,42,0.22)"
+              strokeWidth={strokeBase}
+              initial={{ r: ringStart, opacity: 0 }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha, 0] }}
+              transition={{ delay: d1, duration: dur1, ease }}
+            />
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="none"
+              stroke="rgba(255,255,255,0.75)"
+              strokeWidth={Math.max(1, strokeBase * 0.62)}
+              initial={{ r: ringStart, opacity: 0 }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.7, 0] }}
+              transition={{ delay: d1, duration: dur1, ease }}
+            />
+
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="none"
+              stroke="rgba(15,23,42,0.20)"
+              strokeWidth={strokeBase * 0.95}
+              initial={{ r: ringStart, opacity: 0 }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.75, 0] }}
+              transition={{ delay: d2, duration: dur2, ease }}
+            />
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="none"
+              stroke="rgba(255,255,255,0.70)"
+              strokeWidth={Math.max(1, strokeBase * 0.55)}
+              initial={{ r: ringStart, opacity: 0 }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.5, 0] }}
+              transition={{ delay: d2, duration: dur2, ease }}
+            />
+
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="none"
+              stroke="rgba(15,23,42,0.18)"
+              strokeWidth={strokeBase * 0.85}
+              initial={{ r: ringStart, opacity: 0 }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.55, 0] }}
+              transition={{ delay: d3, duration: dur3, ease }}
+            />
+            <motion.circle
+              cx={imp.x}
+              cy={imp.y}
+              fill="none"
+              stroke="rgba(255,255,255,0.62)"
+              strokeWidth={Math.max(1, strokeBase * 0.48)}
+              initial={{ r: ringStart, opacity: 0 }}
+              animate={{ r: imp.maxWaveRadius, opacity: [0, alpha * 0.36, 0] }}
+              transition={{ delay: d3, duration: dur3, ease }}
+            />
+          </g>
+        )
+      })}
+    </motion.svg>
+  )
+}
+
 export function AssetsScreen(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
@@ -269,6 +407,9 @@ export function AssetsScreen(props: {
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const measureRafRef = useRef<number | null>(null)
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
+  const bubbleSnapTimerRef = useRef<number | null>(null)
+  const inBubbleSnapRef = useRef(false)
+  const rippleKeyRef = useRef(0)
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
   const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
@@ -278,8 +419,20 @@ export function AssetsScreen(props: {
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(true)
-  const [rippleImpacts, setRippleImpacts] = useState<RippleImpact[]>([])
-  const [rippleToken, setRippleToken] = useState(0)
+  const [ripple, setRipple] = useState<{ key: number; impacts: RippleImpact[] } | null>(null)
+
+  useEffect(() => {
+    if (!ripple) return
+    if (ripple.impacts.length === 0) return
+
+    const key = ripple.key
+    const maxEnd = Math.max(...ripple.impacts.map((i) => i.delay + i.duration + 0.34), 0)
+    const t = window.setTimeout(() => {
+      setRipple((curr) => (curr && curr.key === key ? null : curr))
+    }, (maxEnd + 0.25) * 1000)
+
+    return () => window.clearTimeout(t)
+  }, [ripple])
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
@@ -301,17 +454,6 @@ export function AssetsScreen(props: {
     return v / w
   })
 
-  useEffect(() => {
-    if (!selectedType) return
-    const el = scrollerRef.current
-    if (!el) return
-    const w = el.clientWidth || 0
-    if (w <= 0) return
-    requestAnimationFrame(() => {
-      el.scrollTo({ left: w * 3, behavior: 'smooth' })
-    })
-  }, [selectedType])
-
   // Page 0: Bubble
   // Page 1: Ratio (Blocks)
   // Page 2: List
@@ -323,10 +465,10 @@ export function AssetsScreen(props: {
   // Blocks visible on Page 1-2, fade out quickly on 3
   // Also visible on Page 0 (Bubble)
   const overlayFade = useTransform(scrollIdx, [0, 1, 2, 2.08, 3], [1, 1, 1, 0, 0])
+  const rippleOpacity = useTransform(scrollIdx, [0, 0.22, 0.35], [1, 1, 0])
   
   // Bubble chart visibility
   const [isBubblePageActive, setIsBubblePageActive] = useState(true)
-  const bubbleWasActiveRef = useRef(false)
   
   useEffect(() => {
     return scrollIdx.on('change', (v) => {
@@ -415,32 +557,46 @@ export function AssetsScreen(props: {
 
   const bubblePositions = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
-  useEffect(() => {
-    if (!initialized) return
-    if (!viewport.w || !viewport.h) return
+  const triggerRipples = useCallback(() => {
+    const w = viewport.w
+    const h = viewport.h
+    if (!w || !h) return
     if (bubbleNodes.length === 0) return
 
-    if (isBubblePageActive && !bubbleWasActiveRef.current) {
-      const maxR = Math.max(...bubbleNodes.map((n) => n.radius), 1)
-      const nodes = bubbleNodes.slice().sort(() => Math.random() - 0.5)
+    const maxR = Math.max(...bubbleNodes.map((n) => n.radius), 1)
 
-      const impacts: RippleImpact[] = nodes.map((n, i) => {
-        const p = bubblePositions.get(n.id)
-        const x = p?.x.get() ?? viewport.w / 2
-        const y = p?.y.get() ?? viewport.h / 2
-        const t = Math.min(1, Math.max(0, n.radius / maxR))
-        const strength = 0.65 + t * 0.75
-        const radius = Math.max(28, n.radius * 0.92)
-        const delayMs = i * 140 + Math.random() * 140
-        return { x, y, radius, strength, delayMs }
+    const impacts = bubbleNodes
+      .map((node) => {
+        const mv = bubblePositions.get(node.id)
+        const x = mv?.x.get()
+        const y = mv?.y.get()
+        if (typeof x !== 'number' || typeof y !== 'number') return null
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+
+        const energy = Math.min(1, Math.max(0.12, (node.radius / maxR) ** 2))
+        const maxWaveRadius = maxCornerDistance(x, y, w, h) * 1.05
+        const duration = Math.min(2.8, Math.max(1.15, maxWaveRadius / 420))
+        const jitter = (Math.random() - 0.5) * 0.08
+        const delay = Math.max(0, 0.06 + (1 - energy) * 0.12 + jitter)
+
+        return {
+          id: node.id,
+          x,
+          y,
+          bubbleRadius: node.radius,
+          energy,
+          maxWaveRadius,
+          delay,
+          duration,
+        } satisfies RippleImpact
       })
+      .filter((v): v is RippleImpact => Boolean(v))
 
-      setRippleImpacts(impacts)
-      setRippleToken((v) => v + 1)
-    }
+    if (impacts.length === 0) return
 
-    bubbleWasActiveRef.current = isBubblePageActive
-  }, [bubbleNodes, bubblePositions, initialized, isBubblePageActive, viewport.h, viewport.w])
+    rippleKeyRef.current += 1
+    setRipple({ key: rippleKeyRef.current, impacts })
+  }, [bubbleNodes, bubblePositions, viewport.h, viewport.w])
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -686,6 +842,47 @@ export function AssetsScreen(props: {
   }, [scrollLeft])
 
   useEffect(() => {
+    if (!initialized) return
+    const el = scrollerRef.current
+    if (!el) return
+
+    const checkStop = () => {
+      const w = el.clientWidth || 0
+      if (w <= 0) return
+
+      const idx = el.scrollLeft / w
+      const nearest = Math.round(idx)
+      const dist = Math.abs(idx - nearest)
+      if (dist > 0.02) return
+
+      if (nearest === 0) {
+        if (!inBubbleSnapRef.current) {
+          inBubbleSnapRef.current = true
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => triggerRipples())
+          })
+        }
+      } else {
+        inBubbleSnapRef.current = false
+      }
+    }
+
+    const onScroll = () => {
+      if (bubbleSnapTimerRef.current) window.clearTimeout(bubbleSnapTimerRef.current)
+      bubbleSnapTimerRef.current = window.setTimeout(checkStop, 140)
+    }
+
+    el.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      if (bubbleSnapTimerRef.current) window.clearTimeout(bubbleSnapTimerRef.current)
+      bubbleSnapTimerRef.current = null
+    }
+  }, [initialized, triggerRipples])
+
+  useEffect(() => {
     const el = listScrollRef.current
     if (!el) return
 
@@ -789,21 +986,21 @@ export function AssetsScreen(props: {
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
       {initialized ? (
-        <WaterImpactRipples
-          active={isBubblePageActive}
-          impacts={rippleImpacts}
-          replayToken={rippleToken}
-          className="absolute inset-0 z-[1]"
-        />
-      ) : null}
-
-      {initialized ? (
         <motion.div
           className="absolute inset-0 z-0 pointer-events-none"
           initial={{ x: -100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
+          {ripple ? (
+            <ImpactRipples
+              key={ripple.key}
+              width={viewport.w}
+              height={viewport.h}
+              impacts={ripple.impacts}
+              opacity={rippleOpacity}
+            />
+          ) : null}
           {/* 负债上方的白色填充块（负债比例低于100%时） */}
           {debtFillerRect ? (
           <motion.div
@@ -998,6 +1195,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             onPickType={(type) => {
               setSelectedType(type)
+              scrollToPage(3)
             }}
             expandedGroup={expandedGroup}
             onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
@@ -1008,21 +1206,19 @@ export function AssetsScreen(props: {
           />
         </div>
 
-        {selectedType ? (
-          <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
-            <AssetsTypeDetailPage
-              type={selectedType}
-              accounts={accounts}
-              getIcon={getIcon}
-              hideAmounts={hideAmounts}
-              onBack={() => {
-                scrollToPage(2)
-                setSelectedType(null)
-              }}
-              onEditAccount={onEditAccount}
-            />
-          </div>
-        ) : null}
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
+          <AssetsTypeDetailPage
+            type={selectedType}
+            accounts={accounts}
+            getIcon={getIcon}
+            hideAmounts={hideAmounts}
+            onBack={() => {
+              scrollToPage(2)
+              setSelectedType(null)
+            }}
+            onEditAccount={onEditAccount}
+          />
+        </div>
       </div>
     </div>
   )
