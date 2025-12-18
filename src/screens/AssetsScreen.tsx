@@ -134,8 +134,8 @@ function OverlayBlock(props: {
       : kind === 'assetTop'
         ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
         : kind === 'assetBottom'
-          ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-          : { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+          ? { tl: 0, tr: 0, bl: 0, br: chartRadius }
+          : { tl: 0, tr: 0, bl: 0, br: 0 }
 
   const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
