@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
-import { type ComponentType, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { AssetsListPage } from './AssetsListPage'
@@ -51,6 +51,7 @@ function OverlayBlock(props: {
   labelsOpacity: MotionValue<number>
   chartRadius: number
   listRadius: number
+  isMobile: boolean
 }) {
   const {
     block,
@@ -64,6 +65,7 @@ function OverlayBlock(props: {
     labelsOpacity,
     chartRadius,
     listRadius,
+    isMobile,
   } = props
 
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
@@ -160,11 +162,17 @@ function OverlayBlock(props: {
   const textColor = block.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.96)'
 
   // Content Centering for Bubbles
-  const padding = useTransform(scrollIdx, [0, 1], [0, 16])
+  const paddingMax = isMobile ? 10 : 16
+  const padding = useTransform(scrollIdx, [0, 1], [0, paddingMax])
   const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
   const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start')) // For debt col layout
   const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
   
+  // Font sizes
+  const amountSize = isMobile ? 'text-[17px]' : 'text-[20px]'
+  const percentSize = isMobile ? 'text-[28px]' : 'text-[34px]'
+  const percentSymbolSize = isMobile ? 'text-[12px]' : 'text-[14px]'
+
   // Sphere visual effects (fade out as we scroll to ratio)
   const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.6], [1, 0])
 
@@ -225,7 +233,7 @@ function OverlayBlock(props: {
                 style={{ opacity: amountOpacity, alignItems: flexAlign }}
             >
                 <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
-                <div className="text-[20px] font-bold tracking-tight leading-none">
+                <div className={`${amountSize} font-bold tracking-tight leading-none`}>
                     {formatCny(block.amount)}
                 </div>
             </motion.div>
@@ -239,9 +247,9 @@ function OverlayBlock(props: {
                      alignItems: flexAlign 
                  }}
             >
-                 <div className="text-[34px] font-semibold tracking-tight leading-none">
+                 <div className={`${percentSize} font-semibold tracking-tight leading-none`}>
                     {block.percent}
-                    <span className="text-[14px] align-top ml-0.5">%</span>
+                    <span className={`${percentSymbolSize} align-top ml-0.5`}>%</span>
                 </div>
                 <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
             </motion.div>
@@ -279,14 +287,9 @@ function ImpactRipples(props: {
 }) {
   const { width, height, impacts, opacity } = props
 
-  const rawId = useId()
-  const rid = rawId.replace(/:/g, '')
-  const organicId = `rippleOrganic-${rid}`
-  const glowId = `rippleGlow-${rid}`
-  const filterRes = `${Math.round(Math.min(760, Math.max(220, width * 0.55)))} ${Math.round(
-    Math.min(760, Math.max(220, height * 0.55)),
-  )}`
-
+  const isMobile = width < 600
+  const displacementScale = isMobile ? 40 : 80
+  
   return (
     <motion.svg
       className="absolute inset-0 pointer-events-none"
@@ -295,13 +298,13 @@ function ImpactRipples(props: {
       preserveAspectRatio="none"
     >
       <defs>
-        <filter id={organicId} x="-50%" y="-50%" width="200%" height="200%" filterRes={filterRes}>
-          <feTurbulence type="fractalNoise" baseFrequency="0.013" numOctaves="1" result="noise" seed="0" />
-          <feDisplacementMap in="SourceGraphic" in2="noise" scale="56" xChannelSelector="R" yChannelSelector="G" />
-          <feGaussianBlur stdDeviation="4.2" />
-        </filter>
-        <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%" filterRes={filterRes}>
+        <filter id="rippleOrganic" x="-50%" y="-50%" width="200%" height="200%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.012" numOctaves="1" result="noise" seed="0" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale={displacementScale} xChannelSelector="R" yChannelSelector="G" />
           <feGaussianBlur stdDeviation="6" />
+        </filter>
+        <filter id="rippleGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="8" />
         </filter>
       </defs>
 
@@ -310,38 +313,45 @@ function ImpactRipples(props: {
         const dur = imp.duration * 1.2
         const ease = [0.25, 0.4, 0.25, 1] as const
 
+        const strokeBase = isMobile ? 25 : 40
+        const strokeMax = isMobile ? 50 : 80
+        const mainBase = isMobile ? 35 : 60
+        const mainMax = isMobile ? 70 : 120
+
         return (
           <g key={imp.id}>
+            {/* Secondary dark pressure wave for contrast */}
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
               stroke="#000000"
-              strokeWidth={32}
-              filter={`url(#${glowId})`}
+              strokeWidth={strokeBase}
+              filter="url(#rippleGlow)"
               style={{ mixBlendMode: 'soft-light' }}
               initial={{ r: imp.bubbleRadius * 0.5, opacity: 0 }}
               animate={{ 
                 r: imp.maxWaveRadius * 0.95, 
                 opacity: [0, 0.3 * imp.energy, 0],
-                strokeWidth: [32, 64]
+                strokeWidth: [strokeBase, strokeMax]
               }}
               transition={{ delay: d0, duration: dur, ease }}
             />
             
+            {/* Main expanding organic wave (white/light) */}
             <motion.circle
               cx={imp.x}
               cy={imp.y}
               fill="none"
               stroke="#ffffff"
-              strokeWidth={54}
-              filter={`url(#${organicId})`}
+              strokeWidth={mainBase}
+              filter="url(#rippleOrganic)"
               style={{ mixBlendMode: 'overlay' }}
               initial={{ r: imp.bubbleRadius * 0.5, opacity: 0 }}
               animate={{ 
                 r: imp.maxWaveRadius, 
                 opacity: [0, 0.6 * imp.energy, 0],
-                strokeWidth: [54, 108]
+                strokeWidth: [mainBase, mainMax]
               }}
               transition={{ delay: d0, duration: dur, ease }}
             />
@@ -387,10 +397,10 @@ export function AssetsScreen(props: {
     if (ripple.impacts.length === 0) return
 
     const key = ripple.key
-    const maxEnd = Math.max(...ripple.impacts.map((i) => i.delay + i.duration * 1.2), 0)
+    const maxEnd = Math.max(...ripple.impacts.map((i) => i.delay + i.duration + 0.34), 0)
     const t = window.setTimeout(() => {
       setRipple((curr) => (curr && curr.key === key ? null : curr))
-    }, (maxEnd + 0.35) * 1000)
+    }, (maxEnd + 0.25) * 1000)
 
     return () => window.clearTimeout(t)
   }, [ripple])
@@ -494,7 +504,11 @@ export function AssetsScreen(props: {
     
     // Find max total to scale
     const maxTotal = Math.max(...groups.map(g => g.total), 1)
-    const maxRadius = 130 // Base max radius
+    
+    // Responsive radius scaling
+    const isMobile = viewport.w < 600
+    const baseMax = isMobile ? Math.min(130, viewport.w * 0.28) : 130
+    const baseMin = isMobile ? 42 : 55
     
     // Fixed / Liquid / Debt / Invest / Receivable
     for (const g of groups) {
@@ -502,8 +516,8 @@ export function AssetsScreen(props: {
       
       // Calculate radius roughly proportional to sqrt of area (value)
       // clamp min size so small assets are still visible bubbles
-      const r = Math.sqrt(g.total / maxTotal) * maxRadius
-      const radius = Math.max(r, 55)
+      const r = Math.sqrt(g.total / maxTotal) * baseMax
+      const radius = Math.max(r, baseMin)
 
       nodes.push({
         id: g.group.id,
@@ -514,7 +528,7 @@ export function AssetsScreen(props: {
       })
     }
     return nodes
-  }, [grouped.groupCards])
+  }, [grouped.groupCards, viewport.w])
 
   const bubblePositions = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
@@ -552,8 +566,6 @@ export function AssetsScreen(props: {
         } satisfies RippleImpact
       })
       .filter((v): v is RippleImpact => Boolean(v))
-      .sort((a, b) => b.energy - a.energy)
-      .slice(0, 3)
 
     if (impacts.length === 0) return
 
@@ -561,11 +573,15 @@ export function AssetsScreen(props: {
     setRipple({ key: rippleKeyRef.current, impacts })
   }, [bubbleNodes, bubblePositions, viewport.h, viewport.w])
 
+  const isMobile = viewport.w > 0 && viewport.w < 600
+
   const ratioLayout = useMemo(() => {
     const top = 64
     const chartH = Math.max(0, viewport.h - top)
     const chartW = viewport.w
-    const debtW = Math.round(chartW * 0.24)
+    // Mobile: Give debt column a bit more width ratio (28% vs 24%) to accommodate text
+    const debtRatio = chartW < 600 ? 0.28 : 0.24
+    const debtW = Math.round(chartW * debtRatio)
     const assetX = debtW
     const assetW = Math.max(0, chartW - debtW)
 
@@ -658,6 +674,7 @@ export function AssetsScreen(props: {
       debtExceeds,
       assetDisplayH,
       assetStartY,
+      debtW,
     }
   }, [blocks, grouped.assetsTotal, viewport.h, viewport.w])
 
@@ -886,7 +903,7 @@ export function AssetsScreen(props: {
     
     const top = 64
     const chartH = Math.max(0, viewport.h - top)
-    const debtW = Math.round(viewport.w * 0.24)
+    const debtW = ratioLayout.debtW
     const assetX = debtW
     const assetW = Math.max(0, viewport.w - debtW)
     
@@ -1012,6 +1029,7 @@ export function AssetsScreen(props: {
             labelsOpacity={labelsOpacity}
             chartRadius={chartRadius}
             listRadius={listRadius}
+            isMobile={isMobile}
           />
         ) : null}
 
@@ -1029,12 +1047,13 @@ export function AssetsScreen(props: {
             labelsOpacity={labelsOpacity}
             chartRadius={chartRadius}
             listRadius={listRadius}
+            isMobile={isMobile}
           />
         ))}
         </motion.div>
       ) : null}
 
-      <motion.div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none" style={{ opacity: overlayFade }}>
+      <motion.div className="absolute inset-x-0 top-0 z-20 px-4 pointer-events-none" style={{ opacity: overlayFade, paddingTop: 'calc(1.5rem + env(safe-area-inset-top))' }}>
         <motion.div
           className="flex items-start justify-between gap-3"
           style={{ y: listHeaderY, opacity: listHeaderOpacity, pointerEvents: listHeaderPointerEvents }}
@@ -1066,7 +1085,7 @@ export function AssetsScreen(props: {
           <motion.button
             type="button"
             onClick={onAddAccount}
-            className="w-10 h-10 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
+            className="w-11 h-11 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
             aria-label="add"
             initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
@@ -1077,7 +1096,13 @@ export function AssetsScreen(props: {
         </motion.div>
       </motion.div>
 
-      <motion.div className="absolute left-4 bottom-4 z-20 pointer-events-none" style={{ opacity: overlayFade }}>
+      <motion.div 
+        className="absolute left-4 z-20 pointer-events-none" 
+        style={{ 
+            opacity: overlayFade,
+            bottom: 'calc(2rem + env(safe-area-inset-bottom))'
+        }}
+      >
         <motion.div style={{ opacity: miniBarOpacity, y: miniBarY, pointerEvents: miniBarPointerEvents }}>
           <div ref={moreRef} className="relative">
             <div className="flex items-center gap-1 bg-white/80 backdrop-blur-md border border-white/70 shadow-sm rounded-full p-1">
