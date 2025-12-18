@@ -52,6 +52,8 @@ function OverlayBlock(props: {
   labelsOpacity: MotionValue<number>
   chartRadius: number
   listRadius: number
+  zIndex?: number
+  extendDownRight?: boolean
 }) {
   const {
     block,
@@ -65,6 +67,8 @@ function OverlayBlock(props: {
     labelsOpacity,
     chartRadius,
     listRadius,
+    zIndex,
+    extendDownRight,
   } = props
 
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
@@ -127,6 +131,20 @@ function OverlayBlock(props: {
   
   const opacity = useTransform([overlayFade], ([a]) => a)
 
+  const extendPatchBaseOpacity = useTransform(scrollIdx, [0.85, 1, 1.8, 2], [0, 1, 1, 0])
+  const extendPatchOpacity = useTransform([extendPatchBaseOpacity, overlayFade], (values) => {
+    const [a, b] = values as [number, number]
+    return a * b
+  })
+  const extendPatchLeft = useTransform([x, w], (values) => {
+    const [vx, vw] = values as [number, number]
+    return vx + vw - chartRadius
+  })
+  const extendPatchTop = useTransform([y, h], (values) => {
+    const [vy, vh] = values as [number, number]
+    return vy + vh - 0.5
+  })
+
   const ratioCorner =
     kind === 'debt'
       ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: 0 }
@@ -178,78 +196,96 @@ function OverlayBlock(props: {
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
   return (
-    <motion.div
-      className="absolute pointer-events-none"
-      style={{
-        left: x,
-        top: y,
-        width: w,
-        height: h,
-        background: block.tone,
-        borderTopLeftRadius: tl,
-        borderTopRightRadius: tr,
-        borderBottomLeftRadius: bl,
-        borderBottomRightRadius: br,
-        opacity,
-        overflow: 'hidden',
-      }}
-    >
-      {/* Sphere 3D Effects Overlay */}
-      <motion.div 
-        className="absolute inset-0 z-0"
-        style={{ opacity: sphereEffectOpacity }}
-      >
-        {/* Inner Highlight/Shadow using CSS gradients/shadows */}
-        <div className="absolute inset-0" style={{ 
-            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
-        }} />
-        <div className="absolute inset-0" style={{ 
-            boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
-        }} />
-      </motion.div>
-
+    <>
       <motion.div
-        style={{ opacity: labelsOpacity, color: textColor, padding }}
-        className="w-full h-full flex flex-col relative z-10"
+        className="absolute pointer-events-none"
+        style={{
+          left: x,
+          top: y,
+          width: w,
+          height: h,
+          background: block.tone,
+          borderTopLeftRadius: tl,
+          borderTopRightRadius: tr,
+          borderBottomLeftRadius: bl,
+          borderBottomRightRadius: br,
+          opacity,
+          overflow: 'hidden',
+          zIndex,
+        }}
       >
+        {/* Sphere 3D Effects Overlay */}
         <motion.div 
-            className="w-full h-full flex flex-col relative"
-            style={{ 
-                justifyContent: kind === 'debt' ? 'center' : flexJustify,
-                alignItems: flexAlign,
-                scale: contentScale
-            }}
+          className="absolute inset-0 z-0"
+          style={{ opacity: sphereEffectOpacity }}
         >
-            {/* Amount View (Bubble) */}
-            <motion.div 
-                className="absolute inset-0 flex flex-col justify-center"
-                style={{ opacity: amountOpacity, alignItems: flexAlign }}
-            >
-                <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
-                <div className="text-[20px] font-bold tracking-tight leading-none">
-                    {formatCny(block.amount)}
-                </div>
-            </motion.div>
+          {/* Inner Highlight/Shadow using CSS gradients/shadows */}
+          <div className="absolute inset-0" style={{ 
+              background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
+          }} />
+          <div className="absolute inset-0" style={{ 
+              boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
+          }} />
+        </motion.div>
 
-            {/* Percent View (Ratio) */}
-            <motion.div 
-                 className="absolute inset-0 flex flex-col"
-                 style={{ 
-                     opacity: percentOpacity, 
-                     justifyContent: kind === 'debt' ? 'center' : 'flex-start',
-                     alignItems: flexAlign 
-                 }}
-            >
-                 <div className="text-[34px] font-semibold tracking-tight leading-none">
-                    {block.percent}
-                    <span className="text-[14px] align-top ml-0.5">%</span>
-                </div>
-                <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
-            </motion.div>
+        <motion.div
+          style={{ opacity: labelsOpacity, color: textColor, padding }}
+          className="w-full h-full flex flex-col relative z-10"
+        >
+          <motion.div 
+              className="w-full h-full flex flex-col relative"
+              style={{ 
+                  justifyContent: kind === 'debt' ? 'center' : flexJustify,
+                  alignItems: flexAlign,
+                  scale: contentScale
+              }}
+          >
+              {/* Amount View (Bubble) */}
+              <motion.div 
+                  className="absolute inset-0 flex flex-col justify-center"
+                  style={{ opacity: amountOpacity, alignItems: flexAlign }}
+              >
+                  <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
+                  <div className="text-[20px] font-bold tracking-tight leading-none">
+                      {formatCny(block.amount)}
+                  </div>
+              </motion.div>
 
+              {/* Percent View (Ratio) */}
+              <motion.div 
+                   className="absolute inset-0 flex flex-col"
+                   style={{ 
+                       opacity: percentOpacity, 
+                       justifyContent: kind === 'debt' ? 'center' : 'flex-start',
+                       alignItems: flexAlign 
+                   }}
+              >
+                   <div className="text-[34px] font-semibold tracking-tight leading-none">
+                      {block.percent}
+                      <span className="text-[14px] align-top ml-0.5">%</span>
+                  </div>
+                  <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
+              </motion.div>
+
+          </motion.div>
         </motion.div>
       </motion.div>
-    </motion.div>
+
+      {extendDownRight ? (
+        <motion.div
+          className="absolute pointer-events-none"
+          style={{
+            left: extendPatchLeft,
+            top: extendPatchTop,
+            width: chartRadius,
+            height: chartRadius,
+            background: block.tone,
+            opacity: extendPatchOpacity,
+            zIndex,
+          }}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -852,10 +888,11 @@ export function AssetsScreen(props: {
             labelsOpacity={labelsOpacity}
             chartRadius={chartRadius}
             listRadius={listRadius}
+            zIndex={0}
           />
         ) : null}
 
-        {blocks.assets.map((b) => (
+        {blocks.assets.map((b, i) => (
           <OverlayBlock
             key={b.id}
             block={b}
@@ -869,6 +906,8 @@ export function AssetsScreen(props: {
             labelsOpacity={labelsOpacity}
             chartRadius={chartRadius}
             listRadius={listRadius}
+            zIndex={100 - i}
+            extendDownRight={i < blocks.assets.length - 1}
           />
         ))}
         </motion.div>
