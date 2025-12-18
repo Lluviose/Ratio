@@ -38,10 +38,7 @@ export function AssetsTypeDetailPage(props: {
     <div className="h-full flex flex-col overflow-y-auto" style={{ background: 'var(--bg)' }}>
       <motion.div
         className="sticky top-0 z-10 backdrop-blur-md border-b border-[var(--hairline)]"
-        style={{ 
-          background: 'rgba(255,255,255,0.85)',
-          paddingTop: 'env(safe-area-inset-top)' 
-        }}
+        style={{ background: 'rgba(255,255,255,0.85)' }}
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.3 }}
@@ -49,7 +46,7 @@ export function AssetsTypeDetailPage(props: {
         <div className="px-4 py-3 flex items-center gap-3">
           <motion.button
             type="button"
-            className="w-11 h-11 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
+            className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
             onClick={onBack}
             aria-label="back"
             whileTap={{ scale: 0.9 }}
@@ -71,7 +68,7 @@ export function AssetsTypeDetailPage(props: {
         </div>
       </motion.div>
 
-      <div className="px-4 pt-4 pb-24">
+      <div className="px-4 pt-4 pb-8">
         <motion.div
           className="bg-[var(--card)] rounded-[24px] border border-[var(--hairline)] overflow-hidden"
           style={{ boxShadow: 'var(--shadow-soft)' }}

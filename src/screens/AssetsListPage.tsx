@@ -42,8 +42,8 @@ export function AssetsListPage(props: {
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">
-      <div className="px-4 pb-24" style={{ paddingTop: 'calc(6rem + env(safe-area-inset-top))' }}>
-        <div className="flex flex-col gap-3 pl-0 md:pl-24">
+      <div className="px-4 pt-24 pb-24">
+        <div className="flex flex-col gap-3 pl-24">
           {groups.map((g, i) => {
             const id = g.group.id as GroupId
             const isExpanded = expandedGroup === id

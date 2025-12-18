@@ -87,17 +87,41 @@ export function useBubblePhysics(
     knownIdsRef.current = new Set(nodes.map((n) => n.id))
 
     // Attractor
+    const t0 = performance.now()
+    const driftSeeds = new Map<string, { a: number; b: number }>()
+    bodies.forEach((body) => {
+      driftSeeds.set(body.label, { a: Math.random() * Math.PI * 2, b: Math.random() * Math.PI * 2 })
+    })
+
     Matter.Events.on(engine, 'beforeUpdate', () => {
-       bodies.forEach(body => {
-         // Gentle force towards center
-         const dx = (width / 2) - body.position.x
-         const dy = (height / 2) - body.position.y
-         
-         Matter.Body.applyForce(body, body.position, {
-           x: dx * 0.00001,
-           y: dy * 0.00001
-         })
-       })
+      const t = (performance.now() - t0) / 1000
+
+      const wander = Math.min(width, height) * 0.06
+      const cx = width / 2 + Math.sin(t * 0.17) * wander
+      const cy = height / 2 + Math.cos(t * 0.13) * wander
+
+      const pulse = Math.sin(t * 0.35)
+      const centerK = 0.000006 + 0.00001 * pulse
+      const swirlK = 0.00000045 * Math.cos(t * 0.25)
+
+      bodies.forEach((body) => {
+        const dx = cx - body.position.x
+        const dy = cy - body.position.y
+
+        Matter.Body.applyForce(body, body.position, {
+          x: dx * centerK + (-dy) * swirlK,
+          y: dy * centerK + dx * swirlK,
+        })
+
+        const seed = driftSeeds.get(body.label)
+        if (!seed) return
+
+        const drift = 0.00012
+        Matter.Body.applyForce(body, body.position, {
+          x: Math.sin(t * 0.9 + seed.a) * drift,
+          y: Math.cos(t * 1.1 + seed.b) * drift,
+        })
+      })
     })
 
     const runner = Matter.Runner.create()
@@ -147,26 +171,9 @@ export function useBubblePhysics(
   // Gyroscope / DeviceOrientation
   useEffect(() => {
     if (!isActive) return
-
-    const handleOrientation = (event: DeviceOrientationEvent) => {
-        if (!engineRef.current) return
-        
-        // beta: front-back (-180 to 180)
-        // gamma: left-right (-90 to 90)
-        const { beta, gamma } = event
-        if (beta === null || gamma === null) return
-
-        // Map tilt to gravity/force
-        // Clamp values to reasonable tilt range
-        const x = Math.min(Math.max(gamma, -45), 45) / 45 // -1 to 1
-        const y = Math.min(Math.max(beta, -45), 45) / 45 // -1 to 1
-
-        engineRef.current.gravity.x = x * 0.5
-        engineRef.current.gravity.y = y * 0.5
-    }
-
-    window.addEventListener('deviceorientation', handleOrientation)
-    return () => window.removeEventListener('deviceorientation', handleOrientation)
+    if (!engineRef.current) return
+    engineRef.current.gravity.x = 0
+    engineRef.current.gravity.y = 0
   }, [isActive])
 
   return positions

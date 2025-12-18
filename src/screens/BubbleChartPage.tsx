@@ -10,7 +10,7 @@ export function BubbleChartPage(props: {
   return (
     <div className="relative w-full h-full overflow-hidden bg-transparent">
         {/* Title / Header */}
-       <div className="absolute inset-x-0 top-0 z-20 px-4 flex items-center justify-between pointer-events-none" style={{ paddingTop: 'calc(1.5rem + env(safe-area-inset-top))' }}>
+       <div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 flex items-center justify-between pointer-events-none">
         <div className="text-[15px] font-semibold tracking-tight text-slate-900 opacity-0">
              {/* Placeholder to match layout */}
         </div>
@@ -20,7 +20,7 @@ export function BubbleChartPage(props: {
           transition={{ delay: 0.2 }}
           type="button"
           onClick={onNext}
-          className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm pointer-events-auto"
+          className="w-10 h-10 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm pointer-events-auto"
           aria-label="next"
         >
           <ChevronRight size={20} strokeWidth={2.5} />
