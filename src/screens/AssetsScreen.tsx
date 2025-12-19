@@ -270,8 +270,6 @@ function OverlayBlock(props: {
   })
 
   // 计算内容区域高度（水平布局时使用实际显示高度，排除被遮挡的延伸部分）
-  // 延伸高度为 32px（cornerExtend）
-  const cornerExtend = 32
   const ratioContentHeight = useTransform(scrollIdx, (idx) => {
     // Bubble 阶段和 Ratio 前期使用全部高度
     if (idx < 0.8) return '100%'
