@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import { motion } from 'framer-motion'
-import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
 import type { Snapshot } from '../lib/snapshots'
@@ -32,14 +31,12 @@ function formatDelta(value: number) {
 
 export function StatsScreen(props: { snapshots: Snapshot[] }) {
   const { snapshots } = props
-  const [open, setOpen] = useState(false)
   const [range, setRange] = useState<RangeId>('6m')
 
   const chartRef = useRef<HTMLDivElement | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
 
   useEffect(() => {
-    if (!open) return
     const el = chartRef.current
     if (!el) return
 
@@ -54,7 +51,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
     const ro = new ResizeObserver(() => update())
     ro.observe(el)
     return () => ro.disconnect()
-  }, [open])
+  }, [])
 
   const analysis = useMemo(() => {
     const empty = {
@@ -179,144 +176,121 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
   }
 
   return (
-    <div className="stack">
-      <motion.div 
-        className="card cursor-pointer" 
-        onClick={() => setOpen(true)}
-        whileHover={{ scale: 1.02, boxShadow: 'var(--shadow-hover)' }}
-        whileTap={{ scale: 0.98 }}
+    <div className="stack" style={{ padding: '0 16px' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
       >
-        <div className="cardInner">
-          <div className="row">
-            <div>
-              <div style={{ fontWeight: 950, fontSize: 16 }}>净资产分析</div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
-                看清楚净资产变化来自哪里
-              </div>
-            </div>
-            <button type="button" className="iconBtn iconBtnPrimary" style={{ pointerEvents: 'none' }}>
-              <div style={{ transform: 'rotate(-45deg)', fontSize: 16, fontWeight: 900 }}>→</div>
-            </button>
-          </div>
+        <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
+          {analysis.start && analysis.end ? (
+            <>
+              {analysis.start.date} 至 {analysis.end.date} · 净资产变化{' '}
+              <span style={{ color: 'var(--text)' }}>{formatDelta(analysis.netDelta)}</span>
+            </>
+          ) : (
+            <>暂无足够快照数据</>
+          )}
         </div>
-      </motion.div>
 
-      <BottomSheet open={open} title="净资产统计" onClose={() => setOpen(false)}>
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-            <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
-              {analysis.start && analysis.end ? (
-                <>
-                  {analysis.start.date} 至 {analysis.end.date} · 净资产变化{' '}
-                  <span style={{ color: 'var(--text)' }}>{formatDelta(analysis.netDelta)}</span>
-                </>
-              ) : (
-                <>暂无足够快照数据</>
-              )}
-            </div>
-
-            {liquidity ? (
-              <motion.div
-                className="card"
-                style={{ marginTop: 16, background: 'rgba(255, 255, 255, 0.7)' }}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性指标</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
-                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>负债率</div>
-                      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4 }}>{Math.round(liquidity.debtRatio * 100)}%</div>
-                    </div>
-                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
-                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>流动性占比</div>
-                      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4 }}>{Math.round(liquidity.liquidRatio * 100)}%</div>
-                    </div>
-                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
-                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>净资产</div>
-                      <div style={{ fontSize: 14, fontWeight: 950, marginTop: 4 }}>{formatCny(analysis.end?.net ?? 0)}</div>
-                    </div>
-                    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
-                      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>净流动资产</div>
-                      <div style={{ fontSize: 14, fontWeight: 950, marginTop: 4 }}>{formatCny(liquidity.netLiquid)}</div>
-                    </div>
-                  </div>
+        {liquidity ? (
+          <motion.div
+            className="card"
+            style={{ marginTop: 16, background: 'rgba(255, 255, 255, 0.7)' }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 }}
+          >
+            <div className="cardInner">
+              <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性指标</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>负债率</div>
+                  <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4 }}>{Math.round(liquidity.debtRatio * 100)}%</div>
                 </div>
-              </motion.div>
-            ) : null}
-
-            <motion.div 
-              ref={chartRef} 
-              style={{ height: 240, marginTop: 16 }} 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
-            >
-              {chartWidth > 0 && analysis.points.length > 0 ? (
-                <BarChart width={chartWidth} height={240} data={analysis.points} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
-                  <XAxis 
-                    dataKey="label" 
-                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }} 
-                    axisLine={false}
-                    tickLine={false}
-                    dy={10}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
-                    dx={-6}
-                  />
-                  <Tooltip 
-                    content={tooltip} 
-                    cursor={{ fill: 'rgba(11, 15, 26, 0.03)', radius: 8 }}
-                  />
-                  <Bar 
-                    dataKey="range" 
-                    fill="rgba(11, 15, 26, 0.12)" 
-                    radius={[6, 6, 6, 6]} 
-                    barSize={20}
-                    animationDuration={1000}
-                  >
-                    {analysis.points.map((p, i) => {
-                      const fill = p.kind === 'total' ? 'rgba(11, 15, 26, 0.18)' : p.delta >= 0 ? '#47d16a' : '#ff6b57'
-                      return <Cell key={`${p.label}-${i}`} fill={fill} />
-                    })}
-                  </Bar>
-                </BarChart>
-              ) : (
-                <div className="muted" style={{ textAlign: 'center', paddingTop: 90, fontSize: 13, fontWeight: 800 }}>
-                  暂无足够快照数据
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>流动性占比</div>
+                  <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4 }}>{Math.round(liquidity.liquidRatio * 100)}%</div>
                 </div>
-              )}
-            </motion.div>
-
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
-              <PillTabs
-                ariaLabel="range"
-                options={[
-                  { value: '5w', label: '5周' },
-                  { value: '6m', label: '6月' },
-                  { value: '1y', label: '1年' },
-                  { value: '4y', label: '4年' },
-                ]}
-                value={range}
-                onChange={setRange}
-              />
-            </div>
-            {range === '4y' ? (
-              <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
-                这里可以接入更长周期统计
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>净资产</div>
+                  <div style={{ fontSize: 14, fontWeight: 950, marginTop: 4 }}>{formatCny(analysis.end?.net ?? 0)}</div>
+                </div>
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>净流动资产</div>
+                  <div style={{ fontSize: 14, fontWeight: 950, marginTop: 4 }}>{formatCny(liquidity.netLiquid)}</div>
+                </div>
               </div>
-            ) : null}
+            </div>
+          </motion.div>
+        ) : null}
+
+        <motion.div
+          ref={chartRef}
+          style={{ height: 240, marginTop: 16 }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
+        >
+          {chartWidth > 0 && analysis.points.length > 0 ? (
+            <BarChart width={chartWidth} height={240} data={analysis.points} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+              <XAxis
+                dataKey="label"
+                tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
+                axisLine={false}
+                tickLine={false}
+                dy={10}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
+                dx={-6}
+              />
+              <Tooltip
+                content={tooltip}
+                cursor={{ fill: 'rgba(11, 15, 26, 0.03)', radius: 8 }}
+              />
+              <Bar
+                dataKey="range"
+                fill="rgba(11, 15, 26, 0.12)"
+                radius={[6, 6, 6, 6]}
+                barSize={20}
+                animationDuration={1000}
+              >
+                {analysis.points.map((p, i) => {
+                  const fill = p.kind === 'total' ? 'rgba(11, 15, 26, 0.18)' : p.delta >= 0 ? '#47d16a' : '#ff6b57'
+                  return <Cell key={`${p.label}-${i}`} fill={fill} />
+                })}
+              </Bar>
+            </BarChart>
+          ) : (
+            <div className="muted" style={{ textAlign: 'center', paddingTop: 90, fontSize: 13, fontWeight: 800 }}>
+              暂无足够快照数据
+            </div>
+          )}
         </motion.div>
-      </BottomSheet>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+          <PillTabs
+            ariaLabel="range"
+            options={[
+              { value: '5w', label: '5周' },
+              { value: '6m', label: '6月' },
+              { value: '1y', label: '1年' },
+              { value: '4y', label: '4年' },
+            ]}
+            value={range}
+            onChange={setRange}
+          />
+        </div>
+        {range === '4y' ? (
+          <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
+            这里可以接入更长周期统计
+          </div>
+        ) : null}
+      </motion.div>
     </div>
   )
 }

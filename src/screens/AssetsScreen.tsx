@@ -394,8 +394,9 @@ export function AssetsScreen(props: {
   onEditAccount: (account: Account) => void
   onAddAccount: () => void
   onNavigate: (tab: 'trend' | 'stats' | 'settings') => void
+  skipInitialAnimation?: boolean
 }) {
-  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate } = props
+  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate, skipInitialAnimation = false } = props
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -411,8 +412,8 @@ export function AssetsScreen(props: {
   const [hideAmounts, setHideAmounts] = useState(false)
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
-  const [initialized, setInitialized] = useState(false)
-  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [initialized, setInitialized] = useState(skipInitialAnimation)
+  const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
@@ -781,12 +782,14 @@ export function AssetsScreen(props: {
       scrollLeft.set(w * 2)
       // 标记初始化完成
       setInitialized(true)
-      // 启动动画完成后（约600ms），重置 isInitialLoad
-      setTimeout(() => setIsInitialLoad(false), 700)
+      // 如果不是跳过初始动画，启动动画完成后（约600ms）重置 isInitialLoad
+      if (!skipInitialAnimation) {
+        setTimeout(() => setIsInitialLoad(false), 700)
+      }
     })
 
     return () => cancelAnimationFrame(raf)
-  }, [scrollLeft])
+  }, [scrollLeft, skipInitialAnimation])
 
   useEffect(() => {
     const el = scrollerRef.current

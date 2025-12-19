@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 import { motion } from 'framer-motion'
-import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { formatCny } from '../lib/format'
@@ -106,7 +105,6 @@ function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: n
 
 export function TrendScreen(props: { snapshots: Snapshot[] }) {
   const { snapshots } = props
-  const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
 
@@ -114,7 +112,6 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
   const [chartWidth, setChartWidth] = useState(0)
 
   useEffect(() => {
-    if (!open) return
     const el = chartRef.current
     if (!el) return
 
@@ -129,7 +126,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
     const ro = new ResizeObserver(() => update())
     ro.observe(el)
     return () => ro.disconnect()
-  }, [open])
+  }, [])
 
   const view = useMemo(() => {
     if (!snapshots || snapshots.length === 0) return { points: [] as TrendPoint[], selected: [] as Snapshot[] }
@@ -274,147 +271,124 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
   }
 
   return (
-    <div className="stack">
-      <motion.div 
-        className="card cursor-pointer" 
-        onClick={() => setOpen(true)}
-        whileHover={{ scale: 1.02, boxShadow: 'var(--shadow-hover)' }}
-        whileTap={{ scale: 0.98 }}
+    <div className="stack" style={{ padding: '0 16px' }}>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
       >
-        <div className="cardInner">
-          <div className="row">
-            <div>
-              <div style={{ fontWeight: 950, fontSize: 16 }}>观察趋势</div>
-              <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
-                关注积累，见证资产增长
-              </div>
-            </div>
-            <button type="button" className="iconBtn iconBtnPrimary" style={{ pointerEvents: 'none' }}>
-              <div style={{ transform: 'rotate(-45deg)', fontSize: 16, fontWeight: 900 }}>→</div>
-            </button>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <SegmentedControl
+            options={[
+              { value: 'netDebt', label: '净资产与负债' },
+              { value: 'cashInvest', label: '流动资金与投资' },
+            ]}
+            value={mode}
+            onChange={setMode}
+          />
         </div>
-      </motion.div>
 
-      <BottomSheet open={open} title="趋势图" onClose={() => setOpen(false)}>
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
+        <motion.div
+          ref={chartRef}
+          style={{ height: 240, marginTop: 24 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
         >
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <SegmentedControl
-                options={[
-                  { value: 'netDebt', label: '净资产与负债' },
-                  { value: 'cashInvest', label: '流动资金与投资' },
-                ]}
-                value={mode}
-                onChange={setMode}
+          {chartWidth > 0 && data.length > 0 ? (
+            <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
+                axisLine={false}
+                tickLine={false}
+                dy={10}
               />
-            </div>
-
-            <motion.div 
-              ref={chartRef} 
-              style={{ height: 240, marginTop: 24 }} 
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
-            >
-              {chartWidth > 0 && data.length > 0 ? (
-                <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
-                  <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }} 
-                    axisLine={false}
-                    tickLine={false}
-                    dy={10}
+              <YAxis
+                tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
+                dx={-6}
+              />
+              <Tooltip
+                content={tooltip}
+                cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
+              />
+              {mode === 'netDebt' ? (
+                <>
+                  <Line
+                    type="monotone"
+                    dataKey="net"
+                    stroke="var(--primary)"
+                    strokeWidth={4}
+                    dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
+                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
                   />
-                  <YAxis
-                    tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
-                    dx={-6}
+                  <Line
+                    type="monotone"
+                    dataKey="debt"
+                    stroke="rgba(11, 15, 26, 0.2)"
+                    strokeWidth={3}
+                    dot={false}
+                    activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
                   />
-                  <Tooltip 
-                    content={tooltip} 
-                    cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
-                  />
-                  {mode === 'netDebt' ? (
-                    <>
-                      <Line 
-                        type="monotone" 
-                        dataKey="net" 
-                        stroke="var(--primary)" 
-                        strokeWidth={4} 
-                        dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
-                        activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="debt" 
-                        stroke="rgba(11, 15, 26, 0.2)" 
-                        strokeWidth={3} 
-                        dot={false}
-                        activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                      />
-                    </>
-                  ) : (
-                    <>
-                      <Line 
-                        type="monotone" 
-                        dataKey="cash" 
-                        stroke="#47d16a" 
-                        strokeWidth={4} 
-                        dot={false}
-                        activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="invest" 
-                        stroke="var(--primary)" 
-                        strokeWidth={4} 
-                        dot={false}
-                        activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                      />
-                    </>
-                  )}
-                </LineChart>
+                </>
               ) : (
-                <div className="muted" style={{ textAlign: 'center', paddingTop: 80, fontSize: 13, fontWeight: 800 }}>
-                  暂无快照数据
-                </div>
+                <>
+                  <Line
+                    type="monotone"
+                    dataKey="cash"
+                    stroke="#47d16a"
+                    strokeWidth={4}
+                    dot={false}
+                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="invest"
+                    stroke="var(--primary)"
+                    strokeWidth={4}
+                    dot={false}
+                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                  />
+                </>
               )}
-            </motion.div>
-
-            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
-              <PillTabs
-                ariaLabel="range"
-                options={[
-                  { value: '30d', label: '30天' },
-                  { value: '6m', label: '6月' },
-                  { value: '1y', label: '1年' },
-                  { value: 'custom', label: '自定义' },
-                ]}
-                value={range}
-                onChange={setRange}
-              />
+            </LineChart>
+          ) : (
+            <div className="muted" style={{ textAlign: 'center', paddingTop: 80, fontSize: 13, fontWeight: 800 }}>
+              暂无快照数据
             </div>
-            {range === 'custom' ? (
-              <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
-                这里可以接入自定义日期范围选择
-              </div>
-            ) : null}
+          )}
         </motion.div>
-      </BottomSheet>
+
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+          <PillTabs
+            ariaLabel="range"
+            options={[
+              { value: '30d', label: '30天' },
+              { value: '6m', label: '6月' },
+              { value: '1y', label: '1年' },
+              { value: 'custom', label: '自定义' },
+            ]}
+            value={range}
+            onChange={setRange}
+          />
+        </div>
+        {range === 'custom' ? (
+          <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
+            这里可以接入自定义日期范围选择
+          </div>
+        ) : null}
+      </motion.div>
     </div>
   )
 }
