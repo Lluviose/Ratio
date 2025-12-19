@@ -12,12 +12,15 @@ export function useReducedMotion(): boolean {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
     // Check if window is available (SSR safety)
     if (typeof window === 'undefined') return false
+    if (typeof window.matchMedia !== 'function') return false
     
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     return mediaQuery.matches
   })
 
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
     
     const handleChange = (event: MediaQueryListEvent) => {
@@ -25,10 +28,18 @@ export function useReducedMotion(): boolean {
     }
 
     // Add listener for changes
-    mediaQuery.addEventListener('change', handleChange)
-    
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+
+      return () => {
+        mediaQuery.removeEventListener('change', handleChange)
+      }
+    }
+
+    mediaQuery.addListener(handleChange)
+
     return () => {
-      mediaQuery.removeEventListener('change', handleChange)
+      mediaQuery.removeListener(handleChange)
     }
   }, [])
 

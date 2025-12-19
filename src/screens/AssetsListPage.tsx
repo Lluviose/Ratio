@@ -51,13 +51,13 @@ export function AssetsListPage(props: {
             const isExpanded = expandedGroup === id
 
             const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
-            const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().at(-1) : undefined
+            const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().slice(-1)[0] : undefined
 
             const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
               .map((type) => {
                 const accounts = g.accounts.filter((a) => a.type === type)
                 const total = accounts.reduce((s, a) => s + a.balance, 0)
-                const updatedAt = accounts.map((a) => a.updatedAt).sort().at(-1)
+                const updatedAt = accounts.map((a) => a.updatedAt).sort().slice(-1)[0]
                 const opt = getAccountTypeOption(type)
                 return { type, opt, accounts, total, updatedAt }
               })

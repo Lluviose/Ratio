@@ -1,5 +1,5 @@
 import { ChevronLeft } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen.tsx'
 import { TourScreen } from './screens/TourScreen.tsx'
@@ -26,7 +26,7 @@ export default function App() {
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
-  const hasVisitedAssetsRef = useRef(false)
+  const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
 
   const accounts = useAccounts()
   const accountOps = useAccountOps()
@@ -57,12 +57,11 @@ export default function App() {
   }, [tab])
 
   // 追踪是否已访问过资产页面，用于控制返回时不显示初始动画
-  const skipInitialAnimation = hasVisitedAssetsRef.current
   useEffect(() => {
     if (tab === 'assets') {
       // 延迟设置，确保首次加载时动画正常播放
       const timer = setTimeout(() => {
-        hasVisitedAssetsRef.current = true
+        setHasVisitedAssets(true)
       }, 800)
       return () => clearTimeout(timer)
     }
@@ -161,7 +160,7 @@ export default function App() {
                           setSelectedAccountId(a.id)
                           setDetailAction('none')
                         }}
-                        skipInitialAnimation={skipInitialAnimation}
+                        skipInitialAnimation={hasVisitedAssets}
                       />
                     </motion.div>
                   )}

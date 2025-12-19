@@ -553,16 +553,18 @@ export function AssetsScreen(props: {
     const groups = grouped.groupCards
     
     // Find max total to scale
-    const maxTotal = Math.max(...groups.map(g => g.total), 1)
+    const totals = groups.map((g) => (Number.isFinite(g.total) ? g.total : 0))
+    const maxTotal = Math.max(...totals, 1)
     const maxRadius = 130 // Base max radius
     
     // Fixed / Liquid / Debt / Invest / Receivable
     for (const g of groups) {
-      if (g.total <= 0) continue
+      const total = Number.isFinite(g.total) ? g.total : 0
+      if (total <= 0) continue
       
       // Calculate radius roughly proportional to sqrt of area (value)
       // clamp min size so small assets are still visible bubbles
-      const r = Math.sqrt(g.total / maxTotal) * maxRadius
+      const r = Math.sqrt(total / maxTotal) * maxRadius
       const radius = Math.max(r, 55)
 
       nodes.push({
@@ -570,7 +572,7 @@ export function AssetsScreen(props: {
         radius,
         color: g.group.tone,
         label: g.group.name,
-        value: g.total
+        value: total
       })
     }
     return nodes
@@ -688,8 +690,8 @@ export function AssetsScreen(props: {
     return {
       rects,
       displayHeights,
-      topAssetId: ratioAssets.at(0)?.id ?? null,
-      bottomAssetId: ratioAssets.at(-1)?.id ?? null,
+      topAssetId: ratioAssets.length > 0 ? ratioAssets[0]?.id ?? null : null,
+      bottomAssetId: ratioAssets.length > 0 ? ratioAssets[ratioAssets.length - 1]?.id ?? null : null,
       debtExceeds,
       assetDisplayH,
       assetStartY,

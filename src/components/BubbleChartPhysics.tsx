@@ -56,13 +56,20 @@ export function useBubblePhysics(
         typeof prevY === 'number' &&
         Number.isFinite(prevY)
 
+      const radius = Number.isFinite(node.radius) && node.radius > 0 ? node.radius : 1
+
       const x0 = hasPrev ? (prevX as number) : Math.random() * (width - 100) + 50
       const y0 = hasPrev ? (prevY as number) : Math.random() * (height - 100) + 50
 
-      const x = Math.min(Math.max(x0, node.radius), width - node.radius)
-      const y = Math.min(Math.max(y0, node.radius), height - node.radius)
+      const minX = radius
+      const maxX = width - radius
+      const minY = radius
+      const maxY = height - radius
+
+      const x = maxX >= minX ? Math.min(Math.max(x0, minX), maxX) : width / 2
+      const y = maxY >= minY ? Math.min(Math.max(y0, minY), maxY) : height / 2
       
-      const body = Matter.Bodies.circle(x, y, node.radius, {
+      const body = Matter.Bodies.circle(x, y, radius, {
         label: node.id,
         frictionAir: 0.02,
         restitution: 0.9,
@@ -93,7 +100,7 @@ export function useBubblePhysics(
       driftSeeds.set(body.label, { a: Math.random() * Math.PI * 2, b: Math.random() * Math.PI * 2 })
     })
 
-    Matter.Events.on(engine, 'beforeUpdate', () => {
+    const onBeforeUpdate = () => {
       const t = (performance.now() - t0) / 1000
 
       const wander = Math.min(width, height) * 0.06
@@ -122,13 +129,15 @@ export function useBubblePhysics(
           y: Math.cos(t * 1.1 + seed.b) * drift,
         })
       })
-    })
+    }
+
+    Matter.Events.on(engine, 'beforeUpdate', onBeforeUpdate)
 
     const runner = Matter.Runner.create()
     runnerRef.current = runner
     
     // Sync Matter.js positions to MotionValues
-    Matter.Events.on(engine, 'afterUpdate', () => {
+    const onAfterUpdate = () => {
        bodies.forEach(body => {
          const m = positions.get(body.label)
          if (m) {
@@ -136,7 +145,9 @@ export function useBubblePhysics(
            m.y.set(body.position.y)
          }
        })
-    })
+    }
+
+    Matter.Events.on(engine, 'afterUpdate', onAfterUpdate)
 
     bodies.forEach(body => {
       const m = positions.get(body.label)
@@ -147,7 +158,10 @@ export function useBubblePhysics(
     })
 
     return () => {
+      Matter.Events.off(engine, 'beforeUpdate', onBeforeUpdate)
+      Matter.Events.off(engine, 'afterUpdate', onAfterUpdate)
       Matter.Runner.stop(runner)
+      Matter.World.clear(world, false)
       Matter.Engine.clear(engine)
       engineRef.current = null
       runnerRef.current = null
