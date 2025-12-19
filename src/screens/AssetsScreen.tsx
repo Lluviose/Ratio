@@ -445,7 +445,7 @@ export function AssetsScreen(props: {
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
   // 是否是从其他页面返回（用于控制入场动画方向）
-  const [isReturning, setIsReturning] = useState(skipInitialAnimation)
+  const [isReturning, setIsReturning] = useState(false)
   // 是否从详情页返回到列表页（用于触发入场动画）
   const [isReturningFromDetail, setIsReturningFromDetail] = useState(false)
   // 动画触发计数器，用于强制重新挂载组件以触发入场动画
@@ -1174,7 +1174,7 @@ export function AssetsScreen(props: {
 
       <div
         ref={scrollerRef}
-        className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain scroll-smooth"
+        className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
