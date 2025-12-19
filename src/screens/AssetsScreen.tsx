@@ -1,4 +1,4 @@
-import { AnimatePresence, animate, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
 import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
@@ -49,11 +49,12 @@ function OverlayBlock(props: {
   bubbleRadius?: number
   scrollIdx: MotionValue<number>
   overlayFade: MotionValue<number>
-  entryProgress?: MotionValue<number>
-  entryDelay?: number
   labelsOpacity: MotionValue<number>
   chartRadius: number
   listRadius: number
+  isReturning?: boolean
+  blockIndex?: number
+  viewportWidth?: number
 }) {
   const {
     block,
@@ -65,11 +66,12 @@ function OverlayBlock(props: {
     bubbleRadius,
     scrollIdx,
     overlayFade,
-    entryProgress,
-    entryDelay,
     labelsOpacity,
     chartRadius,
     listRadius,
+    isReturning = false,
+    blockIndex = 0,
+    viewportWidth = 400,
   } = props
 
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
@@ -129,36 +131,8 @@ function OverlayBlock(props: {
     }
     return lerp(ratio.h, list.h, Math.min(1, Math.max(0, idx - 1)))
   })
-
-  const defaultEntry = useMotionValue(1)
-  const entryBase = entryProgress ?? defaultEntry
-  const entryLocal = useTransform(entryBase, (p) => {
-    const delay = entryDelay ?? 0
-    const span = Math.max(0.0001, 1 - delay)
-    const t = (p - delay) / span
-    return Math.min(1, Math.max(0, t))
-  })
-
-  const entryOffsetX = useTransform(entryLocal, [0, 1], [-80, 0])
-  const entryOffsetY = useTransform(entryLocal, [0, 1], [0, 0])
-  const entryOpacity = useTransform(entryLocal, [0, 1], [0, 1])
-
-  const left = useTransform([x, entryOffsetX], (values) => {
-    const base = values[0] as number
-    const off = values[1] as number
-    return base + off
-  })
-  const top = useTransform([y, entryOffsetY], (values) => {
-    const base = values[0] as number
-    const off = values[1] as number
-    return base + off
-  })
-
-  const opacity = useTransform([overlayFade, entryOpacity], (values) => {
-    const a = values[0] as number
-    const e = values[1] as number
-    return a * e
-  })
+  
+  const opacity = useTransform([overlayFade], ([a]) => a)
 
   // 圆角逻辑：
   // - 有负债时：负债左上角无圆角（与资产区对齐），资产左边无圆角
@@ -333,12 +307,25 @@ function OverlayBlock(props: {
   
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
+  // 入场动画延迟（用于返回时的交错动画）
+  const enterDelay = blockIndex * 0.05
+
+  // 入场动画的 translateX 偏移（从左侧飞入）
+  const enterTranslateX = isReturning ? -viewportWidth : 0
+
   return (
     <motion.div
       className="absolute pointer-events-none"
+      initial={isReturning ? { translateX: enterTranslateX, opacity: 0 } : false}
+      animate={{ translateX: 0, opacity: 1 }}
+      transition={isReturning ? {
+        duration: 0.45,
+        delay: enterDelay,
+        ease: [0.25, 0.46, 0.45, 0.94]
+      } : undefined}
       style={{
-        left,
-        top,
+        left: x,
+        top: y,
         width: w,
         height: h,
         background: block.tone,
@@ -453,11 +440,8 @@ export function AssetsScreen(props: {
   // 当 skipInitialAnimation 为 true 时，initialized 直接为 true，但仍需等待 viewport 测量完成
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
-
-  const [listIntroActive, setListIntroActive] = useState(true)
-  const listIntroActiveRef = useRef(true)
-  const listIntroProgress = useMotionValue(0)
-  const forcedListIdx = useMotionValue(2)
+  // 是否是从其他页面返回（用于控制入场动画方向）
+  const [isReturning, setIsReturning] = useState(skipInitialAnimation)
 
   const didInitRef = useRef(false)
 
@@ -481,23 +465,17 @@ export function AssetsScreen(props: {
     return v / w
   })
 
-  const visualIdx = listIntroActive ? forcedListIdx : scrollIdx
-
-  useEffect(() => {
-    listIntroActiveRef.current = listIntroActive
-  }, [listIntroActive])
-
   // Page 0: Bubble
   // Page 1: Ratio (Blocks)
   // Page 2: List
   // Page 3: Detail
   
   // Transition Ratio(1) -> List(2)
-  const ratioProgress = useTransform(visualIdx, [1, 2], [0, 1])
+  const ratioProgress = useTransform(scrollIdx, [1, 2], [0, 1])
 
   // Blocks visible on Page 1-2, fade out quickly on 3
   // Also visible on Page 0 (Bubble)
-  const overlayFade = useTransform(visualIdx, [0, 1, 2, 2.08, 3], [1, 1, 1, 0, 0])
+  const overlayFade = useTransform(scrollIdx, [0, 1, 2, 2.08, 3], [1, 1, 1, 0, 0])
   
   // Bubble chart visibility
   const [isBubblePageActive, setIsBubblePageActive] = useState(true)
@@ -755,21 +733,6 @@ export function AssetsScreen(props: {
     setListRects(next)
   }, [scrollLeft])
 
-  const requiredListRectIds = useMemo(() => {
-    const ids: GroupId[] = []
-    if (blocks.debt) ids.push('debt')
-    for (const b of blocks.assets) ids.push(b.id)
-    return ids
-  }, [blocks.assets, blocks.debt])
-
-  const listRectsReady = useMemo(() => {
-    if (requiredListRectIds.length === 0) return true
-    return requiredListRectIds.every((id) => {
-      const r = listRects[id]
-      return Boolean(r && r.w > 0 && r.h > 0)
-    })
-  }, [listRects, requiredListRectIds])
-
   const scheduleMeasure = useCallback(() => {
     if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current)
     measureRafRef.current = requestAnimationFrame(() => measureListRects())
@@ -830,38 +793,17 @@ export function AssetsScreen(props: {
 
   useEffect(() => {
     if (!initialized) return
-    if (!listRectsReady) return
-    if (!listIntroActiveRef.current) return
-
-    listIntroProgress.set(0)
-    const controls = animate(listIntroProgress, 1, {
-      duration: 0.55,
-      ease: [0.25, 0.46, 0.45, 0.94],
-      onComplete: () => setListIntroActive(false),
-    })
-
-    return () => {
-      controls.stop()
-    }
-  }, [initialized, listIntroProgress, listRectsReady])
-
-  useEffect(() => {
-    if (!initialized) return
-    return scrollIdx.on('change', (v) => {
-      if (!listIntroActiveRef.current) return
-      if (v < 1.6 || v > 2.4) {
-        listIntroProgress.set(1)
-        setListIntroActive(false)
-      }
-    })
-  }, [initialized, listIntroProgress, scrollIdx])
-
-  useEffect(() => {
-    if (!initialized) return
     if (skipInitialAnimation) return
     const timer = window.setTimeout(() => setIsInitialLoad(false), 700)
     return () => window.clearTimeout(timer)
   }, [initialized, skipInitialAnimation])
+
+  // 返回动画完成后重置 isReturning 状态
+  useEffect(() => {
+    if (!initialized || !isReturning) return
+    const timer = window.setTimeout(() => setIsReturning(false), 600)
+    return () => window.clearTimeout(timer)
+  }, [initialized, isReturning])
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
@@ -976,63 +918,58 @@ export function AssetsScreen(props: {
   }, [blocks.debt, ratioLayout, viewport.h, viewport.w])
 
   // 负债上方白色填充块的动画值
-  const debtFillerLeft = useTransform(visualIdx, (idx) => {
+  const debtFillerLeft = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
     if (idx < 2) return 0
     return lerp(debtFillerRect.x, 0, Math.max(0, idx - 2))
   })
-  const debtFillerTop = useTransform(visualIdx, (idx) => {
+  const debtFillerTop = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
     if (idx < 2) return lerp(0, debtFillerRect.y, Math.max(0, idx - 1))
     return debtFillerRect.y
   })
-  const debtFillerWidth = useTransform(visualIdx, (idx) => {
+  const debtFillerWidth = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
     if (idx < 2) return lerp(0, debtFillerRect.w, Math.max(0, idx - 1))
     return debtFillerRect.w
   })
-  const debtFillerHeight = useTransform(visualIdx, (idx) => {
+  const debtFillerHeight = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
     if (idx < 2) return lerp(0, debtFillerRect.h, Math.max(0, idx - 1))
     return lerp(debtFillerRect.h, 0, Math.max(0, idx - 2))
   })
   // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
-  const debtFillerOpacity = useTransform(visualIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
+  const debtFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
   // 资产底部白色填充块的动画值
-  const assetFillerLeft = useTransform(visualIdx, (idx) => {
+  const assetFillerLeft = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
     if (idx < 2) return lerp(0, assetFillerRect.x, Math.max(0, idx - 1))
     return assetFillerRect.x
   })
-  const assetFillerTop = useTransform(visualIdx, (idx) => {
+  const assetFillerTop = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
     if (idx < 2) return lerp(0, assetFillerRect.y, Math.max(0, idx - 1))
     return assetFillerRect.y
   })
-  const assetFillerWidth = useTransform(visualIdx, (idx) => {
+  const assetFillerWidth = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
     if (idx < 2) return lerp(0, assetFillerRect.w, Math.max(0, idx - 1))
     return assetFillerRect.w
   })
-  const assetFillerHeight = useTransform(visualIdx, (idx) => {
+  const assetFillerHeight = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
     if (idx < 2) return lerp(0, assetFillerRect.h, Math.max(0, idx - 1))
     return lerp(assetFillerRect.h, 0, Math.max(0, idx - 2))
   })
   // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
-  const assetFillerOpacity = useTransform(visualIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
+  const assetFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
-      {initialized && (!listIntroActive || listRectsReady) ? (
-        <motion.div
-          className="absolute inset-0 z-0 pointer-events-none"
-          initial={false}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.2 }}
-        >
+      {initialized ? (
+        <div className="absolute inset-0 z-0 pointer-events-none">
           {/* 负债上方的白色填充块（负债比例低于100%时） */}
           {debtFillerRect ? (
           <motion.div
@@ -1076,13 +1013,14 @@ export function AssetsScreen(props: {
             listRect={listRects.debt}
             bubblePos={bubblePositions.get('debt')}
             bubbleRadius={bubbleNodes.find(n => n.id === 'debt')?.radius}
-            scrollIdx={visualIdx}
+            scrollIdx={scrollIdx}
             overlayFade={overlayFade}
-            entryProgress={listIntroActive ? listIntroProgress : undefined}
-            entryDelay={listIntroActive ? 0.02 : 0}
             labelsOpacity={labelsOpacity}
             chartRadius={chartRadius}
             listRadius={listRadius}
+            isReturning={isReturning}
+            blockIndex={0}
+            viewportWidth={viewport.w}
           />
         ) : null}
 
@@ -1098,16 +1036,17 @@ export function AssetsScreen(props: {
             displayHeight={ratioLayout.displayHeights[b.id]}
             bubblePos={bubblePositions.get(b.id)}
             bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
-            scrollIdx={visualIdx}
+            scrollIdx={scrollIdx}
             overlayFade={overlayFade}
-            entryProgress={listIntroActive ? listIntroProgress : undefined}
-            entryDelay={listIntroActive ? 0.06 + i * 0.06 : 0}
             labelsOpacity={labelsOpacity}
             chartRadius={chartRadius}
             listRadius={listRadius}
+            isReturning={isReturning}
+            blockIndex={blocks.debt ? i + 1 : i}
+            viewportWidth={viewport.w}
           />
         ))}
-        </motion.div>
+        </div>
       ) : null}
 
       <motion.div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none" style={{ opacity: overlayFade }}>
@@ -1118,9 +1057,9 @@ export function AssetsScreen(props: {
           {/* 净资产标题 - 从上滑入 */}
           <motion.div
             className="min-w-0"
-            initial={isInitialLoad || listIntroActive ? { y: -50, opacity: 0 } : false}
+            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: isReturning ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
@@ -1144,9 +1083,9 @@ export function AssetsScreen(props: {
             onClick={onAddAccount}
             className="w-10 h-10 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
             aria-label="add"
-            initial={isInitialLoad || listIntroActive ? { y: -50, opacity: 0 } : false}
+            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: isReturning ? 0.15 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <Plus size={22} strokeWidth={2.75} />
           </motion.button>
@@ -1242,7 +1181,7 @@ export function AssetsScreen(props: {
             scrollRef={listScrollRef}
             onGroupEl={onGroupEl}
             isInitialLoad={isInitialLoad}
-            listEntryActive={listIntroActive}
+            isReturning={isReturning}
           />
         </div>
 
