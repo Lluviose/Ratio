@@ -19,8 +19,9 @@ export function AssetsListPage(props: {
   onGroupEl?: (id: GroupId, el: HTMLDivElement | null) => void
   isInitialLoad?: boolean
   isReturning?: boolean
+  isReturningFromDetail?: boolean
 }) {
-  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad, isReturning } = props
+  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad, isReturning, isReturningFromDetail } = props
 
   const groups = useMemo(() => {
     const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
@@ -62,16 +63,19 @@ export function AssetsListPage(props: {
               })
               .sort((a, b) => b.total - a.total)
 
+            // 是否需要入场动画
+            const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
+
             return (
               <motion.div
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
                 className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
-                initial={isInitialLoad ? { opacity: 0, x: 80 } : isReturning ? { opacity: 0, x: 100 } : false}
+                initial={needsEnterAnimation ? { opacity: 0, x: 100 } : false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{
-                  duration: isInitialLoad || isReturning ? 0.5 : 0.3,
-                  delay: isInitialLoad ? 0.05 + i * 0.06 : isReturning ? 0.08 + i * 0.05 : 0.08 + i * 0.03,
+                  duration: needsEnterAnimation ? 0.5 : 0.3,
+                  delay: needsEnterAnimation ? 0.08 + i * 0.05 : 0.08 + i * 0.03,
                   ease: [0.25, 0.46, 0.45, 0.94],
                 }}
                 style={{

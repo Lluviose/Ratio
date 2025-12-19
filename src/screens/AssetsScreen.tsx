@@ -54,6 +54,7 @@ function OverlayBlock(props: {
   listRadius: number
   isReturning?: boolean
   isInitialLoad?: boolean
+  isReturningFromDetail?: boolean
   blockIndex?: number
   viewportWidth?: number
 }) {
@@ -72,6 +73,7 @@ function OverlayBlock(props: {
     listRadius,
     isReturning = false,
     isInitialLoad = false,
+    isReturningFromDetail = false,
     blockIndex = 0,
     viewportWidth = 400,
   } = props
@@ -309,8 +311,8 @@ function OverlayBlock(props: {
   
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
-  // 是否需要入场动画（首次加载或从其他页面返回）
-  const needsEnterAnimation = isInitialLoad || isReturning
+  // 是否需要入场动画（首次加载、从其他页面返回、或从详情页返回）
+  const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
 
   // 入场动画延迟（用于交错动画）
   const enterDelay = blockIndex * 0.05
@@ -447,6 +449,8 @@ export function AssetsScreen(props: {
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
   // 是否是从其他页面返回（用于控制入场动画方向）
   const [isReturning, setIsReturning] = useState(skipInitialAnimation)
+  // 是否从详情页返回到列表页（用于触发入场动画）
+  const [isReturningFromDetail, setIsReturningFromDetail] = useState(false)
 
   const didInitRef = useRef(false)
 
@@ -810,6 +814,13 @@ export function AssetsScreen(props: {
     return () => window.clearTimeout(timer)
   }, [initialized, isReturning])
 
+  // 从详情页返回动画完成后重置 isReturningFromDetail 状态
+  useEffect(() => {
+    if (!isReturningFromDetail) return
+    const timer = window.setTimeout(() => setIsReturningFromDetail(false), 600)
+    return () => window.clearTimeout(timer)
+  }, [isReturningFromDetail])
+
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
 
@@ -1025,6 +1036,7 @@ export function AssetsScreen(props: {
             listRadius={listRadius}
             isReturning={isReturning}
             isInitialLoad={isInitialLoad}
+            isReturningFromDetail={isReturningFromDetail}
             blockIndex={0}
             viewportWidth={viewport.w}
           />
@@ -1049,6 +1061,7 @@ export function AssetsScreen(props: {
             listRadius={listRadius}
             isReturning={isReturning}
             isInitialLoad={isInitialLoad}
+            isReturningFromDetail={isReturningFromDetail}
             blockIndex={blocks.debt ? i + 1 : i}
             viewportWidth={viewport.w}
           />
@@ -1064,9 +1077,9 @@ export function AssetsScreen(props: {
           {/* 净资产标题 - 从上滑入 */}
           <motion.div
             className="min-w-0"
-            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
+            initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: isReturning ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: (isReturning || isReturningFromDetail) ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
@@ -1090,9 +1103,9 @@ export function AssetsScreen(props: {
             onClick={onAddAccount}
             className="w-10 h-10 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
             aria-label="add"
-            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
+            initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: isReturning ? 0.15 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: (isReturning || isReturningFromDetail) ? 0.15 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <Plus size={22} strokeWidth={2.75} />
           </motion.button>
@@ -1189,6 +1202,7 @@ export function AssetsScreen(props: {
             onGroupEl={onGroupEl}
             isInitialLoad={isInitialLoad}
             isReturning={isReturning}
+            isReturningFromDetail={isReturningFromDetail}
           />
         </div>
 
@@ -1199,6 +1213,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             hideAmounts={hideAmounts}
             onBack={() => {
+              setIsReturningFromDetail(true)
               scrollToPage(2)
               setSelectedType(null)
             }}
