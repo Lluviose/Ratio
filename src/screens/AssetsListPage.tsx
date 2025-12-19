@@ -66,7 +66,7 @@ export function AssetsListPage(props: {
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
                 className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
-                initial={isInitialLoad ? { opacity: 0, x: 80 } : { opacity: 0, y: 14 }}
+                initial={isInitialLoad ? { opacity: 0, x: 80 } : false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{
                   duration: isInitialLoad ? 0.5 : 0.3,

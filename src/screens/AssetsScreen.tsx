@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
-import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { AssetsListPage } from './AssetsListPage'
@@ -422,6 +422,8 @@ export function AssetsScreen(props: {
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
 
+  const didInitRef = useRef(false)
+
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
 
@@ -729,11 +731,15 @@ export function AssetsScreen(props: {
     [scheduleMeasure],
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = viewportRef.current
     if (!el) return
 
-    const update = () => setViewport({ w: el.clientWidth, h: el.clientHeight })
+    const update = () => {
+      const w = el.clientWidth
+      const h = el.clientHeight
+      setViewport((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
+    }
     update()
 
     if (typeof ResizeObserver === 'undefined') {
@@ -745,6 +751,31 @@ export function AssetsScreen(props: {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    if (didInitRef.current) return
+    const el = scrollerRef.current
+    if (!el) return
+
+    const w = el.clientWidth || 0
+    if (w <= 0) return
+
+    didInitRef.current = true
+
+    // Start at Page 2 (List) - 直接设置，不触发动画
+    el.scrollLeft = w * 2
+    scrollLeft.set(w * 2)
+
+    measureListRects()
+    setInitialized(true)
+  }, [measureListRects, scrollLeft, skipInitialAnimation, viewport.w])
+
+  useEffect(() => {
+    if (!initialized) return
+    if (skipInitialAnimation) return
+    const timer = window.setTimeout(() => setIsInitialLoad(false), 700)
+    return () => window.clearTimeout(timer)
+  }, [initialized, skipInitialAnimation])
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
@@ -776,27 +807,6 @@ export function AssetsScreen(props: {
     document.addEventListener('pointerdown', onPointerDown, { capture: true })
     return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true })
   }, [moreOpen])
-
-  useEffect(() => {
-    const el = scrollerRef.current
-    if (!el) return
-
-    const raf = requestAnimationFrame(() => {
-      const w = el.clientWidth || 0
-      if (w <= 0) return
-      // Start at Page 2 (List) - 直接设置，不触发动画
-      el.scrollLeft = w * 2
-      scrollLeft.set(w * 2)
-      // 标记初始化完成
-      setInitialized(true)
-      // 如果不是跳过初始动画，启动动画完成后（约600ms）重置 isInitialLoad
-      if (!skipInitialAnimation) {
-        setTimeout(() => setIsInitialLoad(false), 700)
-      }
-    })
-
-    return () => cancelAnimationFrame(raf)
-  }, [scrollLeft, skipInitialAnimation])
 
   useEffect(() => {
     const el = scrollerRef.current
