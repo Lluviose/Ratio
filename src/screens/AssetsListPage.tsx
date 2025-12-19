@@ -73,16 +73,18 @@ export function AssetsListPage(props: {
                 className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
                 initial={needsEnterAnimation ? { opacity: 0, x: 100 } : false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
-                transition={{
-                  duration: needsEnterAnimation ? 0.5 : 0.3,
-                  delay: needsEnterAnimation ? 0.08 + i * 0.05 : 0.08 + i * 0.03,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                }}
+                transition={needsEnterAnimation ? {
+                  type: 'spring',
+                  stiffness: 400,
+                  damping: 30,
+                  mass: 1,
+                  delay: 0.05 + i * 0.05,
+                } : { duration: 0.2 }}
                 style={{
                   background: id === 'debt'
                     ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.85) 0%, rgba(230, 225, 255, 0.75) 100%)'
-                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)',
-                  boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(255, 255, 255, 0.8) inset',
+                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%)',
+                  boxShadow: 'var(--shadow-soft), 0 0 0 1px rgba(255, 255, 255, 0.6) inset',
                   border: '1px solid rgba(255, 255, 255, 0.6)',
                 }}
               >

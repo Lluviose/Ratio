@@ -275,7 +275,11 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        transition={{ 
+          type: 'spring',
+          stiffness: 400,
+          damping: 30
+        }}
       >
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <SegmentedControl
@@ -293,7 +297,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
           style={{ height: 240, marginTop: 24 }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
+          transition={{ type: 'spring', damping: 30, stiffness: 400, delay: 0.1 }}
         >
           {chartWidth > 0 && data.length > 0 ? (
             <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>

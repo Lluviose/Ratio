@@ -71,9 +71,9 @@ export function useBubblePhysics(
       
       const body = Matter.Bodies.circle(x, y, radius, {
         label: node.id,
-        frictionAir: 0.02,
-        restitution: 0.9,
-        density: 0.001,
+        frictionAir: 0.04,
+        restitution: 0.7,
+        density: 0.002,
         render: { fillStyle: node.color }
       })
       return body
@@ -103,13 +103,13 @@ export function useBubblePhysics(
     const onBeforeUpdate = () => {
       const t = (performance.now() - t0) / 1000
 
-      const wander = Math.min(width, height) * 0.06
-      const cx = width / 2 + Math.sin(t * 0.17) * wander
-      const cy = height / 2 + Math.cos(t * 0.13) * wander
+      const wander = Math.min(width, height) * 0.05
+      const cx = width / 2 + Math.sin(t * 0.15) * wander
+      const cy = height / 2 + Math.cos(t * 0.12) * wander
 
-      const pulse = Math.sin(t * 0.35)
-      const centerK = 0.000006 + 0.00001 * pulse
-      const swirlK = 0.00000045 * Math.cos(t * 0.25)
+      const pulse = Math.sin(t * 0.3)
+      const centerK = 0.000008 + 0.000005 * pulse
+      const swirlK = 0.000001 * Math.cos(t * 0.2)
 
       bodies.forEach((body) => {
         const dx = cx - body.position.x
@@ -123,10 +123,10 @@ export function useBubblePhysics(
         const seed = driftSeeds.get(body.label)
         if (!seed) return
 
-        const drift = 0.00012
+        const drift = 0.0001
         Matter.Body.applyForce(body, body.position, {
-          x: Math.sin(t * 0.9 + seed.a) * drift,
-          y: Math.cos(t * 1.1 + seed.b) * drift,
+          x: Math.sin(t * 0.8 + seed.a) * drift,
+          y: Math.cos(t * 1.0 + seed.b) * drift,
         })
       })
     }

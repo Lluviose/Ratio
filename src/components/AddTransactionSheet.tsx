@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { useMemo, useState } from 'react'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
@@ -57,7 +58,13 @@ export function AddTransactionSheet(props: {
 
   return (
     <BottomSheet open={open} title="记一笔" onClose={onClose}>
-      <div className="stack animate-[fadeIn_0.4s_ease-out]" style={{ gap: 20 }}>
+      <motion.div 
+        className="stack"
+        style={{ gap: 20 }}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 400, delay: 0.1 }}
+      >
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <SegmentedControl
             options={[
@@ -124,7 +131,7 @@ export function AddTransactionSheet(props: {
         <button type="button" className="primaryBtn" onClick={submit}>
           保存
         </button>
-      </div>
+      </motion.div>
     </BottomSheet>
   )
 }

@@ -326,9 +326,11 @@ function OverlayBlock(props: {
       initial={needsEnterAnimation ? { translateX: enterTranslateX, opacity: 0 } : false}
       animate={{ translateX: 0, opacity: 1 }}
       transition={needsEnterAnimation ? {
-        duration: 0.45,
+        type: 'spring',
+        stiffness: 400,
+        damping: 30,
+        mass: 1,
         delay: enterDelay,
-        ease: [0.25, 0.46, 0.45, 0.94]
       } : undefined}
       style={{
         left: x,
@@ -346,15 +348,22 @@ function OverlayBlock(props: {
     >
       {/* Sphere 3D Effects Overlay */}
       <motion.div 
-        className="absolute inset-0 z-0"
+        className="absolute inset-0 z-0 pointer-events-none"
         style={{ opacity: sphereEffectOpacity }}
       >
-        {/* Inner Highlight/Shadow using CSS gradients/shadows */}
+        {/* Top-left Highlight - sharper and brighter */}
         <div className="absolute inset-0" style={{ 
-            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
+            background: 'radial-gradient(circle at 25% 25%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 30%, transparent 60%)' 
         }} />
+        
+        {/* Bottom-right Shadow - deeper for volume */}
         <div className="absolute inset-0" style={{ 
-            boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
+            background: 'radial-gradient(circle at 85% 85%, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 40%, transparent 70%)'
+        }} />
+
+        {/* Rim Light / Inner Glow */}
+        <div className="absolute inset-0" style={{ 
+            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.02), inset 2px 2px 4px rgba(255,255,255,0.3), inset -2px -2px 4px rgba(0,0,0,0.05)' 
         }} />
       </motion.div>
 

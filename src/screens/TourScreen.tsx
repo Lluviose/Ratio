@@ -38,7 +38,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
               key={r.label}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 + i * 0.08, type: 'spring', stiffness: 200, damping: 20 }}
+              transition={{ delay: 0.3 + i * 0.08, type: 'spring', stiffness: 400, damping: 30 }}
               className="bg-white/80 backdrop-blur-sm border border-black/5 rounded-2xl p-3 flex items-center justify-between"
             >
               <div className="flex items-center gap-3">
@@ -106,7 +106,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
                 cx="200" cy="80" r="4" fill="white" stroke="#ef4444" strokeWidth="2"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                transition={{ delay: 1.6, type: 'spring' }}
+                transition={{ delay: 1.6, type: 'spring', stiffness: 400, damping: 20 }}
               />
             </svg>
           </div>
@@ -141,7 +141,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
                       style={{ height: 140 * h, background: i === 3 ? accent : '#e2e8f0' }}
                       initial={{ scaleY: 0 }}
                       animate={{ scaleY: 1 }}
-                      transition={{ delay: 0.2 + i * 0.1, type: 'spring', damping: 15 }}
+                      transition={{ delay: 0.2 + i * 0.1, type: 'spring', stiffness: 400, damping: 30 }}
                     >
                        {i === 3 && (
                          <motion.div 
@@ -242,7 +242,7 @@ function PhoneFrame(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent
       <motion.div
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 100 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 200 }}
         className="relative rounded-[40px] border-[8px] border-gray-900 bg-gray-900 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.3)] overflow-hidden"
         style={{ aspectRatio: '9/19.5' }}
       >

@@ -38,7 +38,7 @@ export function BottomSheet(props: {
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 400 }}
           >
             <div className="handle" />
             <div className="sheetHeader">

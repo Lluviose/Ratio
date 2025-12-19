@@ -16,7 +16,12 @@ export function QuickAddSheet(props: {
         style={{ gap: 16 }}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        transition={{ 
+          type: 'spring',
+          stiffness: 400,
+          damping: 30,
+          delay: 0.1 
+        }}
       >
         <motion.button
           type="button"
