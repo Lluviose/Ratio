@@ -269,15 +269,19 @@ function OverlayBlock(props: {
     return useHorizontalLayout ? 6 : 0
   })
 
-  // 计算内容区域高度（水平布局时使用实际显示高度，排除被遮挡的延伸部分）
-  const ratioContentHeight = useTransform(scrollIdx, (idx) => {
-    // Bubble 阶段和 Ratio 前期使用全部高度
-    if (idx < 0.8) return '100%'
-    // 水平布局时限制高度为实际显示高度
-    if (useHorizontalLayout && displayHeight) {
-      return `${displayHeight}px`
+  // 计算被遮挡的延伸高度（用于调整内容居中位置）
+  // ratio.h 是色块总高度（含延伸），displayHeight 是实际显示高度
+  const extendedHeight = displayHeight ? ratio.h - displayHeight : 0
+
+  // 内容区域底部 padding，用于将内容"推"到可见区域内居中
+  const ratioContentPaddingBottom = useTransform(scrollIdx, (idx) => {
+    // Bubble 阶段和非水平布局时不需要调整
+    if (idx < 0.8) return 0
+    // 水平布局时，添加底部 padding 等于被遮挡的延伸高度
+    if (useHorizontalLayout && extendedHeight > 0) {
+      return extendedHeight
     }
-    return '100%'
+    return 0
   })
   
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
@@ -338,9 +342,9 @@ function OverlayBlock(props: {
 
             {/* Percent View (Ratio) */}
             <motion.div
-                 className="absolute left-0 top-0 right-0 flex"
+                 className="absolute inset-0 flex"
                  style={{
-                     height: ratioContentHeight,
+                     paddingBottom: ratioContentPaddingBottom,
                      opacity: percentOpacity,
                      justifyContent: isDebt ? 'center' : 'flex-start',
                      alignItems: isDebt ? 'center' : ratioAlignItems,
