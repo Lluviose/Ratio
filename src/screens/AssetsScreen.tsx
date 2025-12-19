@@ -44,6 +44,7 @@ function OverlayBlock(props: {
   kind: CornerKind
   ratioRect?: Rect
   listRect?: Rect
+  displayHeight?: number
   bubblePos?: { x: MotionValue<number>; y: MotionValue<number> }
   bubbleRadius?: number
   scrollIdx: MotionValue<number>
@@ -57,6 +58,7 @@ function OverlayBlock(props: {
     kind,
     ratioRect,
     listRect,
+    displayHeight,
     bubblePos,
     bubbleRadius,
     scrollIdx,
@@ -174,12 +176,46 @@ function OverlayBlock(props: {
 
   const textColor = block.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.96)'
 
+  // 计算文字布局和字体缩放
+  // 基础字体大小
+  const basePercentSize = 34 // 百分比数字的基础字体大小
+  const basePercentSymbolSize = 14 // %符号的基础字体大小
+  const baseLabelSize = 12 // 文字标签的基础字体大小
+  const baseLabelMargin = 4 // 文字标签的上边距
+
+  // 垂直布局的最小高度：百分比数字(34px) + 间距(4px) + 文字(12px) + padding(16px*2)
+  const verticalMinHeight = basePercentSize + baseLabelMargin + baseLabelSize + 32
+
+  // 水平布局的最小高度：百分比数字(34px) + padding(16px*2)
+  const horizontalMinHeight = basePercentSize + 32
+
+  // 根据可用高度计算布局和字体缩放
+  const actualHeight = displayHeight ?? ratio.h
+  const isDebt = kind === 'debt'
+
+  // 负债块不需要动态调整
+  const useHorizontalLayout = !isDebt && actualHeight < verticalMinHeight
+
+  // 计算字体缩放比例（最小为1/3）
+  let fontScale = 1
+  if (!isDebt && actualHeight < horizontalMinHeight) {
+    // 可用高度减去padding后的空间
+    const availableHeight = Math.max(0, actualHeight - 32)
+    // 计算缩放比例
+    fontScale = Math.max(1 / 3, availableHeight / basePercentSize)
+  }
+
+  // 计算实际字体大小
+  const percentSize = Math.round(basePercentSize * fontScale)
+  const percentSymbolSize = Math.round(basePercentSymbolSize * fontScale)
+  const labelSize = Math.round(baseLabelSize * fontScale)
+
   // Content Centering for Bubbles
   const padding = useTransform(scrollIdx, [0, 1], [0, 16])
   const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
   const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start')) // For debt col layout
   const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
-  
+
   // Sphere visual effects (fade out as we scroll to ratio)
   const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.6], [1, 0])
 
@@ -188,6 +224,47 @@ function OverlayBlock(props: {
   // 0.5 -> 1: Show Percent (Ratio)
   const amountOpacity = useTransform(scrollIdx, [0, 0.4, 0.6], [1, 1, 0])
   const percentOpacity = useTransform(scrollIdx, [0.4, 0.6, 1], [0, 1, 1])
+
+  // 动态计算 Percent View 的样式，确保在 Bubble 阶段保持正常显示
+  // 使用 useTransform 让布局在过渡时平滑变化
+  const ratioPercentSize = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return basePercentSize // Bubble 阶段使用基础大小
+    const t = Math.min(1, (idx - 0.5) * 2) // 0.5 -> 1 映射到 0 -> 1
+    return Math.round(lerp(basePercentSize, percentSize, t))
+  })
+
+  const ratioPercentSymbolSize = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return basePercentSymbolSize
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return Math.round(lerp(basePercentSymbolSize, percentSymbolSize, t))
+  })
+
+  const ratioLabelSize = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return baseLabelSize
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return Math.round(lerp(baseLabelSize, labelSize, t))
+  })
+
+  // 布局方向过渡
+  const ratioFlexDirection = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 'column' // Bubble 到 Ratio 前期保持垂直布局
+    return useHorizontalLayout ? 'row' : 'column'
+  })
+
+  const ratioLabelMarginTop = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 4
+    return useHorizontalLayout ? 0 : 4
+  })
+
+  const ratioLabelMarginLeft = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 0
+    return useHorizontalLayout ? 6 : 0
+  })
+
+  const ratioLabelAlignSelf = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 'auto'
+    return useHorizontalLayout ? 'center' : 'auto'
+  })
   
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
@@ -246,19 +323,36 @@ function OverlayBlock(props: {
             </motion.div>
 
             {/* Percent View (Ratio) */}
-            <motion.div 
-                 className="absolute inset-0 flex flex-col"
-                 style={{ 
-                     opacity: percentOpacity, 
-                     justifyContent: kind === 'debt' ? 'center' : 'flex-start',
-                     alignItems: flexAlign 
+            <motion.div
+                 className="absolute inset-0 flex"
+                 style={{
+                     opacity: percentOpacity,
+                     justifyContent: isDebt ? 'center' : 'flex-start',
+                     alignItems: isDebt ? 'center' : flexAlign,
+                     flexDirection: ratioFlexDirection,
                  }}
             >
-                 <div className="text-[34px] font-semibold tracking-tight leading-none">
+                 <motion.div
+                   className="font-semibold tracking-tight leading-none"
+                   style={{ fontSize: ratioPercentSize }}
+                 >
                     {block.percent}
-                    <span className="text-[14px] align-top ml-0.5">%</span>
-                </div>
-                <div className="mt-1 text-[12px] font-medium opacity-85">{block.name}</div>
+                    <motion.span
+                      className="align-top ml-0.5"
+                      style={{ fontSize: ratioPercentSymbolSize }}
+                    >%</motion.span>
+                </motion.div>
+                <motion.div
+                  className="font-medium opacity-85"
+                  style={{
+                    fontSize: ratioLabelSize,
+                    marginTop: ratioLabelMarginTop,
+                    marginLeft: ratioLabelMarginLeft,
+                    alignSelf: ratioLabelAlignSelf,
+                  }}
+                >
+                  {block.name}
+                </motion.div>
             </motion.div>
 
         </motion.div>
@@ -465,10 +559,14 @@ export function AssetsScreen(props: {
     const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
     const total = ratioAssets.reduce((s, b) => s + b.amount, 0)
 
-    // 最小高度阈值（确保文字可见）
-    const minHeight = 52
+    // 最小高度阈值（允许字体缩放到最小时仍可显示）
+    // 最小字体 = 34/3 ≈ 11px，加上 padding 和一些余量
+    const minHeight = 28
     // 圆角延伸高度（用于填充下方色块圆角处的空缺）
     const cornerExtend = 32
+
+    // 存储每个色块的实际显示高度（不含延伸部分）
+    const displayHeights: Partial<Record<GroupId, number>> = {}
 
     // 第一遍：找出需要使用最小高度的资产
     const assetHeights: { id: GroupId; rawH: number; useMin: boolean }[] = []
@@ -508,6 +606,9 @@ export function AssetsScreen(props: {
         height = assetStartY + assetDisplayH - y
       }
 
+      // 保存实际显示高度（不含延伸部分）
+      displayHeights[b.id] = height
+
       // 非最后的资产向下延伸一段，以填充下方色块圆角处的空缺
       const extendedHeight = isLast ? height : height + cornerExtend
 
@@ -517,6 +618,7 @@ export function AssetsScreen(props: {
 
     return {
       rects,
+      displayHeights,
       topAssetId: ratioAssets.at(0)?.id ?? null,
       bottomAssetId: ratioAssets.at(-1)?.id ?? null,
       debtExceeds,
@@ -858,6 +960,7 @@ export function AssetsScreen(props: {
             kind={blockKinds[b.id] ?? 'assetMiddle'}
             ratioRect={ratioLayout.rects[b.id]}
             listRect={listRects[b.id]}
+            displayHeight={ratioLayout.displayHeights[b.id]}
             bubblePos={bubblePositions.get(b.id)}
             bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
             scrollIdx={scrollIdx}
