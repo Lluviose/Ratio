@@ -53,6 +53,7 @@ function OverlayBlock(props: {
   chartRadius: number
   listRadius: number
   isReturning?: boolean
+  isInitialLoad?: boolean
   blockIndex?: number
   viewportWidth?: number
 }) {
@@ -70,6 +71,7 @@ function OverlayBlock(props: {
     chartRadius,
     listRadius,
     isReturning = false,
+    isInitialLoad = false,
     blockIndex = 0,
     viewportWidth = 400,
   } = props
@@ -307,18 +309,21 @@ function OverlayBlock(props: {
   
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
-  // 入场动画延迟（用于返回时的交错动画）
+  // 是否需要入场动画（首次加载或从其他页面返回）
+  const needsEnterAnimation = isInitialLoad || isReturning
+
+  // 入场动画延迟（用于交错动画）
   const enterDelay = blockIndex * 0.05
 
   // 入场动画的 translateX 偏移（从左侧飞入）
-  const enterTranslateX = isReturning ? -viewportWidth : 0
+  const enterTranslateX = needsEnterAnimation ? -viewportWidth : 0
 
   return (
     <motion.div
       className="absolute pointer-events-none"
-      initial={isReturning ? { translateX: enterTranslateX, opacity: 0 } : false}
+      initial={needsEnterAnimation ? { translateX: enterTranslateX, opacity: 0 } : false}
       animate={{ translateX: 0, opacity: 1 }}
-      transition={isReturning ? {
+      transition={needsEnterAnimation ? {
         duration: 0.45,
         delay: enterDelay,
         ease: [0.25, 0.46, 0.45, 0.94]
@@ -1019,6 +1024,7 @@ export function AssetsScreen(props: {
             chartRadius={chartRadius}
             listRadius={listRadius}
             isReturning={isReturning}
+            isInitialLoad={isInitialLoad}
             blockIndex={0}
             viewportWidth={viewport.w}
           />
@@ -1042,6 +1048,7 @@ export function AssetsScreen(props: {
             chartRadius={chartRadius}
             listRadius={listRadius}
             isReturning={isReturning}
+            isInitialLoad={isInitialLoad}
             blockIndex={blocks.debt ? i + 1 : i}
             viewportWidth={viewport.w}
           />
