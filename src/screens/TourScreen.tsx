@@ -103,7 +103,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
                  transition={{ delay: 1.2, duration: 0.5 }}
               />
               <motion.circle
-                cx="200" cy="80" r="4" fill="white" stroke="#ef4444" strokeWidth="2"
+                cx="200" cy="64.5" r="4" fill="white" stroke="#ef4444" strokeWidth="2"
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
                 transition={{ delay: 1.6, type: 'spring' }}
