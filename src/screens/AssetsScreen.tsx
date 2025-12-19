@@ -129,13 +129,13 @@ function OverlayBlock(props: {
   const opacity = useTransform([overlayFade], ([a]) => a)
 
   // 圆角逻辑：
-  // - 有负债时：资产左边无圆角（与负债区对齐），右上角有圆角，右下角无圆角
+  // - 有负债时：负债左上角无圆角（与资产区对齐），资产左边无圆角
   // - 无负债时：资产左右上角有圆角，右下角无圆角
   // - 每个色块（除最后一个）都向下延伸，延伸部分垫在下方色块的圆角处
   // - 最底部色块右下角有圆角
   const ratioCorner =
     kind === 'debt'
-      ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: 0 }
+      ? { tl: 0, tr: chartRadius, bl: chartRadius, br: 0 }
       : kind === 'assetOnly'
         ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
       : kind === 'assetTop'
@@ -208,10 +208,12 @@ function OverlayBlock(props: {
   }
 
   // 计算实际字体大小
+  // 只有当 fontScale < 1 时才缩放，否则保持基础大小
+  const needsScaling = fontScale < 1
   // 动态缩放时，百分比和文字使用相同的字体大小
-  const percentSize = Math.round(basePercentSize * fontScale)
-  const percentSymbolSize = fontScale < 1 ? percentSize : Math.round(basePercentSymbolSize * fontScale)
-  const labelSize = fontScale < 1 ? percentSize : Math.round(baseLabelSize * fontScale)
+  const percentSize = needsScaling ? Math.round(basePercentSize * fontScale) : basePercentSize
+  const percentSymbolSize = needsScaling ? percentSize : basePercentSymbolSize
+  const labelSize = needsScaling ? percentSize : baseLabelSize
 
   // 自适应模式下的 padding（正常 16px，自适应时缩小到 4px）
   const adaptivePadding = useHorizontalLayout ? adaptivePaddingValue : normalPadding
@@ -237,20 +239,24 @@ function OverlayBlock(props: {
 
   // 动态计算 Percent View 的样式，确保在 Bubble 阶段保持正常显示
   // 使用 useTransform 让布局在过渡时平滑变化
+  // 只有需要缩放时才进行过渡，否则保持基础大小
   const ratioPercentSize = useTransform(scrollIdx, (idx) => {
     if (idx < 0.5) return basePercentSize // Bubble 阶段使用基础大小
+    if (!needsScaling) return basePercentSize // 不需要缩放时保持基础大小
     const t = Math.min(1, (idx - 0.5) * 2) // 0.5 -> 1 映射到 0 -> 1
     return Math.round(lerp(basePercentSize, percentSize, t))
   })
 
   const ratioPercentSymbolSize = useTransform(scrollIdx, (idx) => {
     if (idx < 0.5) return basePercentSymbolSize
+    if (!needsScaling) return basePercentSymbolSize // 不需要缩放时保持基础大小
     const t = Math.min(1, (idx - 0.5) * 2)
     return Math.round(lerp(basePercentSymbolSize, percentSymbolSize, t))
   })
 
   const ratioLabelSize = useTransform(scrollIdx, (idx) => {
     if (idx < 0.5) return baseLabelSize
+    if (!needsScaling) return baseLabelSize // 不需要缩放时保持基础大小
     const t = Math.min(1, (idx - 0.5) * 2)
     return Math.round(lerp(baseLabelSize, labelSize, t))
   })
