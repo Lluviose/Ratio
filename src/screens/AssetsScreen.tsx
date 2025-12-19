@@ -451,6 +451,8 @@ export function AssetsScreen(props: {
   const [isReturning, setIsReturning] = useState(skipInitialAnimation)
   // 是否从详情页返回到列表页（用于触发入场动画）
   const [isReturningFromDetail, setIsReturningFromDetail] = useState(false)
+  // 动画触发计数器，用于强制重新挂载组件以触发入场动画
+  const [animationKey, setAnimationKey] = useState(0)
 
   const didInitRef = useRef(false)
 
@@ -1022,7 +1024,7 @@ export function AssetsScreen(props: {
 
         {blocks.debt ? (
           <OverlayBlock
-            key="debt"
+            key={`debt-${animationKey}`}
             block={blocks.debt}
             kind="debt"
             ratioRect={ratioLayout.rects.debt}
@@ -1046,7 +1048,7 @@ export function AssetsScreen(props: {
             每个色块向下延伸的部分垫在下方色块的圆角处 */}
         {blocks.assets.map((b, i) => (
           <OverlayBlock
-            key={b.id}
+            key={`${b.id}-${animationKey}`}
             block={b}
             kind={blockKinds[b.id] ?? 'assetMiddle'}
             ratioRect={ratioLayout.rects[b.id]}
@@ -1076,6 +1078,7 @@ export function AssetsScreen(props: {
         >
           {/* 净资产标题 - 从上滑入 */}
           <motion.div
+            key={`title-${animationKey}`}
             className="min-w-0"
             initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
@@ -1099,6 +1102,7 @@ export function AssetsScreen(props: {
 
           {/* 添加按钮 - 从上滑入，稍微延迟 */}
           <motion.button
+            key={`add-${animationKey}`}
             type="button"
             onClick={onAddAccount}
             className="w-10 h-10 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
@@ -1189,6 +1193,7 @@ export function AssetsScreen(props: {
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
           <AssetsListPage
+            key={`list-${animationKey}`}
             grouped={grouped}
             getIcon={getIcon}
             onPickType={(type) => {
@@ -1214,6 +1219,7 @@ export function AssetsScreen(props: {
             hideAmounts={hideAmounts}
             onBack={() => {
               setIsReturningFromDetail(true)
+              setAnimationKey(k => k + 1)
               scrollToPage(2)
               setSelectedType(null)
             }}
