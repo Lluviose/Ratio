@@ -129,25 +129,26 @@ function OverlayBlock(props: {
   // 圆角逻辑：
   // - 有负债时：资产左边无圆角（与负债区对齐），右边有圆角
   // - 无负债时：资产左右都有圆角
+  // - 每个色块（除最后一个）都向下延伸，所以圆角空白处会显示上一个色块的颜色
   const ratioCorner =
     kind === 'debt'
       ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: 0 }
       : kind === 'assetOnly'
         ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
       : kind === 'assetTop'
-        ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+        ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
         : kind === 'assetBottom'
-          ? { tl: 0, tr: 0, bl: 0, br: chartRadius }
+          ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
           : kind === 'assetMiddle'
-            ? { tl: 0, tr: 0, bl: 0, br: 0 }
+            ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
             : kind === 'assetOnlyNoDebt'
               ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
               : kind === 'assetTopNoDebt'
-                ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
+                ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
                 : kind === 'assetBottomNoDebt'
-                  ? { tl: 0, tr: 0, bl: chartRadius, br: chartRadius }
+                  ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
                   : kind === 'assetMiddleNoDebt'
-                    ? { tl: 0, tr: 0, bl: 0, br: 0 }
+                    ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
                     : { tl: 0, tr: 0, bl: 0, br: 0 }
 
   const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
@@ -847,7 +848,10 @@ export function AssetsScreen(props: {
           />
         ) : null}
 
-        {blocks.assets.map((b) => (
+        {/* 反转渲染顺序：底部色块先渲染，顶部色块后渲染
+            这样顶部色块向下延伸的部分会覆盖底部色块，
+            使得底部色块的圆角空白处显示上方色块的颜色 */}
+        {[...blocks.assets].reverse().map((b) => (
           <OverlayBlock
             key={b.id}
             block={b}
