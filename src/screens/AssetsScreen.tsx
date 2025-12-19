@@ -182,12 +182,14 @@ function OverlayBlock(props: {
   const basePercentSymbolSize = 14 // %符号的基础字体大小
   const baseLabelSize = 12 // 文字标签的基础字体大小
   const baseLabelMargin = 4 // 文字标签的上边距
+  const normalPadding = 16 // 正常模式的上下 padding
+  const adaptivePaddingValue = 4 // 自适应模式的上下 padding
 
   // 垂直布局的最小高度：百分比数字(34px) + 间距(4px) + 文字(12px) + padding(16px*2)
-  const verticalMinHeight = basePercentSize + baseLabelMargin + baseLabelSize + 32
+  const verticalMinHeight = basePercentSize + baseLabelMargin + baseLabelSize + normalPadding * 2
 
-  // 水平布局的最小高度：百分比数字(34px) + padding(16px*2)
-  const horizontalMinHeight = basePercentSize + 32
+  // 水平布局的最小高度：百分比数字(34px) + padding(4px*2)（自适应模式使用更小的 padding）
+  const horizontalMinHeight = basePercentSize + adaptivePaddingValue * 2
 
   // 根据可用高度计算布局和字体缩放
   const actualHeight = displayHeight ?? ratio.h
@@ -199,8 +201,8 @@ function OverlayBlock(props: {
   // 计算字体缩放比例（最小为1/3）
   let fontScale = 1
   if (!isDebt && actualHeight < horizontalMinHeight) {
-    // 可用高度减去padding后的空间
-    const availableHeight = Math.max(0, actualHeight - 32)
+    // 可用高度减去 padding 后的空间（自适应模式使用更小的 padding）
+    const availableHeight = Math.max(0, actualHeight - adaptivePaddingValue * 2)
     // 计算缩放比例
     fontScale = Math.max(1 / 3, availableHeight / basePercentSize)
   }
@@ -211,8 +213,15 @@ function OverlayBlock(props: {
   const percentSymbolSize = fontScale < 1 ? percentSize : Math.round(basePercentSymbolSize * fontScale)
   const labelSize = fontScale < 1 ? percentSize : Math.round(baseLabelSize * fontScale)
 
+  // 自适应模式下的 padding（正常 16px，自适应时缩小到 4px）
+  const adaptivePadding = useHorizontalLayout ? adaptivePaddingValue : normalPadding
+
   // Content Centering for Bubbles
-  const padding = useTransform(scrollIdx, [0, 1], [0, 16])
+  const padding = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return 0 // Bubble 阶段无 padding
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return lerp(0, adaptivePadding, t)
+  })
   const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
   const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start')) // For debt col layout
   const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
