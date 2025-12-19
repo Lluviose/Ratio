@@ -412,7 +412,8 @@ export function AssetsScreen(props: {
   const [hideAmounts, setHideAmounts] = useState(false)
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
-  const [initialized, setInitialized] = useState(skipInitialAnimation)
+  // 当 skipInitialAnimation 为 true 时，initialized 直接为 true，但仍需等待 viewport 测量完成
+  const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
@@ -926,7 +927,7 @@ export function AssetsScreen(props: {
       {initialized ? (
         <motion.div
           className="absolute inset-0 z-0 pointer-events-none"
-          initial={{ x: -100, opacity: 0 }}
+          initial={skipInitialAnimation ? false : { x: -100, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
         >

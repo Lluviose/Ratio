@@ -6,7 +6,6 @@ import { TourScreen } from './screens/TourScreen.tsx'
 import { SettingsScreen } from './screens/SettingsScreen.tsx'
 import { StatsScreen } from './screens/StatsScreen.tsx'
 import { TrendScreen } from './screens/TrendScreen.tsx'
-import { QuickAddSheet } from './components/QuickAddSheet.tsx'
 import { AccountDetailSheet } from './components/AccountDetailSheet.tsx'
 import { AddAccountScreen } from './screens/AddAccountScreen.tsx'
 import { type Account } from './lib/accounts.ts'
@@ -25,7 +24,6 @@ export default function App() {
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
   const [crossPlatformSync, setCrossPlatformSync] = useLocalStorageState<boolean>('ratio.sync', false)
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
-  const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const hasVisitedAssetsRef = useRef(false)
@@ -157,7 +155,7 @@ export default function App() {
                       <AssetsScreen
                         grouped={accounts.grouped}
                         getIcon={accounts.getIcon}
-                        onAddAccount={() => setQuickAddOpen(true)}
+                        onAddAccount={() => setView('addAccount')}
                         onNavigate={(next) => setTab(next)}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
@@ -212,11 +210,6 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
-              <QuickAddSheet
-                open={quickAddOpen}
-                onClose={() => setQuickAddOpen(false)}
-                onAddAccount={() => setView('addAccount')}
-              />
 
               <AccountDetailSheet
                 open={Boolean(selectedAccountId)}
