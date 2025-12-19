@@ -218,6 +218,7 @@ export default function App() {
                 onSetBalance={accounts.updateBalance}
                 onAdjust={accounts.adjustBalance}
                 onTransfer={accounts.transfer}
+                onDelete={accounts.deleteAccount}
                 onAddOp={accountOps.addOp}
               />
             </motion.div>

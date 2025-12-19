@@ -1,5 +1,5 @@
 import { type CSSProperties, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, MoreHorizontal, Pencil, Plus, Save } from 'lucide-react'
+import { ArrowLeftRight, MoreHorizontal, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
@@ -50,6 +50,7 @@ export function AccountDetailSheet(props: {
   onSetBalance: (id: string, balance: number) => void
   onAdjust: (id: string, delta: number) => void
   onTransfer: (fromId: string, toId: string, amount: number) => void
+  onDelete: (id: string) => void
   onAddOp: (op: AccountOpInput) => void
 }) {
   const {
@@ -63,6 +64,7 @@ export function AccountDetailSheet(props: {
     onSetBalance,
     onAdjust,
     onTransfer,
+    onDelete,
     onAddOp,
   } = props
 
@@ -342,6 +344,33 @@ export function AccountDetailSheet(props: {
                   >
                     <ArrowLeftRight size={16} strokeWidth={2.6} />
                     转账
+                  </button>
+
+                  <div style={{ height: 1, background: 'var(--hairline)', margin: '4px 0' }} />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      if (window.confirm(`确定要删除账户「${account.name}」吗？此操作不可撤销。`)) {
+                        onDelete(account.id)
+                        onClose()
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      borderRadius: 14,
+                      padding: '10px 12px',
+                      fontWeight: 900,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      color: '#ef4444',
+                    }}
+                    className="hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 size={16} strokeWidth={2.6} />
+                    删除账户
                   </button>
                 </motion.div>
               ) : null}

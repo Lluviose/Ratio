@@ -99,6 +99,13 @@ export function useAccounts() {
     [setAccounts],
   )
 
+  const deleteAccount = useCallback(
+    (id: string) => {
+      setAccounts((prev) => prev.filter((a) => a.id !== id))
+    },
+    [setAccounts],
+  )
+
   const liquidAccounts = useMemo(
     () => accounts.filter((a) => getGroupIdByAccountType(a.type) === 'liquid'),
     [accounts],
@@ -153,6 +160,7 @@ export function useAccounts() {
     renameAccount,
     adjustBalance,
     transfer,
+    deleteAccount,
     grouped,
     liquidAccounts,
     getIcon,

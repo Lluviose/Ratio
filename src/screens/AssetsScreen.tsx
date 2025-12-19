@@ -37,7 +37,7 @@ type Block = {
 
 type OverlayBlockModel = Block
 
-type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly'
+type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly' | 'assetTopNoDebt' | 'assetMiddleNoDebt' | 'assetBottomNoDebt' | 'assetOnlyNoDebt'
 
 function OverlayBlock(props: {
   block: OverlayBlockModel
@@ -126,6 +126,9 @@ function OverlayBlock(props: {
   
   const opacity = useTransform([overlayFade], ([a]) => a)
 
+  // 圆角逻辑：
+  // - 有负债时：资产左边无圆角（与负债区对齐），右边有圆角
+  // - 无负债时：资产左右都有圆角
   const ratioCorner =
     kind === 'debt'
       ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: 0 }
@@ -135,7 +138,17 @@ function OverlayBlock(props: {
         ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
         : kind === 'assetBottom'
           ? { tl: 0, tr: 0, bl: 0, br: chartRadius }
-          : { tl: 0, tr: 0, bl: 0, br: 0 }
+          : kind === 'assetMiddle'
+            ? { tl: 0, tr: 0, bl: 0, br: 0 }
+            : kind === 'assetOnlyNoDebt'
+              ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
+              : kind === 'assetTopNoDebt'
+                ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
+                : kind === 'assetBottomNoDebt'
+                  ? { tl: 0, tr: 0, bl: chartRadius, br: chartRadius }
+                  : kind === 'assetMiddleNoDebt'
+                    ? { tl: 0, tr: 0, bl: 0, br: 0 }
+                    : { tl: 0, tr: 0, bl: 0, br: 0 }
 
   const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
@@ -404,26 +417,31 @@ export function AssetsScreen(props: {
     const top = 64
     const chartH = Math.max(0, viewport.h - top)
     const chartW = viewport.w
-    const debtW = Math.round(chartW * 0.24)
+
+    // 判断是否有负债
+    const hasDebt = blocks.debt && blocks.debt.amount > 0
+
+    // 如果没有负债，资产占满整个宽度；否则负债占 24%
+    const debtW = hasDebt ? Math.round(chartW * 0.24) : 0
     const assetX = debtW
     const assetW = Math.max(0, chartW - debtW)
 
     const rects: Partial<Record<GroupId, Rect>> = {}
-    
+
     // 计算负债占资产的百分比
     const assetsTotal = grouped.assetsTotal || 0
     const debtTotal = blocks.debt?.amount || 0
     const debtPercent = assetsTotal > 0 ? debtTotal / assetsTotal : 0
-    
+
     // 决定哪边是100%高度的基准
     const debtExceeds = debtPercent > 1
-    
+
     // 计算实际显示高度
     let assetDisplayH: number
     let debtDisplayH: number
     let assetStartY: number
     let debtStartY: number
-    
+
     if (debtExceeds) {
       // 负债超过100%：负债占满，资产按比例缩小（资产高度 = 100% / 负债百分比）
       debtDisplayH = chartH
@@ -437,41 +455,43 @@ export function AssetsScreen(props: {
       debtDisplayH = chartH * debtPercent
       debtStartY = top + chartH - debtDisplayH // 负债底部对齐，与资产底部平齐
     }
-    
-    if (blocks.debt) {
+
+    if (hasDebt && blocks.debt) {
       rects.debt = { x: 0, y: debtStartY, w: debtW, h: debtDisplayH }
     }
 
     const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
     const total = ratioAssets.reduce((s, b) => s + b.amount, 0)
-    
+
     // 最小高度阈值（确保文字可见）
     const minHeight = 52
-    
+    // 圆角延伸高度（用于填充下方色块圆角处的空缺）
+    const cornerExtend = 32
+
     // 第一遍：找出需要使用最小高度的资产
     const assetHeights: { id: GroupId; rawH: number; useMin: boolean }[] = []
     let minHeightSum = 0
-    
+
     for (const b of ratioAssets) {
       const rawH = total > 0 ? (assetDisplayH * b.amount) / total : 0
       const useMin = rawH < minHeight && rawH > 0
       if (useMin) minHeightSum += minHeight
       assetHeights.push({ id: b.id, rawH, useMin })
     }
-    
+
     // 第二遍：计算剩余高度给非最小高度的资产
     const remainingH = Math.max(0, assetDisplayH - minHeightSum)
     const nonMinTotal = assetHeights
       .filter((a) => !a.useMin)
       .reduce((sum, a) => sum + a.rawH, 0)
-    
-    // 第三遍：分配最终高度
+
+    // 第三遍：分配最终高度（非最后的资产向下延伸以填充圆角空缺）
     let y = assetStartY
     for (let i = 0; i < ratioAssets.length; i += 1) {
       const b = ratioAssets[i]
       const info = assetHeights[i]
       const isLast = i === ratioAssets.length - 1
-      
+
       let height: number
       if (info.useMin) {
         height = minHeight
@@ -480,14 +500,17 @@ export function AssetsScreen(props: {
       } else {
         height = info.rawH
       }
-      
+
       // 最后一个资产填满剩余空间
       if (isLast) {
         height = assetStartY + assetDisplayH - y
       }
-      
-      rects[b.id] = { x: assetX, y, w: assetW, h: Math.max(0, height) }
-      y += height
+
+      // 非最后的资产向下延伸一段，以填充下方色块圆角处的空缺
+      const extendedHeight = isLast ? height : height + cornerExtend
+
+      rects[b.id] = { x: assetX, y, w: assetW, h: Math.max(0, extendedHeight) }
+      y += height // 下一个色块的起始位置不变，仍然使用原始高度计算
     }
 
     return {
@@ -497,6 +520,7 @@ export function AssetsScreen(props: {
       debtExceeds,
       assetDisplayH,
       assetStartY,
+      hasDebt,
     }
   }, [blocks, grouped.assetsTotal, viewport.h, viewport.w])
 
@@ -504,14 +528,21 @@ export function AssetsScreen(props: {
     const kinds: Partial<Record<GroupId, CornerKind>> = {}
     if (blocks.debt) kinds.debt = 'debt'
     const singleAsset = Boolean(ratioLayout.topAssetId && ratioLayout.topAssetId === ratioLayout.bottomAssetId)
+    const hasDebt = ratioLayout.hasDebt
+
     for (const b of blocks.assets) {
-      if (singleAsset && b.id === ratioLayout.topAssetId) kinds[b.id] = 'assetOnly'
-      else if (b.id === ratioLayout.topAssetId) kinds[b.id] = 'assetTop'
-      else if (b.id === ratioLayout.bottomAssetId) kinds[b.id] = 'assetBottom'
-      else kinds[b.id] = 'assetMiddle'
+      if (singleAsset && b.id === ratioLayout.topAssetId) {
+        kinds[b.id] = hasDebt ? 'assetOnly' : 'assetOnlyNoDebt'
+      } else if (b.id === ratioLayout.topAssetId) {
+        kinds[b.id] = hasDebt ? 'assetTop' : 'assetTopNoDebt'
+      } else if (b.id === ratioLayout.bottomAssetId) {
+        kinds[b.id] = hasDebt ? 'assetBottom' : 'assetBottomNoDebt'
+      } else {
+        kinds[b.id] = hasDebt ? 'assetMiddle' : 'assetMiddleNoDebt'
+      }
     }
     return kinds
-  }, [blocks.assets, blocks.debt, ratioLayout.bottomAssetId, ratioLayout.topAssetId])
+  }, [blocks.assets, blocks.debt, ratioLayout.bottomAssetId, ratioLayout.topAssetId, ratioLayout.hasDebt])
 
   const measureListRects = useCallback(() => {
     const root = viewportRef.current
@@ -633,7 +664,19 @@ export function AssetsScreen(props: {
     let raf = 0
     const onScroll = () => {
       cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => scrollLeft.set(el.scrollLeft))
+      raf = requestAnimationFrame(() => {
+        const w = el.clientWidth || 1
+        const currentScroll = el.scrollLeft
+        const maxScroll = w * 2 // 最大只能滑到 Page 2（主页），不能滑到 Page 3
+
+        // 如果没有选中类型，限制滚动范围不超过 Page 2
+        if (!selectedType && currentScroll > maxScroll) {
+          el.scrollLeft = maxScroll
+          scrollLeft.set(maxScroll)
+        } else {
+          scrollLeft.set(currentScroll)
+        }
+      })
     }
 
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -641,7 +684,7 @@ export function AssetsScreen(props: {
       cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
     }
-  }, [scrollLeft])
+  }, [scrollLeft, selectedType])
 
   useEffect(() => {
     const el = listScrollRef.current
