@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { useRef } from 'react'
 import { BottomSheet } from './BottomSheet'
 import { formatCny } from '../lib/format'
@@ -26,13 +25,7 @@ export function EditBalanceSheet(props: {
 
   return (
     <BottomSheet open={open} title={title} onClose={onClose}>
-      <motion.div 
-        className="stack"
-        style={{ gap: 16 }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', damping: 30, stiffness: 400, delay: 0.1 }}
-      >
+      <div className="stack animate-[fadeIn_0.4s_ease-out]" style={{ gap: 16 }}>
         <div className="muted" style={{ fontSize: 13, fontWeight: 700 }}>
           当前：<span style={{ color: 'var(--text)', fontWeight: 900 }}>{formatCny(initialValue)}</span>
         </div>
@@ -52,7 +45,7 @@ export function EditBalanceSheet(props: {
         <button type="button" className="primaryBtn" onClick={submit}>
           保存
         </button>
-      </motion.div>
+      </div>
     </BottomSheet>
   )
 }

@@ -180,11 +180,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ 
-          type: 'spring',
-          stiffness: 400,
-          damping: 30
-        }}
+        transition={{ duration: 0.4 }}
       >
         <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
           {analysis.start && analysis.end ? (
@@ -203,7 +199,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
             style={{ marginTop: 16, background: 'rgba(255, 255, 255, 0.7)' }}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', damping: 30, stiffness: 400, delay: 0.1 }}
+            transition={{ delay: 0.1 }}
           >
             <div className="cardInner">
               <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性指标</div>
@@ -234,7 +230,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
           style={{ height: 240, marginTop: 16 }}
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', damping: 30, stiffness: 400, delay: 0.2 }}
+          transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.2 }}
         >
           {chartWidth > 0 && analysis.points.length > 0 ? (
             <BarChart width={chartWidth} height={240} data={analysis.points} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>

@@ -17,11 +17,7 @@ export function BubbleChartPage(props: {
          <motion.button
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: isActive ? 1 : 0, x: isActive ? 0 : 20 }}
-          transition={{ 
-            type: 'spring',
-            stiffness: 400,
-            damping: 30
-          }}
+          transition={{ delay: 0.2 }}
           type="button"
           onClick={onNext}
           className="w-10 h-10 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm pointer-events-auto"

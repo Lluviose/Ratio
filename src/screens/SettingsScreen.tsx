@@ -23,11 +23,7 @@ export function SettingsScreen(props: {
       className="stack"
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ 
-        type: 'spring',
-        stiffness: 400,
-        damping: 30
-      }}
+      transition={{ duration: 0.3 }}
     >
       <div className="card">
         <div className="cardInner">
@@ -55,12 +51,7 @@ export function SettingsScreen(props: {
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ 
-                    type: 'spring',
-                    stiffness: 400,
-                    damping: 30,
-                    delay: i * 0.05 
-                  }}
+                  transition={{ delay: i * 0.05 }}
                   whileTap={{ scale: 0.99 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -86,12 +77,7 @@ export function SettingsScreen(props: {
         className="card"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ 
-          type: 'spring',
-          stiffness: 400,
-          damping: 30,
-          delay: 0.2 
-        }}
+        transition={{ delay: 0.2 }}
       >
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>数据同步</div>

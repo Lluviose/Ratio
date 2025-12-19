@@ -57,12 +57,7 @@ export function AddAccountScreen(props: {
         key={groupId} 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ 
-          type: 'spring',
-          stiffness: 400,
-          damping: 30,
-          delay: index * 0.05 
-        }}
+        transition={{ delay: index * 0.1 }}
       >
         {header(group.name, group.tone)}
         <div className="flex flex-col mt-3 gap-2">
@@ -80,12 +75,7 @@ export function AddAccountScreen(props: {
                 whileTap={{ scale: 0.98 }}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ 
-                  type: 'spring',
-                  stiffness: 400,
-                  damping: 30,
-                  delay: index * 0.05 + i * 0.03 
-                }}
+                transition={{ delay: index * 0.1 + i * 0.05 }}
               >
                 <span 
                   className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
@@ -147,7 +137,7 @@ export function AddAccountScreen(props: {
               initial={{ y: '-100%' }}
               animate={{ y: 0 }}
               exit={{ y: '-100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 400 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             >
               <div className="text-center mb-6">
                 <div className="text-lg font-black text-[var(--text)]">

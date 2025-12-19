@@ -41,12 +41,7 @@ export function AssetsTypeDetailPage(props: {
         style={{ background: 'rgba(255,255,255,0.85)' }}
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{
-          type: 'spring',
-          stiffness: 400,
-          damping: 30,
-          mass: 1
-        }}
+        transition={{ duration: 0.3 }}
       >
         <div className="px-4 py-3 flex items-center gap-3">
           <motion.button
@@ -79,12 +74,7 @@ export function AssetsTypeDetailPage(props: {
           style={{ boxShadow: 'var(--shadow-soft)' }}
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ 
-            type: 'spring',
-            stiffness: 350,
-            damping: 30,
-            delay: 0.1 
-          }}
+          transition={{ duration: 0.4, delay: 0.1 }}
         >
           <div className="px-4 py-4 flex items-center gap-3">
             <div

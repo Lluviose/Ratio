@@ -239,13 +239,13 @@ function OverlayBlock(props: {
   const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
 
   // Sphere visual effects (fade out as we scroll to ratio)
-  const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.6], [1, 0])
+  const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.5], [1, 0])
 
   // Text Crossfade
   // 0 -> 0.5: Show Amount (Bubble)
   // 0.5 -> 1: Show Percent (Ratio)
-  const amountOpacity = useTransform(scrollIdx, [0, 0.4, 0.6], [1, 1, 0])
-  const percentOpacity = useTransform(scrollIdx, [0.4, 0.6, 1], [0, 1, 1])
+  const amountOpacity = useTransform(scrollIdx, [0, 0.35, 0.55], [1, 1, 0])
+  const percentOpacity = useTransform(scrollIdx, [0.45, 0.65, 1], [0, 1, 1])
 
   // 动态计算 Percent View 的样式，确保在 Bubble 阶段保持正常显示
   // 使用 useTransform 让布局在过渡时平滑变化
@@ -314,9 +314,6 @@ function OverlayBlock(props: {
   // 是否需要入场动画（首次加载、从其他页面返回、或从详情页返回）
   const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
 
-  // 入场动画延迟（用于交错动画）
-  const enterDelay = blockIndex * 0.05
-
   // 入场动画的 translateX 偏移（从左侧飞入）
   const enterTranslateX = needsEnterAnimation ? -viewportWidth : 0
 
@@ -326,11 +323,9 @@ function OverlayBlock(props: {
       initial={needsEnterAnimation ? { translateX: enterTranslateX, opacity: 0 } : false}
       animate={{ translateX: 0, opacity: 1 }}
       transition={needsEnterAnimation ? {
-        type: 'spring',
-        stiffness: 400,
-        damping: 30,
-        mass: 1,
-        delay: enterDelay,
+        duration: 0.5,
+        delay: blockIndex * 0.04,
+        ease: [0.2, 0, 0, 1]
       } : undefined}
       style={{
         left: x,
@@ -348,22 +343,15 @@ function OverlayBlock(props: {
     >
       {/* Sphere 3D Effects Overlay */}
       <motion.div 
-        className="absolute inset-0 z-0 pointer-events-none"
+        className="absolute inset-0 z-0"
         style={{ opacity: sphereEffectOpacity }}
       >
-        {/* Top-left Highlight - sharper and brighter */}
+        {/* Inner Highlight/Shadow using CSS gradients/shadows */}
         <div className="absolute inset-0" style={{ 
-            background: 'radial-gradient(circle at 25% 25%, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 30%, transparent 60%)' 
+            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
         }} />
-        
-        {/* Bottom-right Shadow - deeper for volume */}
         <div className="absolute inset-0" style={{ 
-            background: 'radial-gradient(circle at 85% 85%, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.05) 40%, transparent 70%)'
-        }} />
-
-        {/* Rim Light / Inner Glow */}
-        <div className="absolute inset-0" style={{ 
-            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.02), inset 2px 2px 4px rgba(255,255,255,0.3), inset -2px -2px 4px rgba(0,0,0,0.05)' 
+            boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
         }} />
       </motion.div>
 

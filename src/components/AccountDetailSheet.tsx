@@ -256,12 +256,7 @@ export function AccountDetailSheet(props: {
         style={{ gap: 16, minHeight: '62vh' }}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ 
-          type: 'spring',
-          stiffness: 500,
-          damping: 30,
-          opacity: { duration: 0.2 }
-        }}
+        transition={{ delay: 0.1 }}
         onClick={() => setMoreOpen(false)}
       >
         <div style={{ position: 'sticky', top: 0, zIndex: 6, background: 'var(--card)', paddingBottom: 12 }}>
@@ -293,11 +288,7 @@ export function AccountDetailSheet(props: {
                   initial={{ opacity: 0, y: -6, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.98 }}
-                  transition={{ 
-                    type: 'spring',
-                    stiffness: 400,
-                    damping: 30
-                  }}
+                  transition={{ duration: 0.16 }}
                   onClick={(e) => e.stopPropagation()}
                   style={{
                     position: 'absolute',
@@ -594,12 +585,7 @@ export function AccountDetailSheet(props: {
                       key={op.id}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ 
-                        type: 'spring',
-                        stiffness: 400,
-                        damping: 30,
-                        delay: i * 0.05 
-                      }}
+                      transition={{ delay: i * 0.05 }}
                       style={{
                         border: '1px solid var(--hairline)',
                         borderRadius: 18,
