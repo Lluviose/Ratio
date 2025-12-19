@@ -70,7 +70,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
                 <div key={i} className="border-[0.5px] border-dashed border-gray-100" />
               ))}
             </div>
-            <svg className="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none">
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 300 160" preserveAspectRatio="none">
               <motion.path
                 d="M10 140 C 40 130, 80 140, 120 100 C 160 60, 200 80, 240 40 L 280 20"
                 fill="none"
@@ -329,9 +329,16 @@ export function TourScreen(props: { onClose: () => void }) {
 
   return (
     <motion.div 
-      className="h-full relative overflow-hidden flex flex-col"
+      className="h-full relative overflow-hidden flex flex-col touch-none"
       animate={{ backgroundColor: bgColors[index % bgColors.length] }}
       transition={{ duration: 0.7 }}
+      onPanEnd={(_, { offset }) => {
+        if (offset.x < -50 && index < slides.length - 1) {
+          setIndex(index + 1)
+        } else if (offset.x > 50 && index > 0) {
+          setIndex(index - 1)
+        }
+      }}
     >
       {/* Background Gradient Blob */}
       <motion.div
