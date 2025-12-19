@@ -69,34 +69,34 @@ export function AssetsTypeDetailPage(props: {
 
       <div className="px-4 pt-4 pb-8">
         <motion.div
-          className="bg-white/60 backdrop-blur-md rounded-[24px] border border-white/60 overflow-hidden"
+          className="bg-white/60 backdrop-blur-md rounded-[32px] border border-white/60 overflow-hidden"
           style={{ boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.04)' }}
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="flex flex-col p-2 gap-2">
+          <div className="flex flex-col p-3 gap-3">
             {list.map((account) => (
               <motion.div
                 key={account.id}
-                className="flex items-center justify-between p-4 hover:bg-white/50 rounded-[18px] cursor-pointer transition-colors"
+                className="flex items-center justify-between p-5 hover:bg-white/60 active:bg-white/80 rounded-[24px] cursor-pointer transition-all"
                 onClick={() => onEditAccount(account)}
-                whileTap={{ scale: 0.99, backgroundColor: 'rgba(255,255,255,0.8)' }}
+                whileTap={{ scale: 0.98 }}
               >
-                <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex items-center gap-4 min-w-0">
                   <motion.div 
-                    className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-600 shadow-sm border border-slate-100"
+                    className="w-11 h-11 rounded-full bg-white flex items-center justify-center text-slate-600 shadow-sm border border-slate-100"
                     layoutId={`account-icon-${account.id}`}
                   >
-                    {createElement(info.opt.icon, { size: 20, strokeWidth: 2 })}
+                    {createElement(info.opt.icon, { size: 22, strokeWidth: 2 })}
                   </motion.div>
                   <div className="min-w-0">
-                    <div className="font-semibold text-[15px] text-slate-900 truncate mb-0.5">{account.name}</div>
-                    <div className="text-[11px] text-slate-400 font-medium">更新于 {new Date(account.updatedAt).toLocaleDateString()}</div>
+                    <div className="font-bold text-[16px] text-slate-900 truncate mb-0.5">{account.name}</div>
+                    <div className="text-[12px] text-slate-400 font-medium">更新于 {new Date(account.updatedAt).toLocaleDateString()}</div>
                   </div>
                 </div>
                 <motion.div 
-                  className={hideAmounts ? `font-semibold text-[15px] text-slate-900 ${maskedClass}` : 'font-semibold text-[15px] text-slate-900'}
+                  className={hideAmounts ? `font-bold text-[16px] text-slate-900 ${maskedClass}` : 'font-bold text-[16px] text-slate-900'}
                   layoutId={`account-balance-${account.id}`}
                 >
                   {hideAmounts ? maskedText : formatCny(account.balance)}
