@@ -75,7 +75,7 @@ export function AssetsTypeDetailPage(props: {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.3 }}
         >
-          <div className="flex flex-col p-2 gap-1">
+          <div className="flex flex-col p-2 gap-2">
             {list.map((account) => (
               <motion.div
                 key={account.id}
@@ -84,17 +84,23 @@ export function AssetsTypeDetailPage(props: {
                 whileTap={{ scale: 0.99, backgroundColor: 'rgba(255,255,255,0.8)' }}
               >
                 <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-600 shadow-sm border border-slate-100">
+                  <motion.div 
+                    className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-600 shadow-sm border border-slate-100"
+                    layoutId={`account-icon-${account.id}`}
+                  >
                     {createElement(info.opt.icon, { size: 20, strokeWidth: 2 })}
-                  </div>
+                  </motion.div>
                   <div className="min-w-0">
                     <div className="font-semibold text-[15px] text-slate-900 truncate mb-0.5">{account.name}</div>
                     <div className="text-[11px] text-slate-400 font-medium">更新于 {new Date(account.updatedAt).toLocaleDateString()}</div>
                   </div>
                 </div>
-                <div className={hideAmounts ? `font-semibold text-[15px] text-slate-900 ${maskedClass}` : 'font-semibold text-[15px] text-slate-900'}>
+                <motion.div 
+                  className={hideAmounts ? `font-semibold text-[15px] text-slate-900 ${maskedClass}` : 'font-semibold text-[15px] text-slate-900'}
+                  layoutId={`account-balance-${account.id}`}
+                >
                   {hideAmounts ? maskedText : formatCny(account.balance)}
-                </div>
+                </motion.div>
               </motion.div>
             ))}
           </div>

@@ -267,9 +267,12 @@ export function AccountDetailSheet(props: {
         {/* Header - Balance Display */}
         <div className="flex flex-col items-center py-6 bg-slate-50/50 rounded-[32px] border border-slate-100/50">
           <div className="text-[12px] font-bold text-slate-400 mb-1 tracking-wider uppercase">当前余额</div>
-          <div className="text-[40px] font-black text-slate-900 tracking-tight leading-none">
+          <motion.div 
+            className="text-[40px] font-black text-slate-900 tracking-tight leading-none"
+            layoutId={`account-balance-${account.id}`}
+          >
             {formatCny(account.balance)}
-          </div>
+          </motion.div>
           <div className="mt-3 px-3 py-1 rounded-full bg-white border border-slate-100 text-[11px] font-bold text-slate-500 shadow-sm">
             {account.type}
           </div>
