@@ -577,9 +577,9 @@ export function AssetsScreen(props: {
     const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
     const total = ratioAssets.reduce((s, b) => s + b.amount, 0)
 
-    // 最小高度阈值（允许字体缩放到最小时仍可显示）
-    // 最小字体 = 34/3 ≈ 11px，加上 padding 和一些余量
-    const minHeight = 28
+    // 最小高度阈值：由于有自适应布局和字体缩放，可以使用较小的最小高度
+    // 最小字体 = 34/3 ≈ 11px，水平布局时只需要容纳一行文字
+    const minHeight = 12
     // 圆角延伸高度（用于填充下方色块圆角处的空缺）
     const cornerExtend = 32
 
