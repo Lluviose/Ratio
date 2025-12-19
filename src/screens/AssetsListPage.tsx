@@ -18,8 +18,9 @@ export function AssetsListPage(props: {
   scrollRef?: Ref<HTMLDivElement>
   onGroupEl?: (id: GroupId, el: HTMLDivElement | null) => void
   isInitialLoad?: boolean
+  listEntryActive?: boolean
 }) {
-  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad } = props
+  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad, listEntryActive } = props
 
   const groups = useMemo(() => {
     const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
@@ -62,25 +63,24 @@ export function AssetsListPage(props: {
               .sort((a, b) => b.total - a.total)
 
             return (
-              <motion.div
-                key={id}
-                ref={(el) => onGroupEl?.(id, el)}
-                className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
-                initial={isInitialLoad ? { opacity: 0, x: 80 } : false}
-                animate={{ opacity: 1, x: 0, y: 0 }}
-                transition={{
-                  duration: isInitialLoad ? 0.5 : 0.3,
-                  delay: isInitialLoad ? 0.05 + i * 0.06 : 0.08 + i * 0.03,
-                  ease: [0.25, 0.46, 0.45, 0.94],
-                }}
-                style={{
-                  background: id === 'debt'
-                    ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.85) 0%, rgba(230, 225, 255, 0.75) 100%)'
-                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)',
-                  boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(255, 255, 255, 0.8) inset',
-                  border: '1px solid rgba(255, 255, 255, 0.6)',
-                }}
-              >
+              <div key={id} ref={(el) => onGroupEl?.(id, el)}>
+                <motion.div
+                  className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
+                  initial={isInitialLoad || listEntryActive ? { opacity: 0, x: 80 } : false}
+                  animate={{ opacity: 1, x: 0, y: 0 }}
+                  transition={{
+                    duration: isInitialLoad || listEntryActive ? 0.5 : 0.3,
+                    delay: isInitialLoad || listEntryActive ? 0.05 + i * 0.06 : 0.08 + i * 0.03,
+                    ease: [0.25, 0.46, 0.45, 0.94],
+                  }}
+                  style={{
+                    background: id === 'debt'
+                      ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.85) 0%, rgba(230, 225, 255, 0.75) 100%)'
+                      : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)',
+                    boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(255, 255, 255, 0.8) inset',
+                    border: '1px solid rgba(255, 255, 255, 0.6)',
+                  }}
+                >
                 <button
                   type="button"
                   className="w-full text-left"
@@ -178,7 +178,8 @@ export function AssetsListPage(props: {
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
-              </motion.div>
+                </motion.div>
+              </div>
             )
           })}
         </div>
