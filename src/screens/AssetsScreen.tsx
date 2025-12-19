@@ -206,9 +206,10 @@ function OverlayBlock(props: {
   }
 
   // 计算实际字体大小
+  // 动态缩放时，百分比和文字使用相同的字体大小
   const percentSize = Math.round(basePercentSize * fontScale)
-  const percentSymbolSize = Math.round(basePercentSymbolSize * fontScale)
-  const labelSize = Math.round(baseLabelSize * fontScale)
+  const percentSymbolSize = fontScale < 1 ? percentSize : Math.round(basePercentSymbolSize * fontScale)
+  const labelSize = fontScale < 1 ? percentSize : Math.round(baseLabelSize * fontScale)
 
   // Content Centering for Bubbles
   const padding = useTransform(scrollIdx, [0, 1], [0, 16])
@@ -251,6 +252,13 @@ function OverlayBlock(props: {
     return useHorizontalLayout ? 'row' : 'column'
   })
 
+  // 水平布局时整体上下居中
+  const ratioAlignItems = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return 'center' // Bubble 阶段居中
+    if (idx < 0.8) return 'flex-start' // Ratio 前期左上对齐
+    return useHorizontalLayout ? 'center' : 'flex-start' // 水平布局时上下居中
+  })
+
   const ratioLabelMarginTop = useTransform(scrollIdx, (idx) => {
     if (idx < 0.8) return 4
     return useHorizontalLayout ? 0 : 4
@@ -259,11 +267,6 @@ function OverlayBlock(props: {
   const ratioLabelMarginLeft = useTransform(scrollIdx, (idx) => {
     if (idx < 0.8) return 0
     return useHorizontalLayout ? 6 : 0
-  })
-
-  const ratioLabelAlignSelf = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 'auto'
-    return useHorizontalLayout ? 'center' : 'auto'
   })
   
   // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
@@ -328,7 +331,7 @@ function OverlayBlock(props: {
                  style={{
                      opacity: percentOpacity,
                      justifyContent: isDebt ? 'center' : 'flex-start',
-                     alignItems: isDebt ? 'center' : flexAlign,
+                     alignItems: isDebt ? 'center' : ratioAlignItems,
                      flexDirection: ratioFlexDirection,
                  }}
             >
@@ -338,7 +341,7 @@ function OverlayBlock(props: {
                  >
                     {block.percent}
                     <motion.span
-                      className="align-top ml-0.5"
+                      className="ml-0.5"
                       style={{ fontSize: ratioPercentSymbolSize }}
                     >%</motion.span>
                 </motion.div>
@@ -348,7 +351,6 @@ function OverlayBlock(props: {
                     fontSize: ratioLabelSize,
                     marginTop: ratioLabelMarginTop,
                     marginLeft: ratioLabelMarginLeft,
-                    alignSelf: ratioLabelAlignSelf,
                   }}
                 >
                   {block.name}
