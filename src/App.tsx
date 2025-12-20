@@ -12,16 +12,36 @@ import { type Account } from './lib/accounts'
 import { useAccounts } from './lib/useAccounts'
 import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
-import { themeOptions, type ThemeId } from './lib/themes'
+import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
 
+function hexToRgbTriplet(hex: string): string | null {
+  const raw = hex.trim().replace(/^#/, '')
+  if (raw.length === 3) {
+    const r = Number.parseInt(raw[0] + raw[0], 16)
+    const g = Number.parseInt(raw[1] + raw[1], 16)
+    const b = Number.parseInt(raw[2] + raw[2], 16)
+    if ([r, g, b].some((v) => Number.isNaN(v))) return null
+    return `${r} ${g} ${b}`
+  }
+  if (raw.length === 6) {
+    const r = Number.parseInt(raw.slice(0, 2), 16)
+    const g = Number.parseInt(raw.slice(2, 4), 16)
+    const b = Number.parseInt(raw.slice(4, 6), 16)
+    if ([r, g, b].some((v) => Number.isNaN(v))) return null
+    return `${r} ${g} ${b}`
+  }
+  return null
+}
+
 export default function App() {
   const [tab, setTab] = useState<TabId>('assets')
   const [view, setView] = useState<ViewId>('main')
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
+  const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
   const [crossPlatformSync, setCrossPlatformSync] = useLocalStorageState<boolean>('ratio.sync', false)
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
@@ -32,7 +52,12 @@ export default function App() {
   const accountOps = useAccountOps()
   const { snapshots, upsertFromAccounts } = useSnapshots()
 
-  const currentTheme = useMemo(() => themeOptions.find((t) => t.id === theme) || themeOptions[0], [theme])
+  const resolvedTheme = theme === 'random' ? randomTheme : theme
+
+  const currentTheme = useMemo(
+    () => realThemeOptions.find((t) => t.id === resolvedTheme) || realThemeOptions[0],
+    [resolvedTheme],
+  )
   const themeColors = currentTheme.colors
 
   const groupedWithTheme = useMemo(() => {
@@ -50,8 +75,12 @@ export default function App() {
   }, [accounts.grouped, themeColors])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
-  }, [theme])
+    document.documentElement.dataset.theme = resolvedTheme
+    document.documentElement.style.setProperty('--primary', themeColors.invest)
+    document.documentElement.style.setProperty('--primary-contrast', pickForegroundColor(themeColors.invest))
+    const rgb = hexToRgbTriplet(themeColors.invest)
+    if (rgb) document.documentElement.style.setProperty('--primary-rgb', rgb)
+  }, [resolvedTheme, themeColors])
 
   useEffect(() => {
     if (accounts.accounts.length === 0) return
@@ -173,7 +202,7 @@ export default function App() {
                         grouped={groupedWithTheme}
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
-                        addButtonTone={theme === 'macke' ? themeColors.debt : undefined}
+                        addButtonTone={themeColors.debt}
                         onNavigate={(next) => setTab(next)}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
@@ -219,9 +248,12 @@ export default function App() {
                       <SettingsScreen
                         themeOptions={themeOptions}
                         theme={theme}
-                        onThemeChange={setTheme}
+                        onThemeChange={(id) => {
+                          if (id === 'random') setRandomTheme(pickRandomThemeId())
+                          setTheme(id)
+                        }}
                         crossPlatformSync={crossPlatformSync}
-                        onCrossPlatformSyncChange={setCrossPlatformSync}
+                        onCrossPlatformSyncChange={setCrossPlatformSync}        
                       />
                     </motion.div>
                   )}

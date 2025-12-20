@@ -1,6 +1,8 @@
 import type { AccountGroupId } from './accounts'
 
-export type ThemeId = 'matisse' | 'matisse2' | 'macke' | 'mondrian' | 'kandinsky' | 'miro'
+export type ThemeId = 'random' | 'matisse' | 'matisse2' | 'macke' | 'mondrian' | 'kandinsky' | 'miro'
+
+export type RealThemeId = Exclude<ThemeId, 'random'>
 
 export type ThemeColors = Record<AccountGroupId, string>
 
@@ -44,7 +46,7 @@ export type ThemeOption = {
   colors: ThemeColors
 }
 
-export const themeOptions: ThemeOption[] = [
+export const realThemeOptions: ThemeOption[] = [
   {
     id: 'matisse',
     name: 'Matisse',
@@ -53,7 +55,7 @@ export const themeOptions: ThemeOption[] = [
       invest: '#ff8b73',
       fixed: '#26c6da',
       receivable: '#c7b5ff',
-      debt: '#57534e',
+      debt: '#d6d3d1',
     },
   },
   {
@@ -64,7 +66,7 @@ export const themeOptions: ThemeOption[] = [
       invest: '#6366f1',
       fixed: '#a5b4fc',
       receivable: '#67e8f9',
-      debt: '#475569',
+      debt: '#e0e7ff',
     },
   },
   {
@@ -85,8 +87,8 @@ export const themeOptions: ThemeOption[] = [
       liquid: '#eab308',
       invest: '#ef4444',
       fixed: '#2563eb',
-      receivable: '#94a3b8',
-      debt: '#171717',
+      receivable: '#e2e8f0',
+      debt: '#111827',
     },
   },
   {
@@ -96,8 +98,8 @@ export const themeOptions: ThemeOption[] = [
       liquid: '#f97316',
       invest: '#ef4444',
       fixed: '#8b5cf6',
-      receivable: '#3b82f6',
-      debt: '#581c87',
+      receivable: '#c4b5fd',
+      debt: '#ede9fe',
     },
   },
   {
@@ -111,4 +113,33 @@ export const themeOptions: ThemeOption[] = [
       debt: '#1f2937',
     },
   },
+]
+
+export const REAL_THEME_IDS: RealThemeId[] = [
+  'matisse',
+  'matisse2',
+  'macke',
+  'mondrian',
+  'kandinsky',
+  'miro',
+]
+
+export function pickRandomThemeId(): RealThemeId {
+  const idx = Math.floor(Math.random() * REAL_THEME_IDS.length)
+  return REAL_THEME_IDS[idx] ?? REAL_THEME_IDS[0]
+}
+
+export const themeOptions: ThemeOption[] = [
+  {
+    id: 'random',
+    name: 'Random',
+    colors: realThemeOptions[0]?.colors ?? {
+      liquid: '#f59e0b',
+      invest: '#ff8b73',
+      fixed: '#26c6da',
+      receivable: '#c7b5ff',
+      debt: '#d6d3d1',
+    },
+  },
+  ...realThemeOptions,
 ]

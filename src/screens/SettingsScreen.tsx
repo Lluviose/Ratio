@@ -18,6 +18,8 @@ export function SettingsScreen(props: {
     onCrossPlatformSyncChange,
   } = props
 
+  const randomSwatches = themeOptions.filter((t) => t.id !== 'random').map((t) => t.colors.invest)
+
   return (
     <motion.div 
       className="stack"
@@ -56,9 +58,11 @@ export function SettingsScreen(props: {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div className="swatches" aria-hidden="true">
-                      {['liquid', 'invest', 'fixed', 'receivable', 'debt'].map((key) => (
-                        <span key={key} className="swatch" style={{ background: t.colors[key as keyof typeof t.colors] }} />
-                      ))}
+                      {(t.id === 'random' ? randomSwatches : [t.colors.liquid, t.colors.invest, t.colors.fixed]).map(
+                        (color, idx) => (
+                          <span key={`${t.id}-${idx}`} className="swatch" style={{ background: color }} />
+                        ),
+                      )}
                     </div>
                     <div style={{ fontWeight: 900, fontSize: 14 }}>{t.name}</div>
                   </div>

@@ -9,6 +9,7 @@
 
   --primary: #4f46e5;
   --primary-contrast: #ffffff;
+  --primary-rgb: 79 70 229;
 
   --radius-xl: 24px;
   --radius-lg: 20px;
@@ -459,7 +460,7 @@ a {
 
 .checkOn {
   border-color: var(--primary);
-  background: rgba(91, 107, 255, 0.12);
+  background: rgb(var(--primary-rgb) / 0.12);
 }
 
 .toggle {
@@ -485,8 +486,8 @@ a {
 }
 
 .toggleOn {
-  background: rgba(91, 107, 255, 0.18);
-  border-color: rgba(91, 107, 255, 0.35);
+  background: rgb(var(--primary-rgb) / 0.18);
+  border-color: rgb(var(--primary-rgb) / 0.35);
 }
 
 .toggleOn .toggleKnob {
@@ -527,7 +528,7 @@ a {
 .select:focus {
   border-color: var(--primary);
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(91, 107, 255, 0.15);
+  box-shadow: 0 0 0 4px rgb(var(--primary-rgb) / 0.15);
   transform: translateY(-1px);
 }
 
@@ -540,18 +541,18 @@ a {
   font-weight: 800;
   font-size: 16px;
   cursor: pointer;
-  box-shadow: 0 8px 20px -4px rgba(91, 107, 255, 0.4);
+  box-shadow: 0 8px 20px -4px rgb(var(--primary-rgb) / 0.4);
   transition: all 0.2s var(--ease-out);
 }
 
 .primaryBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -6px rgba(91, 107, 255, 0.5);
+  box-shadow: 0 12px 24px -6px rgb(var(--primary-rgb) / 0.5);
 }
 
 .primaryBtn:active {
   transform: translateY(0);
-  box-shadow: 0 4px 12px -4px rgba(91, 107, 255, 0.3);
+  box-shadow: 0 4px 12px -4px rgb(var(--primary-rgb) / 0.3);
 }
 
 button:disabled {
