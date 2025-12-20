@@ -103,8 +103,10 @@ function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: n
   return changes.slice(0, limit)
 }
 
-export function TrendScreen(props: { snapshots: Snapshot[] }) {
-  const { snapshots } = props
+import { type ThemeColors } from '../lib/themes'
+
+export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors }) {
+  const { snapshots, colors } = props
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
 
@@ -171,25 +173,25 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
       <div style={{ marginTop: 10 }}>
         <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
         <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>分组构成</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>流动资金</div>
-          <div>{formatCny(p.cash)}</div>
+          <div style={{ color: colors.liquid }}>{formatCny(p.cash)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>投资</div>
-          <div>{formatCny(p.invest)}</div>
+          <div style={{ color: colors.invest }}>{formatCny(p.invest)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>固定资产</div>
-          <div>{formatCny(p.fixed)}</div>
+          <div style={{ color: colors.fixed }}>{formatCny(p.fixed)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>应收款</div>
-          <div>{formatCny(p.receivable)}</div>
+          <div style={{ color: colors.receivable }}>{formatCny(p.receivable)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>负债</div>
-          <div style={{ opacity: 0.75 }}>{formatDelta(-p.debt)}</div>
+          <div style={{ opacity: 0.75, color: colors.debt }}>{formatDelta(-p.debt)}</div>
         </div>
       </div>
     )
@@ -257,7 +259,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
       >
         <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.date}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-             <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#47d16a' }} />
+             <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
              <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatCny(p.cash)}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -330,7 +332,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
                   <Line
                     type="monotone"
                     dataKey="debt"
-                    stroke="rgba(11, 15, 26, 0.2)"
+                    stroke={colors.debt}
                     strokeWidth={3}
                     dot={false}
                     activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
@@ -343,7 +345,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
                   <Line
                     type="monotone"
                     dataKey="cash"
-                    stroke="#47d16a"
+                    stroke={colors.liquid}
                     strokeWidth={4}
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
@@ -353,7 +355,7 @@ export function TrendScreen(props: { snapshots: Snapshot[] }) {
                   <Line
                     type="monotone"
                     dataKey="invest"
-                    stroke="var(--primary)"
+                    stroke={colors.invest}
                     strokeWidth={4}
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}

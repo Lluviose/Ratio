@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
 import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Account, AccountGroup, AccountTypeId } from '../lib/accounts'
+import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
@@ -982,6 +982,17 @@ export function AssetsScreen(props: {
   // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
   const assetFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
+  const selectedThemeColor = useMemo(() => {
+    if (!selectedType) return 'var(--text)'
+    try {
+      const opt = getAccountTypeOption(selectedType)
+      const group = grouped.groupCards.find((g) => g.group.id === opt.groupId)
+      return group?.group.tone ?? 'var(--text)'
+    } catch {
+      return 'var(--text)'
+    }
+  }, [selectedType, grouped.groupCards])
+
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
@@ -1104,7 +1115,7 @@ export function AssetsScreen(props: {
             key={`add-${animationKey}`}
             type="button"
             onClick={onAddAccount}
-            className="w-10 h-10 rounded-full bg-[#eae9ff] text-[#4f46e5] flex items-center justify-center shadow-sm"
+            className="iconBtn iconBtnPrimary shadow-sm"
             aria-label="add"
             initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
@@ -1216,6 +1227,7 @@ export function AssetsScreen(props: {
             accounts={accounts}
             getIcon={getIcon}
             hideAmounts={hideAmounts}
+            themeColor={selectedThemeColor}
             onBack={() => {
               setIsReturningFromDetail(true)
               setAnimationKey(k => k + 1)

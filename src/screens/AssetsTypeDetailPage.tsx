@@ -11,8 +11,9 @@ export function AssetsTypeDetailPage(props: {
   onBack: () => void
   onEditAccount: (account: Account) => void
   hideAmounts: boolean
+  themeColor: string
 }) {
-  const { type, accounts, onBack, onEditAccount, hideAmounts } = props
+  const { type, accounts, onBack, onEditAccount, hideAmounts, themeColor } = props
 
   const info = useMemo(() => {
     if (!type) return null
@@ -55,7 +56,7 @@ export function AssetsTypeDetailPage(props: {
             <ChevronLeft size={20} strokeWidth={2.5} />
           </motion.button>
           <div className="flex-1 min-w-0">
-            <div className="font-black text-[15px] truncate" style={{ color: info.group.tone }}>
+            <div className="font-black text-[15px] truncate" style={{ color: themeColor }}>
               {info.opt.name}
             </div>
             <div className="text-xs font-bold text-[var(--muted-text)] truncate">{info.group.name}</div>
@@ -79,7 +80,7 @@ export function AssetsTypeDetailPage(props: {
           <div className="px-4 py-4 flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-2xl flex items-center justify-center border border-[var(--hairline)]"
-              style={{ background: info.group.tone, color: 'rgba(0,0,0,0.75)' }}
+              style={{ background: themeColor, color: 'rgba(0,0,0,0.75)' }}
             >
               {createElement(info.opt.icon, { size: 18 })}
             </div>

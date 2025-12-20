@@ -1,10 +1,11 @@
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, createElement, useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, MoreHorizontal, Pencil, Plus, Save, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import { formatCny } from '../lib/format'
-import type { Account } from '../lib/accounts'
+import { type Account, getAccountTypeOption } from '../lib/accounts'
+import type { ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
 
 type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'
@@ -52,6 +53,7 @@ export function AccountDetailSheet(props: {
   onTransfer: (fromId: string, toId: string, amount: number) => void
   onDelete: (id: string) => void
   onAddOp: (op: AccountOpInput) => void
+  colors: ThemeColors
 }) {
   const {
     open,
@@ -66,6 +68,7 @@ export function AccountDetailSheet(props: {
     onTransfer,
     onDelete,
     onAddOp,
+    colors,
   } = props
 
   const account = useMemo(() => {
@@ -102,6 +105,16 @@ export function AccountDetailSheet(props: {
     setTransferPeerId('')
     setTransferAmount('')
   }, [account, initialAction, open])
+
+  const accountTypeInfo = useMemo(() => {
+    if (!account) return null
+    const opt = getAccountTypeOption(account.type)
+    if (!opt) return null
+    return {
+      opt,
+      tone: colors[opt.groupId],
+    }
+  }, [account, colors])
 
   const selectablePeers = useMemo(() => {
     if (!accountId) return []
@@ -266,8 +279,32 @@ export function AccountDetailSheet(props: {
               <div style={{ fontSize: 24, fontWeight: 950, marginTop: 4 }}>{formatCny(account.balance)}</div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>{account.type}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {accountTypeInfo ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: 8,
+                      background: accountTypeInfo.tone,
+                      color: 'rgba(0,0,0,0.75)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {createElement(accountTypeInfo.opt.icon, { size: 14, strokeWidth: 2.5 })}
+                  </div>
+                  <div className="muted" style={{ fontSize: 13, fontWeight: 850 }}>
+                    {accountTypeInfo.opt.name}
+                  </div>
+                </div>
+              ) : (
+                <div className="muted" style={{ fontSize: 13, fontWeight: 850 }}>
+                  {account.type}
+                </div>
+              )}
               <motion.button
                 type="button"
                 className="iconBtn hover:bg-[var(--hairline)] transition-colors"

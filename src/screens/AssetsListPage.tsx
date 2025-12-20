@@ -100,7 +100,7 @@ export function AssetsListPage(props: {
                         transition={{ duration: 0.3 }}
                         style={{
                            background: id === 'debt'
-                            ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.85) 0%, rgba(230, 225, 255, 0.75) 100%)'
+                            ? `linear-gradient(135deg, ${g.group.tone}D9 0%, ${g.group.tone}BF 100%)`
                             : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)'
                         }}
                     />
@@ -112,7 +112,7 @@ export function AssetsListPage(props: {
                         transition={{ duration: 0.3 }}
                         style={{
                            background: id === 'debt'
-                            ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.95) 0%, rgba(230, 225, 255, 0.9) 100%)'
+                            ? `linear-gradient(135deg, ${g.group.tone}F2 0%, ${g.group.tone}E6 100%)`
                             : `linear-gradient(135deg, ${g.group.tone}20 0%, ${g.group.tone}10 100%), linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0.85))`
                         }}
                     />

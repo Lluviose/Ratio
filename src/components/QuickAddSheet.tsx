@@ -28,7 +28,7 @@ export function QuickAddSheet(props: {
             onClose()
           }}
         >
-          <span className="actionIcon" style={{ background: 'rgba(245, 209, 138, 0.55)', color: '#926c2a' }}>
+          <span className="actionIcon" style={{ background: 'rgba(91, 107, 255, 0.12)', color: 'var(--primary)' }}>
             <Landmark size={20} strokeWidth={2.5} />
           </span>
           <span className="actionText">

@@ -56,8 +56,8 @@ export function SettingsScreen(props: {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div className="swatches" aria-hidden="true">
-                      {t.swatches.map((s) => (
-                        <span key={s} className="swatch" style={{ background: s }} />
+                      {['liquid', 'invest', 'fixed', 'receivable', 'debt'].map((key) => (
+                        <span key={key} className="swatch" style={{ background: t.colors[key as keyof typeof t.colors] }} />
                       ))}
                     </div>
                     <div style={{ fontWeight: 900, fontSize: 14 }}>{t.name}</div>

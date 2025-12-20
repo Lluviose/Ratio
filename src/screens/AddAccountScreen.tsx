@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
+import { type ThemeColors } from '../lib/themes'
 
 export function AddAccountScreen(props: {
   onBack: () => void
   onPick: (type: AccountTypeId, customName?: string) => void
+  colors: ThemeColors
 }) {
-  const { onBack, onPick } = props
+  const { onBack, onPick, colors } = props
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
   const [customName, setCustomName] = useState('')
 
@@ -19,28 +21,10 @@ export function AddAccountScreen(props: {
     debt: accountTypeOptions.filter((t) => t.groupId === 'debt'),
   } as const
 
-  // Icon colors by group
-  const iconColors: Record<AccountGroupId, string> = {
-    liquid: '#e09e43',
-    invest: '#f04638',
-    fixed: '#3949c7',
-    receivable: '#6a78ff',
-    debt: '#8b7fc7',
-  }
-
-  // Icon background colors (lighter versions)
-  const iconBgColors: Record<AccountGroupId, string> = {
-    liquid: '#fef3c7',
-    invest: '#fee2e2',
-    fixed: '#e0e7ff',
-    receivable: '#e0e7ff',
-    debt: '#ede9fe',
-  }
-
   const header = (title: string, tone: string) => (
     <div 
       className="px-4 py-3 rounded-2xl font-black text-sm"
-      style={{ background: tone, color: tone === '#3949c7' ? 'white' : 'rgba(0,0,0,0.85)' }}
+      style={{ background: tone, color: 'rgba(0,0,0,0.75)' }}
     >
       {title}
     </div>
@@ -49,8 +33,7 @@ export function AddAccountScreen(props: {
   const renderGroup = (groupId: AccountGroupId, index: number) => {
     const group = accountGroups[groupId]
     const items = grouped[groupId]
-    const iconColor = iconColors[groupId]
-    const iconBg = iconBgColors[groupId]
+    const tone = colors[groupId]
 
     return (
       <motion.div 
@@ -59,7 +42,7 @@ export function AddAccountScreen(props: {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.1 }}
       >
-        {header(group.name, group.tone)}
+        {header(group.name, tone)}
         <div className="flex flex-col mt-3 gap-2">
           {items.map((t, i) => {
             const Icon = t.icon
@@ -79,7 +62,7 @@ export function AddAccountScreen(props: {
               >
                 <span 
                   className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
-                  style={{ background: iconBg, color: iconColor }}
+                  style={{ background: tone, color: 'rgba(0,0,0,0.75)' }}
                 >
                   <Icon size={20} strokeWidth={2.5} />
                 </span>

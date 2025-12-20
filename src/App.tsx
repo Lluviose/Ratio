@@ -1,19 +1,19 @@
 import { ChevronLeft } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { AssetsScreen } from './screens/AssetsScreen.tsx'
-import { TourScreen } from './screens/TourScreen.tsx'
-import { SettingsScreen } from './screens/SettingsScreen.tsx'
-import { StatsScreen } from './screens/StatsScreen.tsx'
-import { TrendScreen } from './screens/TrendScreen.tsx'
-import { AccountDetailSheet } from './components/AccountDetailSheet.tsx'
-import { AddAccountScreen } from './screens/AddAccountScreen.tsx'
-import { type Account } from './lib/accounts.ts'
-import { useAccounts } from './lib/useAccounts.ts'
-import { useSnapshots } from './lib/useSnapshots.ts'
-import { useAccountOps } from './lib/useAccountOps.ts'
-import { themeOptions, type ThemeId } from './lib/themes.ts'
-import { useLocalStorageState } from './lib/useLocalStorageState.ts'
+import { AssetsScreen } from './screens/AssetsScreen'
+import { TourScreen } from './screens/TourScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
+import { StatsScreen } from './screens/StatsScreen'
+import { TrendScreen } from './screens/TrendScreen'
+import { AccountDetailSheet } from './components/AccountDetailSheet'
+import { AddAccountScreen } from './screens/AddAccountScreen'
+import { type Account } from './lib/accounts'
+import { useAccounts } from './lib/useAccounts'
+import { useSnapshots } from './lib/useSnapshots'
+import { useAccountOps } from './lib/useAccountOps'
+import { themeOptions, type ThemeId } from './lib/themes'
+import { useLocalStorageState } from './lib/useLocalStorageState'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
@@ -31,6 +31,23 @@ export default function App() {
   const accounts = useAccounts()
   const accountOps = useAccountOps()
   const { snapshots, upsertFromAccounts } = useSnapshots()
+
+  const currentTheme = useMemo(() => themeOptions.find((t) => t.id === theme) || themeOptions[0], [theme])
+  const themeColors = currentTheme.colors
+
+  const groupedWithTheme = useMemo(() => {
+    const cards = accounts.grouped.groupCards.map((c) => ({
+      ...c,
+      group: {
+        ...c.group,
+        tone: themeColors[c.group.id],
+      },
+    }))
+    return {
+      ...accounts.grouped,
+      groupCards: cards,
+    }
+  }, [accounts.grouped, themeColors])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -93,6 +110,7 @@ export default function App() {
             >
               <AddAccountScreen
                 onBack={() => setView('main')}
+                colors={themeColors}
                 onPick={(type, customName) => {
                   const next = accounts.addAccount(type, customName)
                   setView('main')
@@ -152,7 +170,7 @@ export default function App() {
                       style={{ height: '100%' }}
                     >
                       <AssetsScreen
-                        grouped={accounts.grouped}
+                        grouped={groupedWithTheme}
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
                         onNavigate={(next) => setTab(next)}
@@ -173,7 +191,7 @@ export default function App() {
                       transition={{ duration: 0.2 }}
                       style={{ height: '100%' }}
                     >
-                      <TrendScreen snapshots={snapshots} />
+                      <TrendScreen snapshots={snapshots} colors={themeColors} />
                     </motion.div>
                   )}
                   {tab === 'stats' && (
@@ -185,7 +203,7 @@ export default function App() {
                       transition={{ duration: 0.2 }}
                       style={{ height: '100%' }}
                     >
-                      <StatsScreen snapshots={snapshots} />
+                      <StatsScreen snapshots={snapshots} colors={themeColors} />
                     </motion.div>
                   )}
                   {tab === 'settings' && (
@@ -226,6 +244,7 @@ export default function App() {
                 onTransfer={accounts.transfer}
                 onDelete={accounts.deleteAccount}
                 onAddOp={accountOps.addOp}
+                colors={themeColors}
               />
             </motion.div>
           )}

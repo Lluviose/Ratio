@@ -3,6 +3,7 @@ import { Bar, BarChart, Cell, Tooltip, XAxis, YAxis } from 'recharts'
 import { motion } from 'framer-motion'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
+import { type ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
 
 type RangeId = '5w' | '6m' | '1y' | '4y'
@@ -29,8 +30,8 @@ function formatDelta(value: number) {
   return text
 }
 
-export function StatsScreen(props: { snapshots: Snapshot[] }) {
-  const { snapshots } = props
+export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors }) {
+  const { snapshots, colors } = props
   const [range, setRange] = useState<RangeId>('6m')
 
   const chartRef = useRef<HTMLDivElement | null>(null)
@@ -162,7 +163,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
         <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.label}</div>
         {p.kind === 'total' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
             <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.delta)}</div>
           </div>
         ) : (
@@ -173,6 +174,22 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
         )}
       </div>
     )
+  }
+
+  const getBarColor = (p: WaterfallPoint) => {
+    if (p.kind === 'total') return 'rgba(11, 15, 26, 0.18)'
+    // Map label to color key
+    const map: Record<string, keyof ThemeColors> = {
+      '流动资金': 'liquid',
+      '投资': 'invest',
+      '固定资产': 'fixed',
+      '应收款': 'receivable',
+      '负债': 'debt'
+    }
+    if (p.label in map) {
+      return colors[map[p.label]]
+    }
+    return p.delta >= 0 ? '#47d16a' : '#ff6b57'
   }
 
   return (
@@ -260,7 +277,7 @@ export function StatsScreen(props: { snapshots: Snapshot[] }) {
                 animationDuration={1000}
               >
                 {analysis.points.map((p, i) => {
-                  const fill = p.kind === 'total' ? 'rgba(11, 15, 26, 0.18)' : p.delta >= 0 ? '#47d16a' : '#ff6b57'
+                  const fill = getBarColor(p)
                   return <Cell key={`${p.label}-${i}`} fill={fill} />
                 })}
               </Bar>
