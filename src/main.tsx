@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
+import './pwa'
 
 // Prevent gesture zooming (pinch-to-zoom)
 document.addEventListener('gesturestart', function(e) {
