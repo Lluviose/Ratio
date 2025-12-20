@@ -15,7 +15,16 @@ export function useLocalStorageState<T>(key: string, initialValue: T) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(key, JSON.stringify(value))
+      const nextRaw = JSON.stringify(value)
+      const prevRaw = localStorage.getItem(key)
+      if (prevRaw === nextRaw) return
+
+      localStorage.setItem(key, nextRaw)
+      window.dispatchEvent(
+        new CustomEvent('ratio:storage-write', {
+          detail: { key },
+        }),
+      )
     } catch {
       return
     }

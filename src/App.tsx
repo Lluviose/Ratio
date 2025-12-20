@@ -14,6 +14,7 @@ import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
 import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
+import { useWebDavBackup } from './lib/useWebDavBackup'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
@@ -42,8 +43,15 @@ export default function App() {
   const [view, setView] = useState<ViewId>('main')
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
   const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
-  const [crossPlatformSync, setCrossPlatformSync] = useLocalStorageState<boolean>('ratio.sync', false)
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
+  const [webdavEnabled, setWebdavEnabled] = useLocalStorageState<boolean>('ratio.webdav.enabled', false)
+  const [webdavBaseUrl, setWebdavBaseUrl] = useLocalStorageState<string>(
+    'ratio.webdav.baseUrl',
+    'https://dav.jianguoyun.com/dav/',
+  )
+  const [webdavUsername, setWebdavUsername] = useLocalStorageState<string>('ratio.webdav.username', '')
+  const [webdavPassword, setWebdavPassword] = useLocalStorageState<string>('ratio.webdav.password', '')
+  const [webdavPath, setWebdavPath] = useLocalStorageState<string>('ratio.webdav.path', 'Apps/ratio/ratio-backup.json')
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
@@ -51,6 +59,13 @@ export default function App() {
   const accounts = useAccounts()
   const accountOps = useAccountOps()
   const { snapshots, upsertFromAccounts } = useSnapshots()
+  const webdavBackup = useWebDavBackup({
+    enabled: webdavEnabled,
+    baseUrl: webdavBaseUrl,
+    username: webdavUsername,
+    password: webdavPassword,
+    path: webdavPath,
+  })
 
   const resolvedTheme = theme === 'random' ? randomTheme : theme
 
@@ -252,8 +267,30 @@ export default function App() {
                           if (id === 'random') setRandomTheme(pickRandomThemeId())
                           setTheme(id)
                         }}
-                        crossPlatformSync={crossPlatformSync}
-                        onCrossPlatformSyncChange={setCrossPlatformSync}        
+                        webdavEnabled={webdavEnabled}
+                        onWebdavEnabledChange={setWebdavEnabled}
+                        webdavBaseUrl={webdavBaseUrl}
+                        onWebdavBaseUrlChange={setWebdavBaseUrl}
+                        webdavUsername={webdavUsername}
+                        onWebdavUsernameChange={setWebdavUsername}
+                        webdavPassword={webdavPassword}
+                        onWebdavPasswordChange={setWebdavPassword}
+                        webdavPath={webdavPath}
+                        onWebdavPathChange={setWebdavPath}
+                        webdavStatus={webdavBackup.status}
+                        onWebdavBackupNow={() => void webdavBackup.backupNow()}
+                        onWebdavRestoreFromCloud={async () => {
+                          const ok = window.confirm('从坚果云恢复会覆盖当前设备上的所有数据，是否继续？')
+                          if (!ok) return
+                          try {
+                            const res = await webdavBackup.restoreFromCloud()
+                            window.alert(`已恢复 ${res.restoredKeys.length} 项数据，页面将自动刷新。`)
+                            window.location.reload()
+                          } catch (error) {
+                            const msg = error instanceof Error ? error.message : '恢复失败'
+                            window.alert(msg)
+                          }
+                        }}
                       />
                     </motion.div>
                   )}
