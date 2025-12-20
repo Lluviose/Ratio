@@ -52,6 +52,13 @@ export function AssetsListPage(props: {
 
             const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
             const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().slice(-1)[0] : undefined
+            
+            // Helper to get a tinted background for expanded state
+            // We use the group tone but make it very subtle/light for the background
+            // Since we can't easily manipulate hex here without a lib, we'll use an overlay approach
+            // or just assume we can use the tone with opacity if it were RGB. 
+            // Since tone is likely Hex, let's use a simple opacity overlay trick or just use the tone directly if it looks good.
+            // Let's try an overlay div that fades in.
 
             const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
               .map((type) => {
@@ -79,16 +86,41 @@ export function AssetsListPage(props: {
                   ease: [0.2, 0, 0, 1],
                 }}
                 style={{
-                  background: id === 'debt'
-                    ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.85) 0%, rgba(230, 225, 255, 0.75) 100%)'
-                    : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)',
+                  // Removed static background, moved to children
                   boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(255, 255, 255, 0.8) inset',
                   border: '1px solid rgba(255, 255, 255, 0.6)',
                 }}
               >
+                {/* Animated Background Layer */}
+                <div className="absolute inset-0 z-0">
+                    {/* Default White/Glass Background */}
+                    <motion.div 
+                        className="absolute inset-0"
+                        animate={{ opacity: isExpanded ? 0 : 1 }}
+                        transition={{ duration: 0.3 }}
+                        style={{
+                           background: id === 'debt'
+                            ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.85) 0%, rgba(230, 225, 255, 0.75) 100%)'
+                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)'
+                        }}
+                    />
+                    {/* Expanded Tinted Background */}
+                    <motion.div 
+                        className="absolute inset-0"
+                        initial={false}
+                        animate={{ opacity: isExpanded ? 1 : 0 }}
+                        transition={{ duration: 0.3 }}
+                        style={{
+                           background: id === 'debt'
+                            ? 'linear-gradient(135deg, rgba(217, 212, 246, 0.95) 0%, rgba(230, 225, 255, 0.9) 100%)'
+                            : `linear-gradient(135deg, ${g.group.tone}20 0%, ${g.group.tone}10 100%), linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0.85))`
+                        }}
+                    />
+                </div>
+
                 <button
                   type="button"
-                  className="w-full text-left"
+                  className="relative z-10 w-full text-left"
                   onClick={() => onToggleGroup(id)}
                   aria-expanded={isExpanded}
                 >
