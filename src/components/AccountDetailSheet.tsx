@@ -265,28 +265,18 @@ export function AccountDetailSheet(props: {
         transition={{ duration: 0.3 }}
       >
         {/* Header - Balance Display */}
-        <AnimatePresence>
-          {action === 'none' && (
-            <motion.div
-              className="flex flex-col items-center py-6 bg-slate-50/50 rounded-[32px] border border-slate-100/50 overflow-hidden"
-              initial={{ opacity: 0, height: 0, scale: 0.95 }}
-              animate={{ opacity: 1, height: 'auto', scale: 1 }}
-              exit={{ opacity: 0, height: 0, scale: 0.95 }}
-              transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-            >
-              <div className="text-[12px] font-bold text-slate-400 mb-1 tracking-wider uppercase">当前余额</div>
-              <motion.div
-                className="text-[40px] font-black text-slate-900 tracking-tight leading-none"
-                layoutId={`account-balance-${account.id}`}
-              >
-                {formatCny(account.balance)}
-              </motion.div>
-              <div className="mt-3 px-3 py-1 rounded-full bg-white border border-slate-100 text-[11px] font-bold text-slate-500 shadow-sm">
-                {account.type}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="flex flex-col items-center py-6 bg-slate-50/50 rounded-[32px] border border-slate-100/50">
+          <div className="text-[12px] font-bold text-slate-400 mb-1 tracking-wider uppercase">当前余额</div>
+          <motion.div 
+            className="text-[40px] font-black text-slate-900 tracking-tight leading-none"
+            layoutId={`account-balance-${account.id}`}
+          >
+            {formatCny(account.balance)}
+          </motion.div>
+          <div className="mt-3 px-3 py-1 rounded-full bg-white border border-slate-100 text-[11px] font-bold text-slate-500 shadow-sm">
+            {account.type}
+          </div>
+        </div>
 
         {/* Action Forms Area (Moved up for better keyboard experience) */}
         <AnimatePresence mode="wait">
