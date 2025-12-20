@@ -71,11 +71,11 @@ export const themeOptions: ThemeOption[] = [
     id: 'macke',
     name: 'Macke',
     colors: {
-      liquid: '#d97706',
+      liquid: '#f5d18a',
       invest: '#ff6b57',
       fixed: '#3949c7',
       receivable: '#9ba9ff',
-      debt: '#312e81',
+      debt: '#d9d4f6',
     },
   },
   {

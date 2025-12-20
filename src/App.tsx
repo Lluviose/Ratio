@@ -173,6 +173,7 @@ export default function App() {
                         grouped={groupedWithTheme}
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
+                        addButtonTone={theme === 'macke' ? themeColors.debt : undefined}
                         onNavigate={(next) => setTab(next)}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)

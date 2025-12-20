@@ -424,8 +424,9 @@ export function AssetsScreen(props: {
   onAddAccount: () => void
   onNavigate: (tab: 'trend' | 'stats' | 'settings') => void
   skipInitialAnimation?: boolean
+  addButtonTone?: string
 }) {
-  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate, skipInitialAnimation = false } = props
+  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate, skipInitialAnimation = false, addButtonTone } = props
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -460,6 +461,11 @@ export function AssetsScreen(props: {
 
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
+
+  const addButtonStyle = useMemo(() => {
+    if (!addButtonTone) return undefined
+    return { background: addButtonTone, color: pickForegroundColor(addButtonTone) }
+  }, [addButtonTone])
 
   const scrollToPage = (index: number) => {
     const el = scrollerRef.current
@@ -1114,6 +1120,7 @@ export function AssetsScreen(props: {
             type="button"
             onClick={onAddAccount}
             className="iconBtn iconBtnPrimary shadow-sm"
+            style={addButtonStyle}
             aria-label="add"
             initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
