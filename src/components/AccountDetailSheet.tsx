@@ -5,7 +5,7 @@ import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import { formatCny } from '../lib/format'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
-import type { ThemeColors } from '../lib/themes'
+import { pickForegroundColor, type ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
 
 type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'
@@ -288,7 +288,7 @@ export function AccountDetailSheet(props: {
                       height: 24,
                       borderRadius: 8,
                       background: accountTypeInfo.tone,
-                      color: 'rgba(0,0,0,0.75)',
+                      color: pickForegroundColor(accountTypeInfo.tone),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

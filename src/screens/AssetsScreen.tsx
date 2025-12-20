@@ -3,6 +3,7 @@ import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide
 import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
+import { pickForegroundColor } from '../lib/themes'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
@@ -31,7 +32,6 @@ type Block = {
   tone: string
   amount: number
   percent: number
-  darkText: boolean
   hasCard: boolean
 }
 
@@ -184,7 +184,7 @@ function OverlayBlock(props: {
     return lerp(ratioCorner.br, listCorner.br, Math.min(1, Math.max(0, idx - 1)))
   })
 
-  const textColor = block.darkText ? 'rgba(11, 15, 26, 0.92)' : 'rgba(255,255,255,0.96)'
+  const textColor = pickForegroundColor(block.tone)
 
   // 计算文字布局和字体缩放
   // 基础字体大小
@@ -522,7 +522,6 @@ export function AssetsScreen(props: {
           tone: g.group.tone,
           amount: g.total,
           percent: pct(g.total, assetsTotal),
-          darkText: id === 'liquid' || id === 'receivable',
           hasCard: g.accountsCount > 0,
         } satisfies Block
       })
@@ -537,7 +536,6 @@ export function AssetsScreen(props: {
           tone: debtRaw.group.tone,
           amount: debtRaw.total,
           percent: pct(debtRaw.total, assetsTotal),
-          darkText: true,
           hasCard: debtRaw.accountsCount > 0,
         }
       : null

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
-import { type ThemeColors } from '../lib/themes'
+import { pickForegroundColor, type ThemeColors } from '../lib/themes'
 
 export function AddAccountScreen(props: {
   onBack: () => void
@@ -24,7 +24,7 @@ export function AddAccountScreen(props: {
   const header = (title: string, tone: string) => (
     <div 
       className="px-4 py-3 rounded-2xl font-black text-sm"
-      style={{ background: tone, color: 'rgba(0,0,0,0.75)' }}
+      style={{ background: tone, color: pickForegroundColor(tone) }}
     >
       {title}
     </div>
@@ -62,7 +62,7 @@ export function AddAccountScreen(props: {
               >
                 <span 
                   className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
-                  style={{ background: tone, color: 'rgba(0,0,0,0.75)' }}
+                  style={{ background: tone, color: pickForegroundColor(tone) }}
                 >
                   <Icon size={20} strokeWidth={2.5} />
                 </span>

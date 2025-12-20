@@ -3,6 +3,7 @@ import { ChevronLeft } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { formatCny } from '../lib/format'
 import { accountGroups, getAccountTypeOption, type Account, type AccountTypeId } from '../lib/accounts'
+import { pickForegroundColor } from '../lib/themes'
 
 export function AssetsTypeDetailPage(props: {
   type: AccountTypeId | null
@@ -80,7 +81,7 @@ export function AssetsTypeDetailPage(props: {
           <div className="px-4 py-4 flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-2xl flex items-center justify-center border border-[var(--hairline)]"
-              style={{ background: themeColor, color: 'rgba(0,0,0,0.75)' }}
+              style={{ background: themeColor, color: pickForegroundColor(themeColor) }}
             >
               {createElement(info.opt.icon, { size: 18 })}
             </div>

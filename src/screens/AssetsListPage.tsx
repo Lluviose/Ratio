@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { type ComponentType, type Ref, useMemo } from 'react'
 import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
+import { pickForegroundColor } from '../lib/themes'
 import type { GroupedAccounts } from './AssetsScreen'
 
 type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
@@ -186,7 +187,7 @@ export function AssetsListPage(props: {
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div
                                     className="w-9 h-9 rounded-2xl flex items-center justify-center border border-black/5"
-                                    style={{ background: g.group.tone, color: 'rgba(0,0,0,0.78)' }}
+                                    style={{ background: g.group.tone, color: pickForegroundColor(g.group.tone) }}
                                   >
                                     <Icon size={18} />
                                   </div>
