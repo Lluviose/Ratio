@@ -275,7 +275,39 @@ export function AccountDetailSheet(props: {
           </div>
         </div>
 
-        {/* Action Forms Area (Moved up for better keyboard experience) */}
+        {/* Quick Actions Grid */}
+        <div className="grid grid-cols-2 gap-3">
+          <QuickActionBtn 
+            icon={Plus} 
+            label="增减金额" 
+            active={action === 'adjust'} 
+            onClick={() => setAction('adjust')} 
+            color="#4f46e5"
+          />
+          <QuickActionBtn 
+            icon={ArrowLeftRight} 
+            label="账户转账" 
+            active={action === 'transfer'} 
+            onClick={() => setAction('transfer')} 
+            color="#0891b2"
+          />
+          <QuickActionBtn 
+            icon={Pencil} 
+            label="重命名" 
+            active={action === 'rename'} 
+            onClick={() => setAction('rename')} 
+            color="#924e00"
+          />
+          <QuickActionBtn 
+            icon={Save} 
+            label="修改余额" 
+            active={action === 'set_balance'} 
+            onClick={() => setAction('set_balance')} 
+            color="#059669"
+          />
+        </div>
+
+        {/* Action Forms Area */}
         <AnimatePresence mode="wait">
           {action !== 'none' && (
             <motion.div
@@ -283,18 +315,16 @@ export function AccountDetailSheet(props: {
               initial={{ opacity: 0, height: 0, y: -10 }}
               animate={{ opacity: 1, height: 'auto', y: 0 }}
               exit={{ opacity: 0, height: 0, y: -10 }}
-              className="overflow-hidden bg-white rounded-[28px] p-4 border-2 border-indigo-100 shadow-xl shadow-indigo-100/20"
+              className="overflow-hidden bg-slate-50/80 rounded-[28px] p-4 border border-slate-100"
             >
               {action === 'rename' && (
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-bold text-slate-700">重命名账户</span>
-                    <button onClick={() => setAction('none')} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                      <Plus size={18} className="rotate-45" />
-                    </button>
+                    <button onClick={() => setAction('none')} className="text-[12px] font-bold text-indigo-600">取消</button>
                   </div>
                   <input 
-                    className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:border-indigo-400 transition-colors"
+                    className="w-full h-12 px-4 rounded-2xl bg-white border border-slate-200 font-bold text-slate-800 focus:outline-none focus:border-indigo-400 transition-colors"
                     value={renameValue} 
                     onChange={(e) => setRenameValue(e.target.value)} 
                     autoFocus 
@@ -309,13 +339,11 @@ export function AccountDetailSheet(props: {
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-bold text-slate-700">修改当前余额</span>
-                    <button onClick={() => setAction('none')} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                      <Plus size={18} className="rotate-45" />
-                    </button>
+                    <button onClick={() => setAction('none')} className="text-[12px] font-bold text-indigo-600">取消</button>
                   </div>
                   <div className="relative">
                     <input 
-                      className="w-full h-14 pl-10 pr-4 rounded-2xl bg-slate-50 border border-slate-200 font-black text-[20px] text-slate-900 focus:outline-none focus:border-indigo-400 transition-colors"
+                      className="w-full h-14 pl-10 pr-4 rounded-2xl bg-white border border-slate-200 font-black text-[20px] text-slate-900 focus:outline-none focus:border-indigo-400 transition-colors"
                       inputMode="decimal" 
                       value={balanceValue} 
                       onChange={(e) => setBalanceValue(e.target.value)} 
@@ -333,23 +361,21 @@ export function AccountDetailSheet(props: {
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-bold text-slate-700">金额增减</span>
-                    <button onClick={() => setAction('none')} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                      <Plus size={18} className="rotate-45" />
-                    </button>
+                    <button onClick={() => setAction('none')} className="text-[12px] font-bold text-indigo-600">取消</button>
                   </div>
-                  <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex p-1 bg-white rounded-2xl border border-slate-100">
                     <button 
-                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", adjustDirection === 'plus' ? "bg-indigo-600 text-white shadow-md" : "text-slate-500 hover:bg-white/50")}
+                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", adjustDirection === 'plus' ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-50")}
                       onClick={() => setAdjustDirection('plus')}
                     >增加</button>
                     <button 
-                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", adjustDirection === 'minus' ? "bg-rose-600 text-white shadow-md" : "text-slate-500 hover:bg-white/50")}
+                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", adjustDirection === 'minus' ? "bg-rose-600 text-white" : "text-slate-500 hover:bg-slate-50")}
                       onClick={() => setAdjustDirection('minus')}
                     >减少</button>
                   </div>
                   <div className="relative">
                     <input
-                      className="w-full h-14 pl-10 pr-4 rounded-2xl bg-slate-50 border border-slate-200 font-black text-[24px] text-slate-900 focus:outline-none focus:border-indigo-400 transition-colors"
+                      className="w-full h-14 pl-10 pr-4 rounded-2xl bg-white border border-slate-200 font-black text-[24px] text-slate-900 focus:outline-none focus:border-indigo-400 transition-colors"
                       inputMode="decimal"
                       placeholder="0.00"
                       value={adjustAmount}
@@ -368,23 +394,21 @@ export function AccountDetailSheet(props: {
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
                     <span className="text-[14px] font-bold text-slate-700">内部转账</span>
-                    <button onClick={() => setAction('none')} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500">
-                      <Plus size={18} className="rotate-45" />
-                    </button>
+                    <button onClick={() => setAction('none')} className="text-[12px] font-bold text-indigo-600">取消</button>
                   </div>
-                  <div className="flex p-1 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex p-1 bg-white rounded-2xl border border-slate-100">
                     <button 
-                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", transferDirection === 'out' ? "bg-cyan-600 text-white shadow-md" : "text-slate-500 hover:bg-white/50")}
+                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", transferDirection === 'out' ? "bg-cyan-600 text-white" : "text-slate-500 hover:bg-slate-50")}
                       onClick={() => setTransferDirection('out')}
                     >转出</button>
                     <button 
-                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", transferDirection === 'in' ? "bg-cyan-600 text-white shadow-md" : "text-slate-500 hover:bg-white/50")}
+                      className={clsx("flex-1 py-2 rounded-xl text-[13px] font-bold transition-all", transferDirection === 'in' ? "bg-cyan-600 text-white" : "text-slate-500 hover:bg-slate-50")}
                       onClick={() => setTransferDirection('in')}
                     >转入</button>
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[11px] font-bold text-slate-400 ml-1">对方账户</span>
-                    <select className="w-full h-12 px-4 rounded-2xl bg-slate-50 border border-slate-200 font-bold text-slate-800" value={transferPeerId} onChange={(e) => setTransferPeerId(e.target.value)}>
+                    <select className="w-full h-12 px-4 rounded-2xl bg-white border border-slate-200 font-bold text-slate-800" value={transferPeerId} onChange={(e) => setTransferPeerId(e.target.value)}>
                       <option value="">选择一个账户</option>
                       {selectablePeers.map((a) => (
                         <option key={a.id} value={a.id}>{a.name}</option>
@@ -393,7 +417,7 @@ export function AccountDetailSheet(props: {
                   </div>
                   <div className="relative">
                     <input
-                      className="w-full h-14 pl-10 pr-4 rounded-2xl bg-slate-50 border border-slate-200 font-black text-[24px] text-slate-900 focus:outline-none focus:border-indigo-400 transition-colors"
+                      className="w-full h-14 pl-10 pr-4 rounded-2xl bg-white border border-slate-200 font-black text-[24px] text-slate-900 focus:outline-none focus:border-indigo-400 transition-colors"
                       inputMode="decimal"
                       placeholder="0.00"
                       value={transferAmount}
@@ -410,143 +434,100 @@ export function AccountDetailSheet(props: {
           )}
         </AnimatePresence>
 
-        {/* Lower Content Wrapper - Fades when an action is active */}
-        <motion.div 
-          className="flex flex-col gap-5"
-          animate={{ 
-            opacity: action === 'none' ? 1 : 0.4,
-            scale: action === 'none' ? 1 : 0.98,
-            pointerEvents: action === 'none' ? 'auto' : 'none'
-          }}
-          transition={{ duration: 0.2 }}
-        >
-          {/* Quick Actions Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <QuickActionBtn 
-              icon={Plus} 
-              label="增减金额" 
-              active={action === 'adjust'} 
-              onClick={() => setAction('adjust')} 
-              color="#4f46e5"
-            />
-            <QuickActionBtn 
-              icon={ArrowLeftRight} 
-              label="账户转账" 
-              active={action === 'transfer'} 
-              onClick={() => setAction('transfer')} 
-              color="#0891b2"
-            />
-            <QuickActionBtn 
-              icon={Pencil} 
-              label="重命名" 
-              active={action === 'rename'} 
-              onClick={() => setAction('rename')} 
-              color="#924e00"
-            />
-            <QuickActionBtn 
-              icon={Save} 
-              label="修改余额" 
-              active={action === 'set_balance'} 
-              onClick={() => setAction('set_balance')} 
-              color="#059669"
-            />
+        {/* History Section */}
+        <div className="flex flex-col flex-1">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <span className="text-[15px] font-black text-slate-900">操作记录</span>
+            <span className="text-[11px] font-bold text-slate-400">{relatedOps.length} 条记录</span>
           </div>
 
-          {/* History Section */}
-          <div className="flex flex-col flex-1">
-            <div className="flex items-center justify-between mb-3 px-1">
-              <span className="text-[15px] font-black text-slate-900">操作记录</span>
-              <span className="text-[11px] font-bold text-slate-400">{relatedOps.length} 条记录</span>
-            </div>
+          <div className="flex flex-col gap-2.5">
+            {relatedOps.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 bg-slate-50/50 rounded-[28px] border border-dashed border-slate-200">
+                <div className="text-slate-300 mb-2"><Plus size={32} strokeWidth={1} /></div>
+                <div className="text-[13px] font-bold text-slate-400">暂无任何变动记录</div>
+              </div>
+            ) : (
+              relatedOps.map((op, i) => {
+                let title = ''
+                let delta = 0
+                let after = account.balance
 
-            <div className="flex flex-col gap-2.5">
-              {relatedOps.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 bg-slate-50/50 rounded-[28px] border border-dashed border-slate-200">
-                  <div className="text-slate-300 mb-2"><Plus size={32} strokeWidth={1} /></div>
-                  <div className="text-[13px] font-bold text-slate-400">暂无任何变动记录</div>
-                </div>
-              ) : (
-                relatedOps.map((op, i) => {
-                  let title = ''
-                  let delta = 0
-                  let after = account.balance
-
-                  if (op.kind === 'rename') {
-                    title = `重命名：${op.beforeName} → ${op.afterName}`
-                    delta = 0
-                    after = account.balance
-                  }
-
-                  if (op.kind === 'set_balance') {
-                    title = '初始余额设置'
-                    delta = op.after - op.before
-                    after = op.after
-                  }
-
-                  if (op.kind === 'adjust') {
-                    title = op.delta >= 0 ? '手动增加金额' : '手动减少金额'
-                    delta = op.delta
-                    after = op.after
-                  }
-
-                  if (op.kind === 'transfer') {
-                    const from = byId.get(op.fromId)
-                    const to = byId.get(op.toId)
-                    if (account.id === op.fromId) {
-                      title = `转账至 ${to?.name ?? '外部'}`
-                      delta = op.fromAfter - op.fromBefore
-                      after = op.fromAfter
-                    } else {
-                      title = `从 ${from?.name ?? '外部'} 转入`
-                      delta = op.toAfter - op.toBefore
-                      after = op.toAfter
-                    }
-                  }
-
-                  return (
-                    <motion.div
-                      key={op.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="p-4 bg-white border border-slate-100 rounded-[22px] shadow-sm flex flex-col gap-2"
-                    >
-                      <div className="flex justify-between items-start gap-3">
-                        <div className="text-[14px] font-bold text-slate-800 leading-snug flex-1">{title}</div>
-                        <div className={clsx("text-[15px] font-black shrink-0", delta > 0 ? "text-emerald-500" : delta < 0 ? "text-rose-500" : "text-slate-400")}>
-                          {delta !== 0 ? formatSigned(delta) : '—'}
-                        </div>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <div className="text-[11px] font-medium text-slate-400">{formatTime(op.at)}</div>
-                        <div className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md">
-                          余额 {formatCny(after)}
-                        </div>
-                      </div>
-                    </motion.div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-
-          {/* Footer Actions */}
-          <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
-            <button
-              type="button"
-              className="flex items-center gap-2 px-6 py-3 rounded-2xl text-rose-500 hover:bg-rose-50 transition-colors"
-              onClick={() => {
-                if (window.confirm(`确定要删除账户「${account.name}」吗？\n此操作将移除该账户的所有记录且不可恢复。`)) {
-                  onDelete(account.id)
-                  onClose()
+                if (op.kind === 'rename') {
+                  title = `重命名：${op.beforeName} → ${op.afterName}`
+                  delta = 0
+                  after = account.balance
                 }
-              }}
-            >
-              <Trash2 size={16} strokeWidth={2.5} />
-              <span className="text-[13px] font-black">删除此账户</span>
-            </button>
+
+                if (op.kind === 'set_balance') {
+                  title = '初始余额设置'
+                  delta = op.after - op.before
+                  after = op.after
+                }
+
+                if (op.kind === 'adjust') {
+                  title = op.delta >= 0 ? '手动增加金额' : '手动减少金额'
+                  delta = op.delta
+                  after = op.after
+                }
+
+                if (op.kind === 'transfer') {
+                  const from = byId.get(op.fromId)
+                  const to = byId.get(op.toId)
+                  if (account.id === op.fromId) {
+                    title = `转账至 ${to?.name ?? '外部'}`
+                    delta = op.fromAfter - op.fromBefore
+                    after = op.fromAfter
+                  } else {
+                    title = `从 ${from?.name ?? '外部'} 转入`
+                    delta = op.toAfter - op.toBefore
+                    after = op.toAfter
+                  }
+                }
+
+                return (
+                  <motion.div
+                    key={op.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.05 }}
+                    className="p-4 bg-white border border-slate-100 rounded-[22px] shadow-sm flex flex-col gap-2"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="text-[14px] font-bold text-slate-800 leading-snug flex-1">{title}</div>
+                      <div className={clsx("text-[15px] font-black shrink-0", delta > 0 ? "text-emerald-500" : delta < 0 ? "text-rose-500" : "text-slate-400")}>
+                        {delta !== 0 ? formatSigned(delta) : '—'}
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="text-[11px] font-medium text-slate-400">{formatTime(op.at)}</div>
+                      <div className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2 py-0.5 rounded-md">
+                        余额 {formatCny(after)}
+                      </div>
+                    </div>
+                  </motion.div>
+                )
+              })
+            )}
           </div>
-        </motion.div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="mt-4 pt-4 border-t border-slate-100 flex justify-center">
+          <button
+            type="button"
+            className="flex items-center gap-2 px-6 py-3 rounded-2xl text-rose-500 hover:bg-rose-50 transition-colors"
+            onClick={() => {
+              if (window.confirm(`确定要删除账户「${account.name}」吗？\n此操作将移除该账户的所有记录且不可恢复。`)) {
+                onDelete(account.id)
+                onClose()
+              }
+            }}
+          >
+            <Trash2 size={16} strokeWidth={2.5} />
+            <span className="text-[13px] font-black">删除此账户</span>
+          </button>
+        </div>
       </motion.div>
     </BottomSheet>
   )
