@@ -37,8 +37,8 @@ export function AssetsTypeDetailPage(props: {
   return (
     <div className="h-full flex flex-col overflow-y-auto" style={{ background: 'var(--bg)' }}>
       <motion.div
-        className="sticky top-0 z-10 backdrop-blur-xl border-b border-[var(--hairline)]"
-        style={{ background: 'rgba(255,255,255,0.7)' }}
+        className="sticky top-0 z-10 backdrop-blur-md border-b border-[var(--hairline)]"
+        style={{ background: 'rgba(255,255,255,0.85)' }}
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.3 }}
@@ -46,21 +46,22 @@ export function AssetsTypeDetailPage(props: {
         <div className="px-4 py-3 flex items-center gap-3">
           <motion.button
             type="button"
-            className="w-10 h-10 rounded-full flex items-center justify-center text-[var(--text)] active:bg-black/5 -ml-2"
+            className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
             onClick={onBack}
             aria-label="back"
             whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.05 }}
           >
-            <ChevronLeft size={24} strokeWidth={2.5} />
+            <ChevronLeft size={20} strokeWidth={2.5} />
           </motion.button>
           <div className="flex-1 min-w-0">
-            <div className="font-bold text-[17px] truncate text-slate-900">
+            <div className="font-black text-[15px] truncate" style={{ color: info.group.tone }}>
               {info.opt.name}
             </div>
-            <div className="text-[11px] font-medium text-slate-500 truncate">{info.group.name}</div>
+            <div className="text-xs font-bold text-[var(--muted-text)] truncate">{info.group.name}</div>
           </div>
           <div className="text-right">
-            <div className={hideAmounts ? `font-semibold text-[17px] text-slate-900 ${maskedClass}` : 'font-semibold text-[17px] text-slate-900'}>
+            <div className={hideAmounts ? `font-black text-[15px] text-[var(--text)] ${maskedClass}` : 'font-black text-[15px] text-[var(--text)]'}>
               {hideAmounts ? maskedText : formatCny(total)}
             </div>
           </div>
@@ -69,30 +70,43 @@ export function AssetsTypeDetailPage(props: {
 
       <div className="px-4 pt-4 pb-8">
         <motion.div
-          className="bg-white/60 backdrop-blur-md rounded-[24px] border border-white/60 overflow-hidden"
-          style={{ boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.04)' }}
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
+          className="bg-[var(--card)] rounded-[24px] border border-[var(--hairline)] overflow-hidden"
+          style={{ boxShadow: 'var(--shadow-soft)' }}
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4, delay: 0.1 }}
         >
-          <div className="flex flex-col p-2 gap-1">
-            {list.map((account) => (
+          <div className="px-4 py-4 flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-2xl flex items-center justify-center border border-[var(--hairline)]"
+              style={{ background: info.group.tone, color: 'rgba(0,0,0,0.75)' }}
+            >
+              {createElement(info.opt.icon, { size: 18 })}
+            </div>
+            <div className="font-black text-[15px] text-[var(--text)]">{info.opt.name}</div>
+          </div>
+
+          <div className="h-[1px] bg-[var(--hairline)]" />
+
+          <div className="flex flex-col p-3 gap-2">
+            {list.map((account, i) => (
               <motion.div
                 key={account.id}
-                className="flex items-center justify-between p-4 hover:bg-white/50 rounded-[18px] cursor-pointer transition-colors"
+                className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl cursor-pointer"
                 onClick={() => onEditAccount(account)}
-                whileTap={{ scale: 0.99, backgroundColor: 'rgba(255,255,255,0.8)' }}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 + i * 0.05 }}
+                whileTap={{ scale: 0.98 }}
+                whileHover={{ backgroundColor: 'var(--hairline)' }}
               >
-                <div className="flex items-center gap-3.5 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-slate-600 shadow-sm border border-slate-100">
-                    {createElement(info.opt.icon, { size: 20, strokeWidth: 2 })}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200/50">
+                    {createElement(info.opt.icon, { size: 18 })}
                   </div>
-                  <div className="min-w-0">
-                    <div className="font-semibold text-[15px] text-slate-900 truncate mb-0.5">{account.name}</div>
-                    <div className="text-[11px] text-slate-400 font-medium">更新于 {new Date(account.updatedAt).toLocaleDateString()}</div>
-                  </div>
+                  <div className="font-bold text-sm text-slate-700 truncate">{account.name}</div>
                 </div>
-                <div className={hideAmounts ? `font-semibold text-[15px] text-slate-900 ${maskedClass}` : 'font-semibold text-[15px] text-slate-900'}>
+                <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
                   {hideAmounts ? maskedText : formatCny(account.balance)}
                 </div>
               </motion.div>
