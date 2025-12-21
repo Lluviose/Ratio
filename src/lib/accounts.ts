@@ -9,7 +9,6 @@ import {
   Gem,
   HandCoins,
   Landmark,
-  PiggyBank,
   ReceiptText,
   Smartphone,
   Users,
@@ -22,7 +21,6 @@ export type AccountTypeId =
   | 'cash'
   | 'bank_card'
   | 'online'
-  | 'savings'
   | 'other_liquid'
   | 'fund'
   | 'stock'
@@ -71,7 +69,6 @@ export const accountTypeOptions: AccountTypeOption[] = [
   { id: 'cash', name: '现金', groupId: 'liquid', icon: Wallet },
   { id: 'bank_card', name: '银行卡', groupId: 'liquid', icon: CreditCard },
   { id: 'online', name: '网络账户', groupId: 'liquid', icon: Smartphone },
-  { id: 'savings', name: '储蓄卡', groupId: 'liquid', icon: PiggyBank },
   { id: 'other_liquid', name: '其他', groupId: 'liquid', icon: CircleDollarSign },
 
   { id: 'fund', name: '投资基金', groupId: 'invest', icon: Coins },

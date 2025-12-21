@@ -188,9 +188,9 @@ function OverlayBlock(props: {
 
   // 计算文字布局和字体缩放
   // 基础字体大小
-  const basePercentSize = 34 // 百分比数字的基础字体大小
-  const basePercentSymbolSize = 14 // %符号的基础字体大小
-  const baseLabelSize = 12 // 文字标签的基础字体大小
+  const basePercentSize = 36 // 百分比数字的基础字体大小
+  const basePercentSymbolSize = 15 // %符号的基础字体大小
+  const baseLabelSize = 13 // 文字标签的基础字体大小
   const baseLabelMargin = 4 // 文字标签的上边距
   const normalPadding = 16 // 正常模式的上下 padding
   const adaptivePaddingValue = 4 // 自适应模式的上下 padding
@@ -1098,7 +1098,7 @@ export function AssetsScreen(props: {
             animate={initialized ? { y: 0, opacity: 1 } : false}
             transition={{ duration: 0.5, delay: (isReturning || isReturningFromDetail) ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
-            <div className="flex items-center gap-2 text-[12px] font-medium text-slate-500/80">
+            <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
               <button
                 type="button"

@@ -6,7 +6,7 @@ export function AssetsRatioPage(props: { onBack: () => void }) {
   return (
     <div className="h-full relative bg-transparent">
       <div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 flex items-center justify-between">
-        <div className="text-[15px] font-semibold tracking-tight text-slate-900">资产分配比</div>
+        <div className="text-[16px] font-semibold tracking-tight text-slate-900">资产分配比</div>
         <button
           type="button"
           onClick={onBack}
