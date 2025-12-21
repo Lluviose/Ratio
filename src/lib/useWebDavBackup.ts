@@ -8,6 +8,7 @@ export type WebDavBackupConfig = {
   username: string
   password: string
   path: string
+  proxyUrl?: string
 }
 
 export type WebDavBackupStatus = {
@@ -19,7 +20,9 @@ export type WebDavBackupStatus = {
 function errorMessage(error: unknown) {
   if (error instanceof Error) {
     const msg = error.message || '未知错误'
-    if (msg === 'Failed to fetch') return '请求失败（可能是网络问题或浏览器跨域/CORS 限制）'
+    if (msg === 'Failed to fetch' || msg === 'Load failed' || msg.includes('NetworkError')) {
+      return '请求失败（常见原因：浏览器跨域/CORS 限制），建议配置 WebDAV 代理'
+    }
     return msg
   }
   return '未知错误'
@@ -33,6 +36,7 @@ function validateConfig(config: WebDavBackupConfig) {
     baseUrl: config.baseUrl,
     username: config.username,
     password: config.password,
+    proxyUrl: config.proxyUrl,
   })
 
   return { client, path }

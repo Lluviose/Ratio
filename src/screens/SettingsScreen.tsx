@@ -20,6 +20,8 @@ export function SettingsScreen(props: {
   onWebdavPasswordChange: (next: string) => void
   webdavPath: string
   onWebdavPathChange: (next: string) => void
+  webdavProxyUrl: string
+  onWebdavProxyUrlChange: (next: string) => void
   webdavStatus: WebDavBackupStatus
   onWebdavBackupNow: () => void
   onWebdavRestoreFromCloud: () => void
@@ -38,6 +40,8 @@ export function SettingsScreen(props: {
     onWebdavPasswordChange,
     webdavPath,
     onWebdavPathChange,
+    webdavProxyUrl,
+    onWebdavProxyUrlChange,
     webdavStatus,
     onWebdavBackupNow,
     onWebdavRestoreFromCloud,
@@ -155,7 +159,7 @@ export function SettingsScreen(props: {
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>坚果云备份</div>
           <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
-            通过 WebDAV 自动备份（若提示请求失败，可能是浏览器跨域/CORS 限制）
+            通过 WebDAV 自动备份（网页/PWA 直连通常会被 CORS 阻止，需要代理）
           </div>
 
           <div className="stack" style={{ marginTop: 16 }}>
@@ -220,8 +224,21 @@ export function SettingsScreen(props: {
                   />
                 </div>
 
+                <div className="field">
+                  <div className="fieldLabel">代理地址（可选）</div>
+                  <input
+                    className="input"
+                    value={webdavProxyUrl}
+                    placeholder="https://<your-proxy>/"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    onChange={(e) => onWebdavProxyUrlChange(e.target.value)}
+                  />
+                </div>
+
                 <div className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
-                  提示：账号与应用密码会保存在本地浏览器（不包含在备份文件中）
+                  提示：账号与应用密码会保存在本地浏览器（不包含在备份文件中）；如出现 Load failed/Failed to fetch，请配置代理地址
                 </div>
 
                 <button type="button" className="ghostBtn" disabled={webdavStatus.inFlight} onClick={onWebdavBackupNow}>

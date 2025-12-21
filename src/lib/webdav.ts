@@ -1,6 +1,7 @@
 export type WebDavClient = {
   baseUrl: string
   authorization: string
+  proxyUrl?: string
 }
 
 function normalizeBaseUrl(input: string) {
@@ -49,17 +50,23 @@ export function createWebDavClient(config: {
   baseUrl: string
   username: string
   password: string
+  proxyUrl?: string
 }): WebDavClient {
+  const proxyUrl = config.proxyUrl?.trim()
+  if (proxyUrl) new URL(proxyUrl)
   return {
     baseUrl: normalizeBaseUrl(config.baseUrl),
     authorization: buildBasicAuth(config.username, config.password),
+    proxyUrl: proxyUrl || undefined,
   }
 }
 
 async function request(client: WebDavClient, url: string, init: RequestInit) {
-  const res = await fetch(url, {
+  const directUrl = url
+  const res = await fetch(client.proxyUrl || directUrl, {
     ...init,
     headers: {
+      ...(client.proxyUrl ? { 'X-WebDAV-Target-Url': directUrl } : {}),
       Authorization: client.authorization,
       ...(init.headers || {}),
     },

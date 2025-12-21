@@ -52,6 +52,7 @@ export default function App() {
   const [webdavUsername, setWebdavUsername] = useLocalStorageState<string>('ratio.webdav.username', '')
   const [webdavPassword, setWebdavPassword] = useLocalStorageState<string>('ratio.webdav.password', '')
   const [webdavPath, setWebdavPath] = useLocalStorageState<string>('ratio.webdav.path', 'Apps/ratio/ratio-backup.json')
+  const [webdavProxyUrl, setWebdavProxyUrl] = useLocalStorageState<string>('ratio.webdav.proxyUrl', '')
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
@@ -65,6 +66,7 @@ export default function App() {
     username: webdavUsername,
     password: webdavPassword,
     path: webdavPath,
+    proxyUrl: webdavProxyUrl,
   })
 
   const resolvedTheme = theme === 'random' ? randomTheme : theme
@@ -277,6 +279,8 @@ export default function App() {
                         onWebdavPasswordChange={setWebdavPassword}
                         webdavPath={webdavPath}
                         onWebdavPathChange={setWebdavPath}
+                        webdavProxyUrl={webdavProxyUrl}
+                        onWebdavProxyUrlChange={setWebdavProxyUrl}
                         webdavStatus={webdavBackup.status}
                         onWebdavBackupNow={() => void webdavBackup.backupNow()}
                         onWebdavRestoreFromCloud={async () => {
