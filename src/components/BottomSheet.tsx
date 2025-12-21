@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { type ReactNode, useEffect } from 'react'
+import { type CSSProperties, type ReactNode, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export function BottomSheet(props: {
@@ -7,8 +7,25 @@ export function BottomSheet(props: {
   title: string
   onClose: () => void
   children: ReactNode
+  header?: ReactNode
+  hideHandle?: boolean
+  sheetClassName?: string
+  sheetStyle?: CSSProperties
+  bodyClassName?: string
+  bodyStyle?: CSSProperties
 }) {
-  const { open, title, onClose, children } = props
+  const {
+    open,
+    title,
+    onClose,
+    children,
+    header,
+    hideHandle = false,
+    sheetClassName,
+    sheetStyle,
+    bodyClassName,
+    bodyStyle,
+  } = props
 
   useEffect(() => {
     if (!open) return
@@ -33,26 +50,36 @@ export function BottomSheet(props: {
           transition={{ duration: 0.2 }}
         >
           <motion.div
-            className="sheet"
+            className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}
             onClick={(e) => e.stopPropagation()}
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}        
+            style={sheetStyle}
           >
-            <div className="handle" />
-            <div className="sheetHeader">
-              <div className="sheetTitle">{title}</div>
-              <button
-                type="button"
-                className="iconBtn hover:bg-[var(--hairline)] transition-colors"
-                onClick={onClose}
-                aria-label="close"
-              >
-                <X size={18} />
-              </button>
+            {!hideHandle ? <div className="handle" /> : null}
+            {header ? (
+              header
+            ) : (
+              <div className="sheetHeader">
+                <div className="sheetTitle">{title}</div>
+                <button
+                  type="button"
+                  className="iconBtn hover:bg-[var(--hairline)] transition-colors"
+                  onClick={onClose}
+                  aria-label="close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            )}
+            <div
+              className={bodyClassName ? `sheetBody ${bodyClassName}` : 'sheetBody'}
+              style={bodyStyle}
+            >
+              {children}
             </div>
-            <div className="sheetBody">{children}</div>
           </motion.div>
         </motion.div>
       )}

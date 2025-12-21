@@ -1,11 +1,11 @@
-import { type CSSProperties, createElement, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRight, Check, MoreHorizontal, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
+import { createElement, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeftRight, Keyboard, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import { formatCny } from '../lib/format'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
-import { pickForegroundColor, type ThemeColors } from '../lib/themes'
+import { type ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
 
 type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'
@@ -17,12 +17,9 @@ type AdjustDirection = 'plus' | 'minus'
 function formatTime(iso: string) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${day} ${hh}:${mm}`
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`
 }
 
 function formatSigned(amount: number) {
@@ -86,7 +83,9 @@ export function AccountDetailSheet(props: {
   const [moreOpen, setMoreOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
+  const [noteValue, setNoteValue] = useState('')
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
+  const adjustInputRef = useRef<HTMLInputElement | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
   const [adjustAmount, setAdjustAmount] = useState('')
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
@@ -100,6 +99,7 @@ export function AccountDetailSheet(props: {
     setMoreOpen(false)
     setRenameValue(account?.name ?? '')
     setBalanceValue(account ? String(account.balance) : '')
+    setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
     setTransferDirection('out')
@@ -109,10 +109,10 @@ export function AccountDetailSheet(props: {
 
   useEffect(() => {
     if (!open) return
-    if (action !== 'set_balance') return
+    if (action !== 'set_balance' && action !== 'adjust') return
     setMoreOpen(false)
     const timer = window.setTimeout(() => {
-      const el = balanceInputRef.current
+      const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
       if (!el) return
       el.focus()
       el.select()
@@ -151,27 +151,58 @@ export function AccountDetailSheet(props: {
 
   if (!account) return <BottomSheet open={open} title="账户" onClose={onClose}><div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: 40 }}>未找到账户</div></BottomSheet>
 
-  const actionBtnStyle: CSSProperties = {
-    flex: 1,
-    borderRadius: 999,
-    border: '1px solid var(--hairline)',
-    background: 'var(--card)',
-    padding: '10px 14px',
-    fontWeight: 950,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  }
-
   const setBalanceValueTrimmed = balanceValue.trim()
   const setBalanceParsed = Number(setBalanceValueTrimmed)
   const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsed)
+  const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === account.balance
 
-  const cancelSetBalance = () => {
+  const adjustAmountTrimmed = adjustAmount.trim()
+  const adjustParsed = Number(adjustAmountTrimmed)
+  const canSubmitAdjust =
+    adjustAmountTrimmed !== '' && Number.isFinite(adjustParsed) && adjustParsed > 0
+  const previewAdjustDelta = canSubmitAdjust
+    ? adjustDirection === 'plus'
+      ? adjustParsed
+      : -adjustParsed
+    : 0
+  const previewAdjustAfter = account.balance + previewAdjustDelta
+
+  const refocusActiveInput = () => {
+    const el =
+      action === 'set_balance'
+        ? balanceInputRef.current
+        : action === 'adjust'
+          ? adjustInputRef.current
+          : null
+    if (!el) return
+    el.focus()
+    el.select()
+  }
+
+  const cancelEdit = () => {
+    setMoreOpen(false)
     balanceInputRef.current?.blur()
+    adjustInputRef.current?.blur()
+    setRenameValue(account.name)
     setBalanceValue(String(account.balance))
+    setNoteValue('')
+    setAdjustDirection('plus')
+    setAdjustAmount('')
+    setTransferDirection('out')
+    setTransferPeerId('')
+    setTransferAmount('')
     setAction('none')
+  }
+
+  const toggleBalanceSign = () => {
+    const raw = balanceValue.trim()
+    if (!raw) {
+      setBalanceValue('-')
+      refocusActiveInput()
+      return
+    }
+    setBalanceValue(raw.startsWith('-') ? raw.slice(1) : `-${raw}`)
+    refocusActiveInput()
   }
 
   const submitRename = () => {
@@ -225,12 +256,14 @@ export function AccountDetailSheet(props: {
     })
     onSetBalance(account.id, num)
     balanceInputRef.current?.blur()
+    setNoteValue('')
     setAction('none')
   }
 
   const submitAdjust = () => {
-    const num = Number(adjustAmount)
-    if (!Number.isFinite(num) || num <= 0) {
+    const raw = adjustAmount.trim()
+    const num = Number(raw)
+    if (!raw || !Number.isFinite(num) || num <= 0) {
       alert('请输入正确金额')
       return
     }
@@ -249,6 +282,8 @@ export function AccountDetailSheet(props: {
     })
     onAdjust(account.id, delta)
     setAdjustAmount('')
+    setNoteValue('')
+    adjustInputRef.current?.blur()
     setAction('none')
   }
 
@@ -293,16 +328,556 @@ export function AccountDetailSheet(props: {
     setAction('none')
   }
 
+  const typeLabel = accountTypeInfo?.opt.name ?? account.type
+  const TypeIcon = accountTypeInfo?.opt.icon
+  const isInlineEditing = action === 'adjust' || action === 'set_balance'
+
   return (
-    <BottomSheet open={open} title={account.name} onClose={onClose}>
-      <motion.div 
+    <BottomSheet
+      open={open}
+      title={account.name}
+      onClose={onClose}
+      hideHandle
+      sheetStyle={{ maxHeight: '92vh', background: 'var(--bg)' }}
+      bodyStyle={{ padding: 0 }}
+      header={
+        <div className="px-4 pt-5 pb-3 flex items-center justify-between" style={{ background: 'var(--bg)' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
+            aria-label="close"
+          >
+            <X size={20} strokeWidth={2.5} />
+          </button>
+
+          <div className="flex items-center gap-2">
+            {action === 'none' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMoreOpen(false)
+                    setRenameValue(account.name)
+                    setAction('rename')
+                  }}
+                  className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
+                  aria-label="rename"
+                >
+                  <Pencil size={20} strokeWidth={2.5} />
+                </button>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setMoreOpen((v) => !v)
+                    }}
+                    className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
+                    aria-label="more"
+                  >
+                    <MoreHorizontal size={20} strokeWidth={2.5} />
+                  </button>
+
+                  <AnimatePresence>
+                    {moreOpen ? (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                        transition={{ duration: 0.15 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute right-0 top-full mt-2 min-w-[180px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
+                      >
+                        <button
+                          type="button"
+                          className="w-full px-4 py-3 text-left text-[13px] font-semibold text-slate-800 hover:bg-black/5"
+                          onClick={() => {
+                            setMoreOpen(false)
+                            setTransferDirection('out')
+                            setTransferPeerId('')
+                            setTransferAmount('')
+                            setAction('transfer')
+                          }}
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <ArrowLeftRight size={16} strokeWidth={2.6} />
+                            转账
+                          </span>
+                        </button>
+
+                        <div className="h-px bg-black/5" />
+
+                        <button
+                          type="button"
+                          className="w-full px-4 py-3 text-left text-[13px] font-semibold text-rose-600 hover:bg-rose-50"
+                          onClick={() => {
+                            setMoreOpen(false)
+                            if (window.confirm(`确定要删除账户「${account.name}」吗？此操作不可撤销。`)) {
+                              onDelete(account.id)
+                              onClose()
+                            }
+                          }}
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            <Trash2 size={16} strokeWidth={2.6} />
+                            删除账户
+                          </span>
+                        </button>
+                      </motion.div>
+                    ) : null}
+                  </AnimatePresence>
+                </div>
+              </>
+            ) : (
+              <>
+                {isInlineEditing ? (
+                  <button
+                    type="button"
+                    onClick={refocusActiveInput}
+                    className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
+                    aria-label="keyboard"
+                  >
+                    <Keyboard size={20} strokeWidth={2.5} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="px-2 py-2 text-[15px] font-semibold text-slate-700 hover:text-slate-900"
+                >
+                  取消
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      }
+    >
+      <motion.div
         className="flex flex-col"
-        style={{ gap: 14, minHeight: '72vh', marginTop: -8 }}
+        style={{ minHeight: '72vh' }}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
+        transition={{ delay: 0.08 }}
         onClick={() => setMoreOpen(false)}
       >
+        <div className="px-4 pb-6">
+          <div className="flex items-center gap-2 text-slate-500">
+            <div className="w-6 h-6 rounded-md bg-white/80 border border-white/70 flex items-center justify-center text-slate-500">
+              {TypeIcon ? createElement(TypeIcon, { size: 14, strokeWidth: 2.5 }) : null}
+            </div>
+            <div className="text-[13px] font-semibold text-slate-700">{typeLabel}</div>
+          </div>
+
+          <div className="mt-3 h-px bg-slate-200/70" />
+
+          <AnimatePresence mode="wait" initial={false}>
+            {action === 'none' ? (
+              <motion.div
+                key="summary"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18 }}
+              >
+                <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
+                  {formatCny(account.balance)}
+                </div>
+
+                <div className="mt-5 flex gap-3">
+                  <motion.button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      setNoteValue('')
+                      setAdjustDirection('plus')
+                      setAdjustAmount('')
+                      setAction('adjust')
+                    }}
+                    whileTap={{ scale: 0.99 }}
+                    className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
+                  >
+                    增减金额
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      setNoteValue('')
+                      setBalanceValue(String(account.balance))
+                      setAction('set_balance')
+                    }}
+                    whileTap={{ scale: 0.99 }}
+                    className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
+                  >
+                    修改余额
+                  </motion.button>
+                </div>
+
+                <div className="mt-7 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-500">
+                    <span>变动记录</span>
+                    <SlidersHorizontal size={14} strokeWidth={2.5} className="opacity-60" />
+                  </div>
+                  <div className="text-[13px] font-semibold text-slate-400">金额</div>
+                </div>
+
+                <div className="mt-3 rounded-[22px] bg-white/70 border border-white/70 overflow-hidden">
+                  {relatedOps.length === 0 ? (
+                    <div className="py-10 text-center text-[13px] font-semibold text-slate-400">
+                      暂无操作
+                    </div>
+                  ) : (
+                    <div>
+                      {relatedOps.map((op, i) => {
+                        let title = ''
+                        let delta: number | null = 0
+                        let after = account.balance
+
+                        if (op.kind === 'rename') {
+                          title = `重命名：${op.beforeName} → ${op.afterName}`
+                          delta = null
+                          after = account.balance
+                        }
+
+                        if (op.kind === 'set_balance') {
+                          title = '修改余额'
+                          delta = op.after - op.before
+                          after = op.after
+                        }
+
+                        if (op.kind === 'adjust') {
+                          title = op.delta >= 0 ? '增加金额' : '减少金额'
+                          delta = op.delta
+                          after = op.after
+                        }
+
+                        if (op.kind === 'transfer') {
+                          const from = byId.get(op.fromId)
+                          const to = byId.get(op.toId)
+                          if (account.id === op.fromId) {
+                            title = `转出到 ${to?.name ?? '账户'}`
+                            delta = op.fromAfter - op.fromBefore
+                            after = op.fromAfter
+                          } else {
+                            title = `从 ${from?.name ?? '账户'} 转入`
+                            delta = op.toAfter - op.toBefore
+                            after = op.toAfter
+                          }
+                        }
+
+                        const deltaColor =
+                          delta == null
+                            ? 'text-slate-400'
+                            : delta > 0
+                              ? 'text-slate-900'
+                              : delta < 0
+                                ? 'text-rose-600'
+                                : 'text-slate-400'
+
+                        return (
+                          <motion.div
+                            key={op.id}
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(0.25, i * 0.03) }}
+                            className={i === 0 ? '' : 'border-t border-black/5'}
+                          >
+                            <div className="px-4 py-4 flex items-start justify-between gap-4">
+                              <div className="min-w-0">
+                                <div className="text-[14px] font-semibold text-slate-900 truncate">
+                                  {title}
+                                </div>
+                                <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                  {formatTime(op.at)}
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <div className={`text-[14px] font-semibold ${deltaColor}`}>
+                                  {delta == null ? '—' : formatSigned(delta)}
+                                </div>
+                                <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                  余额 {formatCny(after)}
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ) : action === 'adjust' ? (
+              <motion.div
+                key="adjust"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18 }}
+              >
+                <div className="mt-4 flex items-baseline gap-2">
+                  <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
+                  <input
+                    ref={adjustInputRef}
+                    className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={adjustAmount}
+                    onChange={(e) => setAdjustAmount(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (canSubmitAdjust) submitAdjust()
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault()
+                        cancelEdit()
+                      }
+                    }}
+                    aria-label="adjust amount"
+                  />
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <input
+                    className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                    placeholder="备注"
+                    value={noteValue}
+                    onChange={(e) => setNoteValue(e.target.value)}
+                    aria-label="note"
+                  />
+                  <div className="text-[13px] font-semibold text-slate-700">增减金额</div>
+                </div>
+
+                <div className="mt-4 flex rounded-full bg-slate-200/80 p-1">
+                  {(
+                    [
+                      { id: 'plus' as const, label: '+' },
+                      { id: 'minus' as const, label: '-' },
+                    ] as const
+                  ).map((item) => {
+                    const isActive = adjustDirection === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setAdjustDirection(item.id)}
+                        className="relative flex-1 h-11 rounded-full text-[18px] font-black"
+                        style={{ color: isActive ? '#fff' : 'var(--text)' }}
+                      >
+                        {isActive ? (
+                          <motion.div
+                            layoutId="accountAdjustDirBg"
+                            className="absolute inset-0 rounded-full bg-slate-900"
+                            transition={{ type: 'spring', stiffness: 600, damping: 40 }}
+                          />
+                        ) : null}
+                        <span className="relative z-10">{item.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="mt-3">
+                  <div className="text-[13px] font-semibold" style={{ color: 'var(--primary)' }}>
+                    {formatSigned(previewAdjustDelta)}
+                  </div>
+                  <div className="mt-1 text-[12px] font-medium text-slate-500">
+                    余额 {formatCny(previewAdjustAfter)}
+                  </div>
+                </div>
+
+                <motion.button
+                  type="button"
+                  onClick={submitAdjust}
+                  disabled={!canSubmitAdjust}
+                  whileTap={{ scale: canSubmitAdjust ? 0.99 : 1 }}
+                  className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitAdjust ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
+                >
+                  完成
+                </motion.button>
+              </motion.div>
+            ) : action === 'set_balance' ? (
+              <motion.div
+                key="set_balance"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18 }}
+              >
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <div className="flex items-baseline gap-2 flex-1 min-w-0">
+                    <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
+                    <input
+                      ref={balanceInputRef}
+                      className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={balanceValue}
+                      onChange={(e) => setBalanceValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          if (canSubmitSetBalance && !isSetBalanceNoop) submitSetBalance()
+                        }
+                        if (e.key === 'Escape') {
+                          e.preventDefault()
+                          cancelEdit()
+                        }
+                      }}
+                      aria-label="set balance"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={toggleBalanceSign}
+                    className="px-2 py-2 rounded-full text-[13px] font-semibold text-slate-500 hover:bg-white/60"
+                    aria-label="toggle sign"
+                  >
+                    +/-
+                  </button>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between gap-4">
+                  <input
+                    className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
+                    placeholder="备注"
+                    value={noteValue}
+                    onChange={(e) => setNoteValue(e.target.value)}
+                    aria-label="note"
+                  />
+                  <div className="text-[13px] font-semibold text-slate-700">修改余额</div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between text-[12px] font-medium text-slate-400">
+                  <div>当前余额</div>
+                  <div className="text-slate-500">{formatCny(account.balance)}</div>
+                </div>
+
+                <motion.button
+                  type="button"
+                  onClick={submitSetBalance}
+                  disabled={!canSubmitSetBalance || isSetBalanceNoop}
+                  whileTap={{ scale: canSubmitSetBalance && !isSetBalanceNoop ? 0.99 : 1 }}
+                  className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitSetBalance && !isSetBalanceNoop ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
+                >
+                  完成
+                </motion.button>
+              </motion.div>
+            ) : action === 'rename' ? (
+              <motion.div
+                key="rename"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18 }}
+              >
+                <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
+                  {formatCny(account.balance)}
+                </div>
+
+                <div className="mt-5">
+                  <div className="text-[13px] font-semibold text-slate-500">账户名称</div>
+                  <input
+                    className="input mt-2"
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        submitRename()
+                      }
+                      if (e.key === 'Escape') {
+                        e.preventDefault()
+                        cancelEdit()
+                      }
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                <motion.button
+                  type="button"
+                  onClick={submitRename}
+                  whileTap={{ scale: 0.99 }}
+                  className="mt-6 w-full h-14 rounded-[22px] bg-slate-900 text-white font-semibold text-[16px] shadow-sm"
+                >
+                  完成
+                </motion.button>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="transfer"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.18 }}
+              >
+                <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
+                  {formatCny(account.balance)}
+                </div>
+
+                <div className="mt-5">
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <SegmentedControl
+                      options={[
+                        { value: 'out', label: '转出' },
+                        { value: 'in', label: '转入' },
+                      ]}
+                      value={transferDirection}
+                      onChange={(v) => setTransferDirection(v as TransferDirection)}
+                    />
+                  </div>
+
+                  <div className="mt-4 stack" style={{ gap: 12 }}>
+                    <label className="field">
+                      <div className="fieldLabel">对方账户</div>
+                      <select className="select" value={transferPeerId} onChange={(e) => setTransferPeerId(e.target.value)}>
+                        <option value="">请选择</option>
+                        {selectablePeers.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="field">
+                      <div className="fieldLabel">金额</div>
+                      <div className="relative">
+                        <input
+                          className="input"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={transferAmount}
+                          onChange={(e) => setTransferAmount(e.target.value)}
+                          style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
+                        />
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <motion.button
+                    type="button"
+                    onClick={submitTransfer}
+                    whileTap={{ scale: 0.99 }}
+                    className="mt-6 w-full h-14 rounded-[22px] bg-slate-900 text-white font-semibold text-[16px] shadow-sm"
+                  >
+                    完成
+                  </motion.button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/*
         <div style={{ position: 'sticky', top: 0, zIndex: 6, background: 'var(--card)', paddingBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', position: 'relative' }}>
             <div>
@@ -333,7 +908,7 @@ export function AccountDetailSheet(props: {
                           if (e.key === 'Escape') {
                             e.preventDefault()
                             e.stopPropagation()
-                            cancelSetBalance()
+                            cancelEdit()
                           }
                         }}
                         style={{
@@ -762,6 +1337,7 @@ export function AccountDetailSheet(props: {
             )}
           </div>
         </div>
+        */}
       </motion.div>
     </BottomSheet>
   )
