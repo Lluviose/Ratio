@@ -1,5 +1,5 @@
-import { type CSSProperties, createElement, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, MoreHorizontal, Pencil, Plus, Save, Trash2 } from 'lucide-react'
+import { type CSSProperties, createElement, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeftRight, Check, MoreHorizontal, Pencil, Plus, Save, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
@@ -86,6 +86,7 @@ export function AccountDetailSheet(props: {
   const [moreOpen, setMoreOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
+  const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
   const [adjustAmount, setAdjustAmount] = useState('')
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
@@ -105,6 +106,19 @@ export function AccountDetailSheet(props: {
     setTransferPeerId('')
     setTransferAmount('')
   }, [account, initialAction, open])
+
+  useEffect(() => {
+    if (!open) return
+    if (action !== 'set_balance') return
+    setMoreOpen(false)
+    const timer = window.setTimeout(() => {
+      const el = balanceInputRef.current
+      if (!el) return
+      el.focus()
+      el.select()
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [action, open])
 
   const accountTypeInfo = useMemo(() => {
     if (!account) return null
@@ -150,6 +164,16 @@ export function AccountDetailSheet(props: {
     gap: 8,
   }
 
+  const setBalanceValueTrimmed = balanceValue.trim()
+  const setBalanceParsed = Number(setBalanceValueTrimmed)
+  const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsed)
+
+  const cancelSetBalance = () => {
+    balanceInputRef.current?.blur()
+    setBalanceValue(String(account.balance))
+    setAction('none')
+  }
+
   const submitRename = () => {
     const next = renameValue.trim()
     if (!next) {
@@ -174,13 +198,19 @@ export function AccountDetailSheet(props: {
   }
 
   const submitSetBalance = () => {
-    const num = Number(balanceValue)
+    const raw = balanceValue.trim()
+    if (!raw) {
+      alert('请输入正确余额')
+      return
+    }
+    const num = Number(raw)
     if (!Number.isFinite(num)) {
       alert('请输入正确余额')
       return
     }
 
     if (num === account.balance) {
+      balanceInputRef.current?.blur()
       setAction('none')
       return
     }
@@ -194,6 +224,7 @@ export function AccountDetailSheet(props: {
       after: num,
     })
     onSetBalance(account.id, num)
+    balanceInputRef.current?.blur()
     setAction('none')
   }
 
@@ -266,7 +297,7 @@ export function AccountDetailSheet(props: {
     <BottomSheet open={open} title={account.name} onClose={onClose}>
       <motion.div 
         className="flex flex-col"
-        style={{ gap: 16, minHeight: '62vh' }}
+        style={{ gap: 14, minHeight: '72vh', marginTop: -8 }}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
@@ -276,7 +307,69 @@ export function AccountDetailSheet(props: {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', position: 'relative' }}>
             <div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 850 }}>当前余额</div>
-              <div style={{ fontSize: 24, fontWeight: 950, marginTop: 4 }}>{formatCny(account.balance)}</div>
+              <div style={{ marginTop: 4 }}>
+                <AnimatePresence mode="wait" initial={false}>
+                  {action === 'set_balance' ? (
+                    <motion.div
+                      key="balanceInput"
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.16 }}
+                    >
+                      <input
+                        ref={balanceInputRef}
+                        className="input"
+                        inputMode="decimal"
+                        value={balanceValue}
+                        onChange={(e) => setBalanceValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            submitSetBalance()
+                            return
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            cancelSetBalance()
+                          }
+                        }}
+                        style={{
+                          height: 46,
+                          borderRadius: 16,
+                          fontSize: 24,
+                          fontWeight: 950,
+                          padding: '0 14px',
+                        }}
+                        aria-label="edit balance"
+                      />
+                    </motion.div>
+                  ) : (
+                    <motion.button
+                      key="balanceText"
+                      type="button"
+                      onClick={() => setAction('set_balance')}
+                      className="text-left"
+                      style={{
+                        fontSize: 24,
+                        fontWeight: 950,
+                        padding: 0,
+                        border: 'none',
+                        background: 'transparent',
+                        cursor: 'pointer',
+                        color: 'var(--text)',
+                      }}
+                      whileTap={{ scale: 0.99 }}
+                      whileHover={{ opacity: 0.85 }}
+                      aria-label="edit balance"
+                    >
+                      {formatCny(account.balance)}
+                    </motion.button>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -305,18 +398,44 @@ export function AccountDetailSheet(props: {
                   {account.type}
                 </div>
               )}
-              <motion.button
-                type="button"
-                className="iconBtn hover:bg-[var(--hairline)] transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setMoreOpen((v) => !v)
-                }}
-                whileTap={{ scale: 0.92 }}
-                aria-label="more"
-              >
-                <MoreHorizontal size={18} />
-              </motion.button>
+              {action === 'set_balance' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <motion.button
+                    type="button"
+                    className="iconBtn hover:bg-[var(--hairline)] transition-colors"
+                    style={{ width: 38, height: 38 }}
+                    onClick={cancelSetBalance}
+                    whileTap={{ scale: 0.92 }}
+                    aria-label="cancel"
+                  >
+                    <X size={18} strokeWidth={2.8} />
+                  </motion.button>
+                  <motion.button
+                    type="button"
+                    className="iconBtn iconBtnPrimary shadow-sm"
+                    style={{ width: 38, height: 38 }}
+                    onClick={submitSetBalance}
+                    whileTap={{ scale: 0.92 }}
+                    disabled={!canSubmitSetBalance}
+                    aria-label="save"
+                  >
+                    <Check size={18} strokeWidth={2.8} />
+                  </motion.button>
+                </div>
+              ) : (
+                <motion.button
+                  type="button"
+                  className="iconBtn hover:bg-[var(--hairline)] transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMoreOpen((v) => !v)
+                  }}
+                  whileTap={{ scale: 0.92 }}
+                  aria-label="more"
+                >
+                  <MoreHorizontal size={18} />
+                </motion.button>
+              )}
             </div>
 
             <AnimatePresence>
@@ -437,13 +556,14 @@ export function AccountDetailSheet(props: {
 
         <AnimatePresence mode="wait">
           {action === 'rename' ? (
-            <motion.div 
+            <motion.div
               key="rename"
-              className="stack" 
+              className="stack"
               style={{ gap: 12 }}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -6, height: 0 }}
+              transition={{ duration: 0.16 }}
             >
               <label className="field">
                 <div className="fieldLabel">账户名称</div>
@@ -455,35 +575,17 @@ export function AccountDetailSheet(props: {
             </motion.div>
           ) : null}
 
-          {action === 'set_balance' ? (
-            <motion.div 
-              key="set_balance"
-              className="stack" 
-              style={{ gap: 12 }}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-            >
-              <label className="field">
-                <div className="fieldLabel">修改余额</div>
-                <input className="input" inputMode="decimal" value={balanceValue} onChange={(e) => setBalanceValue(e.target.value)} autoFocus />
-              </label>
-              <motion.button type="button" className="primaryBtn" onClick={submitSetBalance} whileTap={{ scale: 0.98 }}>
-                保存
-              </motion.button>
-            </motion.div>
-          ) : null}
-
           {action === 'adjust' ? (
-            <motion.div 
+            <motion.div
               key="adjust"
-              className="stack" 
+              className="stack"
               style={{ gap: 12 }}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -6, height: 0 }}
+              transition={{ duration: 0.16 }}
             >
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>       
                 <SegmentedControl
                   options={[
                     { value: 'plus', label: '增加' },
@@ -515,15 +617,16 @@ export function AccountDetailSheet(props: {
           ) : null}
 
           {action === 'transfer' ? (
-            <motion.div 
+            <motion.div
               key="transfer"
-              className="stack" 
+              className="stack"
               style={{ gap: 12 }}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -6, height: 0 }}
+              transition={{ duration: 0.16 }}
             >
-              <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'center' }}>       
                 <SegmentedControl
                   options={[
                     { value: 'out', label: '转出' },
