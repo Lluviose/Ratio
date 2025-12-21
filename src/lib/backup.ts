@@ -1,6 +1,6 @@
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
-export const RATIO_BACKUP_EXCLUDE_PREFIXES = ['ratio.webdav.'] as const
+export const RATIO_BACKUP_EXCLUDE_PREFIXES = ['ratio.webdav.', 'ratio.account.'] as const
 
 export type RatioBackupFile = {
   schema: typeof RATIO_BACKUP_SCHEMA_V1
@@ -57,6 +57,21 @@ export function stringifyRatioBackup(backup: RatioBackupFile) {
   return `${JSON.stringify(backup, null, 2)}\n`
 }
 
+export function coerceRatioBackup(value: unknown): RatioBackupFile {
+  if (!isPlainObject(value)) throw new Error('Invalid backup file')
+  if (value.schema !== RATIO_BACKUP_SCHEMA_V1) throw new Error('Unsupported backup schema')
+  if (typeof value.createdAt !== 'string') throw new Error('Invalid backup file')
+  if (!isPlainObject(value.items)) throw new Error('Invalid backup file')
+
+  const items: Record<string, string> = {}
+  for (const [k, v] of Object.entries(value.items)) {
+    if (typeof v !== 'string') continue
+    items[k] = v
+  }
+
+  return { schema: RATIO_BACKUP_SCHEMA_V1, createdAt: value.createdAt, items }
+}
+
 export function parseRatioBackup(text: string): RatioBackupFile {
   let parsed: unknown
   try {
@@ -64,19 +79,7 @@ export function parseRatioBackup(text: string): RatioBackupFile {
   } catch {
     throw new Error('Invalid JSON backup file')
   }
-
-  if (!isPlainObject(parsed)) throw new Error('Invalid backup file')
-  if (parsed.schema !== RATIO_BACKUP_SCHEMA_V1) throw new Error('Unsupported backup schema')
-  if (typeof parsed.createdAt !== 'string') throw new Error('Invalid backup file')
-  if (!isPlainObject(parsed.items)) throw new Error('Invalid backup file')
-
-  const items: Record<string, string> = {}
-  for (const [k, v] of Object.entries(parsed.items)) {
-    if (typeof v !== 'string') continue
-    items[k] = v
-  }
-
-  return { schema: RATIO_BACKUP_SCHEMA_V1, createdAt: parsed.createdAt, items }
+  return coerceRatioBackup(parsed)
 }
 
 export type RestoreResult = {

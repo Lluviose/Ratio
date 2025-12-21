@@ -158,6 +158,7 @@ export function useWebDavBackup(config: WebDavBackupConfig) {
       if (typeof key !== 'string') return
       if (!key.startsWith('ratio.')) return
       if (key.startsWith('ratio.webdav.')) return
+      if (key.startsWith('ratio.account.')) return
       queueBackup()
     }
 

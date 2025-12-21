@@ -10,6 +10,7 @@ describe('backup', () => {
     localStorage.setItem('ratio.accounts', '[]')
     localStorage.setItem('ratio.theme', '"matisse2"')
     localStorage.setItem('ratio.webdav.password', 'secret')
+    localStorage.setItem('ratio.account.token', 'token')
     localStorage.setItem('unrelated', '1')
 
     const backup = buildRatioBackup(localStorage)
@@ -23,6 +24,7 @@ describe('backup', () => {
   it('clearRatioStorage removes backed-up keys only', () => {
     localStorage.setItem('ratio.accounts', '[]')
     localStorage.setItem('ratio.webdav.password', 'secret')
+    localStorage.setItem('ratio.account.token', 'token')
     localStorage.setItem('unrelated', '1')
 
     const cleared = clearRatioStorage(localStorage)
@@ -30,6 +32,7 @@ describe('backup', () => {
     expect(cleared).toEqual(['ratio.accounts'])
     expect(localStorage.getItem('ratio.accounts')).toBeNull()
     expect(localStorage.getItem('ratio.webdav.password')).toBe('secret')
+    expect(localStorage.getItem('ratio.account.token')).toBe('token')
     expect(localStorage.getItem('unrelated')).toBe('1')
   })
 
@@ -51,6 +54,7 @@ describe('backup', () => {
   it('restoreRatioBackup clears then restores ratio.* keys', () => {
     localStorage.setItem('ratio.old', '1')
     localStorage.setItem('ratio.webdav.password', 'keep')
+    localStorage.setItem('ratio.account.token', 'keep')
     localStorage.setItem('unrelated', 'keep')
 
     const backup = parseRatioBackup(
@@ -60,6 +64,7 @@ describe('backup', () => {
         items: {
           'ratio.new': '2',
           'ratio.webdav.password': 'hacked',
+          'ratio.account.token': 'hacked',
           'unrelated': 'skip',
         },
       }),
@@ -69,10 +74,11 @@ describe('backup', () => {
 
     expect(res.clearedKeys).toEqual(['ratio.old'])
     expect(res.restoredKeys).toEqual(['ratio.new'])
-    expect(res.skippedKeys).toEqual(['ratio.webdav.password', 'unrelated'])
+    expect(res.skippedKeys).toEqual(['ratio.account.token', 'ratio.webdav.password', 'unrelated'])
     expect(localStorage.getItem('ratio.old')).toBeNull()
     expect(localStorage.getItem('ratio.new')).toBe('2')
     expect(localStorage.getItem('ratio.webdav.password')).toBe('keep')
+    expect(localStorage.getItem('ratio.account.token')).toBe('keep')
     expect(localStorage.getItem('unrelated')).toBe('keep')
   })
 })
