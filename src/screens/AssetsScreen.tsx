@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
 import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
@@ -13,6 +13,13 @@ import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhys
 /** Linear interpolation helper */
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
+}
+
+function rubberband(distance: number, max: number, k = 80): number {
+  const d = Math.max(0, distance)
+  const m = Math.max(0, max)
+  const stiffness = Math.max(1, k)
+  return m * (1 - Math.exp(-d / stiffness))
 }
 
 export type GroupedAccounts = {
@@ -457,6 +464,11 @@ export function AssetsScreen(props: {
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
 
+  const edgeLockRef = useRef(false)
+  const edgePullTargetX = useMotionValue(0)
+  const edgePullX = useSpring(edgePullTargetX, { stiffness: 700, damping: 55, mass: 0.8 })
+  const edgePullScale = useTransform(edgePullX, [-32, 0], [0.994, 1])
+
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
 
   const maskedText = '*****'
@@ -863,28 +875,59 @@ export function AssetsScreen(props: {
 
     let raf = 0
     const onScroll = () => {
+      if (!selectedType) {
+        const w = el.clientWidth || 1
+        const maxScroll = w * 2
+        const current = el.scrollLeft
+        if (current > maxScroll) {
+          edgeLockRef.current = true
+          edgePullTargetX.set(-rubberband(current - maxScroll, 32, 85))
+          if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
+          scrollLeft.set(maxScroll)
+          return
+        }
+      }
+
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const w = el.clientWidth || 1
         const currentScroll = el.scrollLeft
         const maxScroll = w * 2 // 最大只能滑到 Page 2（主页），不能滑到 Page 3
 
-        // 如果没有选中类型，限制滚动范围不超过 Page 2
-        if (!selectedType && currentScroll > maxScroll) {
-          el.scrollLeft = maxScroll
-          scrollLeft.set(maxScroll)
-        } else {
+        if (!selectedType) {
           scrollLeft.set(currentScroll)
+          if (edgeLockRef.current && currentScroll < maxScroll - 0.5) {
+            edgeLockRef.current = false
+            edgePullTargetX.set(0)
+          }
+          return
         }
+
+        edgeLockRef.current = false
+        edgePullTargetX.set(0)
+        scrollLeft.set(currentScroll)
       })
     }
 
+    const onPointerEnd = () => {
+      edgeLockRef.current = false
+      edgePullTargetX.set(0)
+    }
+
     el.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('pointerup', onPointerEnd, { passive: true })
+    window.addEventListener('pointercancel', onPointerEnd, { passive: true })
+    window.addEventListener('touchend', onPointerEnd, { passive: true })
+    window.addEventListener('touchcancel', onPointerEnd, { passive: true })
     return () => {
       cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
+      window.removeEventListener('pointerup', onPointerEnd)
+      window.removeEventListener('pointercancel', onPointerEnd)
+      window.removeEventListener('touchend', onPointerEnd)
+      window.removeEventListener('touchcancel', onPointerEnd)
     }
-  }, [scrollLeft, selectedType])
+  }, [edgePullTargetX, scrollLeft, selectedType])
 
   useEffect(() => {
     const el = listScrollRef.current
@@ -1207,23 +1250,25 @@ export function AssetsScreen(props: {
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
-          <AssetsListPage
-            key={`list-${animationKey}`}
-            grouped={grouped}
-            getIcon={getIcon}
-            onPickType={(type) => {
-              setSelectedType(type)
-              scrollToPage(3)
-            }}
-            expandedGroup={expandedGroup}
-            onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
-            hideAmounts={hideAmounts}
-            scrollRef={listScrollRef}
-            onGroupEl={onGroupEl}
-            isInitialLoad={isInitialLoad}
-            isReturning={isReturning}
-            isReturningFromDetail={isReturningFromDetail}
-          />
+          <motion.div className="w-full h-full" style={{ x: edgePullX, scale: edgePullScale }}>
+            <AssetsListPage
+              key={`list-${animationKey}`}
+              grouped={grouped}
+              getIcon={getIcon}
+              onPickType={(type) => {
+                setSelectedType(type)
+                scrollToPage(3)
+              }}
+              expandedGroup={expandedGroup}
+              onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
+              hideAmounts={hideAmounts}
+              scrollRef={listScrollRef}
+              onGroupEl={onGroupEl}
+              isInitialLoad={isInitialLoad}
+              isReturning={isReturning}
+              isReturningFromDetail={isReturningFromDetail}
+            />
+          </motion.div>
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
