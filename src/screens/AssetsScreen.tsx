@@ -385,7 +385,7 @@ function OverlayBlock(props: {
                      paddingBottom: ratioContentPaddingBottom,
                      opacity: percentOpacity,
                      justifyContent: isDebt ? 'center' : 'flex-start',
-                     alignItems: isDebt ? 'center' : ratioAlignItems,
+                     alignItems: isDebt ? 'flex-start' : ratioAlignItems,
                      flexDirection: ratioFlexDirection,
                  }}
             >
