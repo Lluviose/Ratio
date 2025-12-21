@@ -14,12 +14,9 @@ import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
 import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
-import { useWebDavBackup } from './lib/useWebDavBackup'
-import { useAccountBackup } from './lib/useAccountBackup'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
-type CloudMode = 'none' | 'webdav' | 'account'
 
 function hexToRgbTriplet(hex: string): string | null {
   const raw = hex.trim().replace(/^#/, '')
@@ -46,27 +43,6 @@ export default function App() {
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
   const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
-  const initialCloudMode = useMemo<CloudMode>(() => {
-    try {
-      const raw = localStorage.getItem('ratio.webdav.enabled')
-      if (!raw) return 'none'
-      return JSON.parse(raw) === true ? 'webdav' : 'none'
-    } catch {
-      return 'none'
-    }
-  }, [])
-  const [cloudMode, setCloudMode] = useLocalStorageState<CloudMode>('ratio.cloud.mode', initialCloudMode)
-  const [webdavBaseUrl, setWebdavBaseUrl] = useLocalStorageState<string>(
-    'ratio.webdav.baseUrl',
-    'https://dav.jianguoyun.com/dav/',
-  )
-  const [webdavUsername, setWebdavUsername] = useLocalStorageState<string>('ratio.webdav.username', '')
-  const [webdavPassword, setWebdavPassword] = useLocalStorageState<string>('ratio.webdav.password', '')
-  const [webdavPath, setWebdavPath] = useLocalStorageState<string>('ratio.webdav.path', 'Apps/ratio/ratio-backup.json')
-  const [webdavProxyUrl, setWebdavProxyUrl] = useLocalStorageState<string>('ratio.webdav.proxyUrl', '')
-  const [accountApiBaseUrl, setAccountApiBaseUrl] = useLocalStorageState<string>('ratio.account.apiBaseUrl', '')
-  const [accountEmail, setAccountEmail] = useLocalStorageState<string>('ratio.account.email', '')
-  const [accountToken, setAccountToken] = useLocalStorageState<string>('ratio.account.token', '')
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
@@ -74,19 +50,6 @@ export default function App() {
   const accounts = useAccounts()
   const accountOps = useAccountOps()
   const { snapshots, upsertFromAccounts } = useSnapshots()
-  const webdavBackup = useWebDavBackup({
-    enabled: cloudMode === 'webdav',
-    baseUrl: webdavBaseUrl,
-    username: webdavUsername,
-    password: webdavPassword,
-    path: webdavPath,
-    proxyUrl: webdavProxyUrl,
-  })
-  const accountBackup = useAccountBackup({
-    enabled: cloudMode === 'account',
-    apiBaseUrl: accountApiBaseUrl,
-    token: accountToken,
-  })
 
   const resolvedTheme = theme === 'random' ? randomTheme : theme
 
@@ -287,63 +250,6 @@ export default function App() {
                         onThemeChange={(id) => {
                           if (id === 'random') setRandomTheme(pickRandomThemeId())
                           setTheme(id)
-                        }}
-                        cloudMode={cloudMode}
-                        onCloudModeChange={setCloudMode}
-                        webdavBaseUrl={webdavBaseUrl}
-                        onWebdavBaseUrlChange={setWebdavBaseUrl}
-                        webdavUsername={webdavUsername}
-                        onWebdavUsernameChange={setWebdavUsername}
-                        webdavPassword={webdavPassword}
-                        onWebdavPasswordChange={setWebdavPassword}
-                        webdavPath={webdavPath}
-                        onWebdavPathChange={setWebdavPath}
-                        webdavProxyUrl={webdavProxyUrl}
-                        onWebdavProxyUrlChange={setWebdavProxyUrl}
-                        webdavStatus={webdavBackup.status}
-                        onWebdavBackupNow={() => void webdavBackup.backupNow()}
-                        onWebdavRestoreFromCloud={async () => {
-                          const ok = window.confirm('从坚果云恢复会覆盖当前设备上的所有数据，是否继续？')
-                          if (!ok) return
-                          try {
-                            const res = await webdavBackup.restoreFromCloud()
-                            window.alert(`已恢复 ${res.restoredKeys.length} 项数据，页面将自动刷新。`)
-                            window.location.reload()
-                          } catch (error) {
-                            const msg = error instanceof Error ? error.message : '恢复失败'
-                            window.alert(msg)
-                          }
-                        }}
-                        accountApiBaseUrl={accountApiBaseUrl}
-                        onAccountApiBaseUrlChange={setAccountApiBaseUrl}
-                        accountEmail={accountEmail}
-                        onAccountEmailChange={setAccountEmail}
-                        accountToken={accountToken}
-                        accountStatus={accountBackup.status}
-                        onAccountRegister={async (email, password) => {
-                          const token = await accountBackup.register(email, password)
-                          setAccountToken(token)
-                        }}
-                        onAccountLogin={async (email, password) => {
-                          const token = await accountBackup.login(email, password)
-                          setAccountToken(token)
-                        }}
-                        onAccountLogout={async () => {
-                          await accountBackup.logout()
-                          setAccountToken('')
-                        }}
-                        onAccountBackupNow={() => void accountBackup.backupNow()}
-                        onAccountRestoreFromCloud={async () => {
-                          const ok = window.confirm('从云端恢复会覆盖当前设备上的所有数据，是否继续？')
-                          if (!ok) return
-                          try {
-                            const res = await accountBackup.restoreFromCloud()
-                            window.alert(`已恢复 ${res.restoredKeys.length} 项数据，页面将自动刷新。`)
-                            window.location.reload()
-                          } catch (error) {
-                            const msg = error instanceof Error ? error.message : '恢复失败'
-                            window.alert(msg)
-                          }
                         }}
                       />
                     </motion.div>
