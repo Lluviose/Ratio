@@ -47,17 +47,21 @@ export default {
       return new Response('Forbidden host', { status: 403, headers: cors })
     }
 
+    const method = request.method.toUpperCase()
     const headers = new Headers(request.headers)
     headers.delete('X-WebDAV-Target-Url')
     headers.delete('Origin')
     headers.delete('Referer')
+    headers.delete('Host')
 
-    const res = await fetch(targetUrl.toString(), {
-      method: request.method,
-      headers,
-      body: request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body,
-    })
+    const body = method === 'GET' || method === 'HEAD' || method === 'MKCOL' ? undefined : request.body
 
-    return withCors(res, cors)
+    try {
+      const res = await fetch(targetUrl.toString(), { method, headers, body })
+      return withCors(res, cors)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return new Response(`Upstream fetch failed: ${msg}`, { status: 502, headers: cors })
+    }
   },
 }

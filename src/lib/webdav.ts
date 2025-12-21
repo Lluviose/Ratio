@@ -33,17 +33,31 @@ function normalizePath(input: string) {
 }
 
 function encodePath(path: string) {
-  return path
+  const hasTrailingSlash = path.endsWith('/')
+  const encoded = path
     .split('/')
     .filter((seg) => seg.length > 0)
     .map((seg) => encodeURIComponent(seg))
     .join('/')
+  if (hasTrailingSlash && encoded) return `${encoded}/`
+  return encoded
 }
 
 function joinUrl(baseUrl: string, path: string) {
   const normalized = normalizePath(path)
   const encoded = encodePath(normalized)
   return new URL(encoded, baseUrl).toString()
+}
+
+function formatStatus(res: Response) {
+  return `${res.status}${res.statusText ? ` ${res.statusText}` : ''}`.trim()
+}
+
+function statusHint(status: number) {
+  if (status === 401) return '（认证失败：请确认用户名为坚果云账号、密码为应用密码）'
+  if (status === 409) return '（父目录不存在：请先创建目录或更换备份路径）'
+  if (status === 520) return '（代理/Cloudflare 异常：请检查代理地址是否正确部署并可访问）'
+  return ''
 }
 
 export function createWebDavClient(config: {
@@ -87,13 +101,13 @@ export async function webdavPutText(
     body: text,
   })
   if (res.ok) return
-  throw new Error(`WebDAV 上传失败：${res.status} ${res.statusText}`.trim())
+  throw new Error(`WebDAV 上传失败：${formatStatus(res)}${statusHint(res.status)}`.trim())
 }
 
-export async function webdavGetText(client: WebDavClient, path: string) {
+export async function webdavGetText(client: WebDavClient, path: string) {       
   const url = joinUrl(client.baseUrl, path)
   const res = await request(client, url, { method: 'GET' })
-  if (!res.ok) throw new Error(`WebDAV 下载失败：${res.status} ${res.statusText}`.trim())
+  if (!res.ok) throw new Error(`WebDAV 下载失败：${formatStatus(res)}${statusHint(res.status)}`.trim())
   return res.text()
 }
 
@@ -104,7 +118,7 @@ export async function webdavMkcol(client: WebDavClient, dirPath: string) {
   if (res.status === 201) return
   if (res.status === 405) return
   if (res.ok) return
-  throw new Error(`WebDAV 创建目录失败：${res.status} ${res.statusText}`.trim())
+  throw new Error(`WebDAV 创建目录失败：${formatStatus(res)}${statusHint(res.status)}`.trim())
 }
 
 export async function ensureWebDavParentDirs(client: WebDavClient, filePath: string) {
