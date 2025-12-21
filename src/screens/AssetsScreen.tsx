@@ -465,9 +465,10 @@ export function AssetsScreen(props: {
   const scrollLeft = useMotionValue(99999)
 
   const edgeLockRef = useRef(false)
+  const edgePointerDownRef = useRef(false)
   const edgePullTargetX = useMotionValue(0)
-  const edgePullX = useSpring(edgePullTargetX, { stiffness: 700, damping: 55, mass: 0.8 })
-  const edgePullScale = useTransform(edgePullX, [-32, 0], [0.994, 1])
+  const edgePullX = useSpring(edgePullTargetX, { stiffness: 520, damping: 62, mass: 1 })
+  const edgePullScale = useTransform(edgePullX, [-24, 0], [0.997, 1])
 
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
 
@@ -881,7 +882,7 @@ export function AssetsScreen(props: {
         const current = el.scrollLeft
         if (current > maxScroll) {
           edgeLockRef.current = true
-          edgePullTargetX.set(-rubberband(current - maxScroll, 32, 85))
+          edgePullTargetX.set(-rubberband(current - maxScroll, 24, 130))
           if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
           scrollLeft.set(maxScroll)
           return
@@ -895,8 +896,18 @@ export function AssetsScreen(props: {
         const maxScroll = w * 2 // 最大只能滑到 Page 2（主页），不能滑到 Page 3
 
         if (!selectedType) {
+          if (edgeLockRef.current && edgePointerDownRef.current) {
+            const stickPx = 10
+            if (currentScroll > maxScroll - stickPx) {
+              if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
+              scrollLeft.set(maxScroll)
+              return
+            }
+          }
+
           scrollLeft.set(currentScroll)
-          if (edgeLockRef.current && currentScroll < maxScroll - 0.5) {
+          const releasePx = edgePointerDownRef.current ? 14 : 2
+          if (edgeLockRef.current && currentScroll < maxScroll - releasePx) {
             edgeLockRef.current = false
             edgePullTargetX.set(0)
           }
@@ -909,11 +920,16 @@ export function AssetsScreen(props: {
       })
     }
 
+    const onPointerDown = () => {
+      edgePointerDownRef.current = true
+    }
     const onPointerEnd = () => {
+      edgePointerDownRef.current = false
       edgeLockRef.current = false
       edgePullTargetX.set(0)
     }
 
+    el.addEventListener('pointerdown', onPointerDown, { passive: true })
     el.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('pointerup', onPointerEnd, { passive: true })
     window.addEventListener('pointercancel', onPointerEnd, { passive: true })
@@ -921,6 +937,7 @@ export function AssetsScreen(props: {
     window.addEventListener('touchcancel', onPointerEnd, { passive: true })
     return () => {
       cancelAnimationFrame(raf)
+      el.removeEventListener('pointerdown', onPointerDown)
       el.removeEventListener('scroll', onScroll)
       window.removeEventListener('pointerup', onPointerEnd)
       window.removeEventListener('pointercancel', onPointerEnd)
