@@ -64,6 +64,7 @@ function OverlayBlock(props: {
   isReturningFromDetail?: boolean
   blockIndex?: number
   viewportWidth?: number
+  isLastInList?: boolean
 }) {
   const {
     block,
@@ -83,11 +84,19 @@ function OverlayBlock(props: {
     isReturningFromDetail = false,
     blockIndex = 0,
     viewportWidth = 400,
+    isLastInList: isLastInListProp,
   } = props
 
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
   const list = listRect ?? ratioRect ?? ratio
   const bRadius = bubbleRadius ?? 60
+  const isLastInList =
+    isLastInListProp ??
+    (kind === 'assetBottom' ||
+      kind === 'assetBottomNoDebt' ||
+      kind === 'assetOnly' ||
+      kind === 'assetOnlyNoDebt' ||
+      kind === 'debt')
   
   // Fallback for bubble pos if missing (shouldn't happen if initialized)
   const defaultBX = useMotionValue(ratio.x + ratio.w / 2)
@@ -133,7 +142,10 @@ function OverlayBlock(props: {
     if (idx < 1) {
       return lerp(bRadius * 2, ratio.w, Math.max(0, idx))
     }
-    return lerp(ratio.w, list.w, Math.min(1, Math.max(0, idx - 1)))
+    const t = Math.min(1, Math.max(0, idx - 1))
+    const listTargetWBase = listRect?.w ?? viewportWidth
+    const listTargetW = listTargetWBase / 3
+    return lerp(ratio.w, listTargetW, t)
   })
 
   const h = useTransform(scrollIdx, (idx) => {
@@ -145,7 +157,7 @@ function OverlayBlock(props: {
     // list.h 是 measureListRects 测量出来的实际 DOM 高度
     // 我们需要在此基础上增加延伸高度
     // 注意：最后一个色块不需要延伸
-    const isLast = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
+    const isLast = isLastInList
     const extend = isLast ? 0 : 32 // 延伸 32px
     const listH = list.h + extend
 
@@ -183,8 +195,8 @@ function OverlayBlock(props: {
   // List 视图下的圆角逻辑：
   // 所有卡片都是左上/右上圆角，向下延伸覆盖
   // 除了最后一个卡片底部也是圆角
-  const isLastBlock = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
-  const listCorner = { tl: listRadius, tr: listRadius, bl: isLastBlock ? listRadius : 0, br: isLastBlock ? listRadius : 0 }
+  const isLastBlock = isLastInList
+  const listCorner = { tl: 0, tr: listRadius, bl: 0, br: isLastBlock ? listRadius : 0 }
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
@@ -1100,6 +1112,9 @@ export function AssetsScreen(props: {
     }
   }, [selectedType, grouped.groupCards])
 
+  const hasDebtBlock = Boolean(blocks.debt)
+  const lastAssetId = blocks.assets.length > 0 ? blocks.assets[blocks.assets.length - 1]?.id ?? null : null
+
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
@@ -1147,7 +1162,7 @@ export function AssetsScreen(props: {
             ratioRect={ratioLayout.rects.debt}
             listRect={listRects.debt}
             bubblePos={bubblePositions.get('debt')}
-            bubbleRadius={bubbleNodes.find(n => n.id === 'debt')?.radius}
+            bubbleRadius={bubbleNodes.find(n => n.id === 'debt')?.radius}       
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
@@ -1158,6 +1173,7 @@ export function AssetsScreen(props: {
             isReturningFromDetail={isReturningFromDetail}
             blockIndex={0}
             viewportWidth={viewport.w}
+            isLastInList={true}
           />
         ) : null}
 
@@ -1230,6 +1246,7 @@ export function AssetsScreen(props: {
             isReturningFromDetail={isReturningFromDetail}
             blockIndex={blocks.debt ? i + 1 : i}
             viewportWidth={viewport.w}
+            isLastInList={!hasDebtBlock && b.id === lastAssetId}
           />
         ))}
         </div>

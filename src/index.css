@@ -105,6 +105,13 @@ a {
   text-decoration: none;
 }
 
+/* Ensure iOS Safari renders Tailwind backdrop blur */
+[class*="backdrop-blur"] {
+  -webkit-backdrop-filter: var(--tw-backdrop-blur) var(--tw-backdrop-brightness) var(--tw-backdrop-contrast)
+    var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate) var(--tw-backdrop-invert)
+    var(--tw-backdrop-opacity) var(--tw-backdrop-saturate) var(--tw-backdrop-sepia);
+}
+
 .appViewport {
   height: 100%;
   display: flex;
@@ -221,6 +228,7 @@ a {
   right: 0;
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   background: rgba(245, 246, 248, 0.85);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border-top: 1px solid rgba(11, 15, 26, 0.06);
   z-index: 3;
@@ -307,6 +315,7 @@ a {
   position: fixed;
   inset: 0;
   background: rgba(11, 15, 26, 0.4);
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
