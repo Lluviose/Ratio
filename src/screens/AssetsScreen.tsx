@@ -147,7 +147,9 @@ function OverlayBlock(props: {
     // 注意：最后一个色块不需要延伸
     const isLast = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
     // 非最后一个色块向下延伸，填充下一个色块圆角产生的空白
-    const extend = isLast ? 0 : listRadius
+    // List 页面条目之间有间距，因此这里额外加上 stackGap，保证多层叠时不露底
+    const stackGap = 4
+    const extend = isLast ? 0 : listRadius + stackGap + 2
     const listH = list.h + extend
 
     return lerp(ratio.h, listH, Math.min(1, Math.max(0, idx - 1)))
@@ -759,7 +761,7 @@ export function AssetsScreen(props: {
 
     const rootRect = root.getBoundingClientRect()
     const next: Partial<Record<GroupId, Rect>> = {}
-    const blockGap = 10
+    const blockGap = 12
 
     for (const id of Object.keys(groupElsRef.current) as GroupId[]) {
       const el = groupElsRef.current[id]
