@@ -870,6 +870,8 @@ export function AssetsScreen(props: {
     return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true })
   }, [moreOpen])
 
+  const edgePointerXRef = useRef<number | null>(null)
+
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
@@ -880,9 +882,16 @@ export function AssetsScreen(props: {
         const w = el.clientWidth || 1
         const maxScroll = w * 2
         const current = el.scrollLeft
-        if (current > maxScroll) {
+
+        // 只有当用户正在按住并拖动时才应用阻尼
+        if (current > maxScroll && edgePointerDownRef.current && edgePointerXRef.current !== null) {
           edgeLockRef.current = true
-          edgePullTargetX.set(-rubberband(current - maxScroll, 60, 160))
+          // 计算相对于屏幕宽度的额外拖动距离
+          // 由于 scrollLeft 可能在 bounce 过程中抖动，我们更信任 pointer 移动
+          // 这里简化处理：仍然基于 scrollLeft，但增加阈值锁定
+          const overscroll = current - maxScroll
+          edgePullTargetX.set(-rubberband(overscroll, 60, 160))
+
           if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
           scrollLeft.set(maxScroll)
           return
@@ -893,24 +902,24 @@ export function AssetsScreen(props: {
       raf = requestAnimationFrame(() => {
         const w = el.clientWidth || 1
         const currentScroll = el.scrollLeft
-        const maxScroll = w * 2 // 最大只能滑到 Page 2（主页），不能滑到 Page 3
+        const maxScroll = w * 2
 
         if (!selectedType) {
-          if (edgeLockRef.current && edgePointerDownRef.current) {
-            const stickPx = 10
-            if (currentScroll > maxScroll - stickPx) {
-              if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-              scrollLeft.set(maxScroll)
-              return
+          // 如果锁定中，确保位置正确
+          if (edgeLockRef.current) {
+            // 如果用户松开手，或者已经滚回范围内
+            if (!edgePointerDownRef.current || currentScroll <= maxScroll) {
+               edgeLockRef.current = false
+               edgePullTargetX.set(0)
+            } else {
+               // 保持锁定状态，防止抖动
+               if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
+               scrollLeft.set(maxScroll)
+               return
             }
           }
 
           scrollLeft.set(currentScroll)
-          const releasePx = edgePointerDownRef.current ? 14 : 2
-          if (edgeLockRef.current && currentScroll < maxScroll - releasePx) {
-            edgeLockRef.current = false
-            edgePullTargetX.set(0)
-          }
           return
         }
 
@@ -920,16 +929,24 @@ export function AssetsScreen(props: {
       })
     }
 
-    const onPointerDown = () => {
+    const onPointerDown = (e: PointerEvent) => {
       edgePointerDownRef.current = true
+      edgePointerXRef.current = e.clientX
+    }
+    const onPointerMove = (e: PointerEvent) => {
+      if (edgePointerDownRef.current) {
+        edgePointerXRef.current = e.clientX
+      }
     }
     const onPointerEnd = () => {
       edgePointerDownRef.current = false
+      edgePointerXRef.current = null
       edgeLockRef.current = false
       edgePullTargetX.set(0)
     }
 
     el.addEventListener('pointerdown', onPointerDown, { passive: true })
+    window.addEventListener('pointermove', onPointerMove, { passive: true })
     el.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('pointerup', onPointerEnd, { passive: true })
     window.addEventListener('pointercancel', onPointerEnd, { passive: true })
@@ -938,6 +955,7 @@ export function AssetsScreen(props: {
     return () => {
       cancelAnimationFrame(raf)
       el.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointermove', onPointerMove)
       el.removeEventListener('scroll', onScroll)
       window.removeEventListener('pointerup', onPointerEnd)
       window.removeEventListener('pointercancel', onPointerEnd)
