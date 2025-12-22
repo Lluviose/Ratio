@@ -46,7 +46,7 @@ export function AssetsListPage(props: {
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">
       <div className="px-4 pt-[104px] pb-24">
-        <div className="flex flex-col gap-0 pl-[34%] pr-4">
+        <div className="flex flex-col gap-0 pl-24">
           {groups.map((g, i) => {
             const id = g.group.id as GroupId
             const isExpanded = expandedGroup === id
@@ -148,14 +148,14 @@ export function AssetsListPage(props: {
                                   'backdrop-blur-md transition-all duration-200',
                                 )}
                                 style={{
-                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.2) 100%)',
-                                  boxShadow: '0 4px 24px -1px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(255, 255, 255, 0.4) inset',
-                                  borderTop: '1px solid rgba(255, 255, 255, 0.5)',
+                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.65) 100%)',
+                                  boxShadow: '0 2px 12px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.7) inset',
+                                  border: '1px solid rgba(255, 255, 255, 0.5)',
                                 }}
                                 onClick={() => onPickType(t.type)}
                                 whileTap={{ scale: 0.99 }}
                                 whileHover={{
-                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.4) 100%)',
+                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.8) 100%)',
                                 }}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
