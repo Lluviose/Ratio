@@ -4,10 +4,35 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { type ComponentType, type Ref, useMemo } from 'react'
 import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
-import { pickForegroundColor } from '../lib/themes'
 import type { GroupedAccounts } from './AssetsScreen'
 
 type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
+
+function withAlpha(color: string, alpha: number): string {
+  const hex = color.trim()
+  if (!hex.startsWith('#')) return color
+  const raw = hex.slice(1)
+
+  let r: number
+  let g: number
+  let b: number
+
+  if (raw.length === 3) {
+    r = Number.parseInt(raw[0] + raw[0], 16)
+    g = Number.parseInt(raw[1] + raw[1], 16)
+    b = Number.parseInt(raw[2] + raw[2], 16)
+  } else if (raw.length === 6) {
+    r = Number.parseInt(raw.slice(0, 2), 16)
+    g = Number.parseInt(raw.slice(2, 4), 16)
+    b = Number.parseInt(raw.slice(4, 6), 16)
+  } else {
+    return color
+  }
+
+  if ([r, g, b].some((v) => Number.isNaN(v))) return color
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 export function AssetsListPage(props: {
   grouped: GroupedAccounts
@@ -46,20 +71,14 @@ export function AssetsListPage(props: {
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">
       <div className="px-4 pt-[104px] pb-24">
-        <div className="flex flex-col gap-0 pl-24">
+        <div className="flex flex-col gap-0">
           {groups.map((g, i) => {
             const id = g.group.id as GroupId
             const isExpanded = expandedGroup === id
+            const cardBg = isExpanded ? withAlpha(g.group.tone, 0.42) : '#ffffff'
 
             const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
             const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().slice(-1)[0] : undefined
-            
-            // Helper to get a tinted background for expanded state
-            // We use the group tone but make it very subtle/light for the background
-            // Since we can't easily manipulate hex here without a lib, we'll use an overlay approach
-            // or just assume we can use the tone with opacity if it were RGB. 
-            // Since tone is likely Hex, let's use a simple opacity overlay trick or just use the tone directly if it looks good.
-            // Let's try an overlay div that fades in.
 
             const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
               .map((type) => {
@@ -78,7 +97,10 @@ export function AssetsListPage(props: {
               <motion.div
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
-                className="relative overflow-hidden"
+                className={clsx(
+                  'relative overflow-hidden rounded-[22px] border border-black/5 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.35)]',
+                  'ml-14',
+                )}
                 initial={needsEnterAnimation ? { opacity: 0, x: 100 } : false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{
@@ -87,7 +109,8 @@ export function AssetsListPage(props: {
                   ease: [0.2, 0, 0, 1],
                 }}
                 style={{
-                  paddingBottom: isExpanded ? 24 : 0
+                  paddingBottom: isExpanded ? 20 : 0,
+                  background: cardBg,
                 }}
               >
                 {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
@@ -135,7 +158,7 @@ export function AssetsListPage(props: {
                       className="overflow-hidden"
                     >
                       <div className="px-3 pb-3">
-                        <div className="h-px bg-white/60 mb-2" />
+                        <div className="h-px bg-white/70 mb-2" />
                         <div className="flex flex-col gap-2">
                           {typeCards.map((t) => {
                             const Icon = getIcon(t.type)
@@ -145,28 +168,26 @@ export function AssetsListPage(props: {
                                 type="button"
                                 className={clsx(
                                   'flex items-center justify-between rounded-[18px] px-3 py-3 text-left',
-                                  'backdrop-blur-md transition-all duration-200',
+                                  'bg-white border border-black/5 shadow-[0_6px_20px_-18px_rgba(15,23,42,0.45)]',
+                                  'transition-colors duration-200',
                                 )}
-                                style={{
-                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(255, 255, 255, 0.65) 100%)',
-                                  boxShadow: '0 2px 12px -2px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(255, 255, 255, 0.7) inset',
-                                  border: '1px solid rgba(255, 255, 255, 0.5)',
-                                }}
                                 onClick={() => onPickType(t.type)}
                                 whileTap={{ scale: 0.99 }}
                                 whileHover={{
-                                  background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.8) 100%)',
+                                  backgroundColor: 'rgba(255,255,255,0.92)',
                                 }}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div
-                                    className="w-9 h-9 rounded-2xl flex items-center justify-center border border-black/5"
-                                    style={{ background: g.group.tone, color: pickForegroundColor(g.group.tone) }}
+                                    className="w-9 h-9 rounded-2xl flex items-center justify-center"
+                                    style={{ color: g.group.tone }}
                                   >
                                     <Icon size={18} />
                                   </div>
                                   <div className="min-w-0">
-                                    <div className="text-[13px] font-semibold truncate text-slate-900">{t.opt.name}</div>
+                                    <div className="text-[13px] font-semibold truncate" style={{ color: g.group.tone }}>
+                                      {t.opt.name}
+                                    </div>
                                     <div className="text-[10px] font-medium text-slate-400 mt-0.5">
                                       {t.updatedAt ? formatTime(t.updatedAt) : ''}
                                     </div>
@@ -174,7 +195,8 @@ export function AssetsListPage(props: {
                                 </div>
                                 <div className="text-right shrink-0">
                                   <div
-                                    className={clsx('text-[13px] font-semibold text-slate-900', hideAmounts && maskedClass)}
+                                    className={clsx('text-[13px] font-semibold', hideAmounts && maskedClass)}
+                                    style={{ color: g.group.tone }}
                                   >
                                     {hideAmounts ? maskedText : formatCny(t.total)}
                                   </div>
