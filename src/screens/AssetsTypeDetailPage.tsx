@@ -94,13 +94,12 @@ export function AssetsTypeDetailPage(props: {
             {list.map((account, i) => (
               <motion.div
                 key={account.id}
-                className="flex items-center justify-between p-3 hover:bg-slate-50 rounded-2xl cursor-pointer"
+                className="flex items-center justify-between p-3 rounded-2xl cursor-pointer transition-colors duration-150 active:bg-[var(--hairline)]"
                 onClick={() => onEditAccount(account)}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 + i * 0.05 }}
                 whileTap={{ scale: 0.98 }}
-                whileHover={{ backgroundColor: 'var(--hairline)' }}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200/50">
