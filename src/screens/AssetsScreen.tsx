@@ -4,6 +4,7 @@ import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, u
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { pickForegroundColor } from '../lib/themes'
+import { allocateIntegerPercents } from '../lib/percent'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
@@ -559,20 +560,25 @@ export function AssetsScreen(props: {
       byId.set(g.group.id as GroupId, { group: g.group, accountsCount: g.accounts.length, total: g.total })
     }
 
-    const assetsTotal = grouped.assetsTotal || 0
-    const pct = (amount: number, total: number) => (total > 0 ? Math.round((amount / total) * 100) : 0)
-
     const assetOrder: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable']
+    const assetAmounts = assetOrder.map((id) => {
+      const g = byId.get(id)
+      const total = Number.isFinite(g?.total) ? Math.max(0, g?.total ?? 0) : 0
+      return { id, amount: total }
+    })
+    const assetTotal = assetAmounts.reduce((s, a) => s + a.amount, 0)
+    const assetPercents = allocateIntegerPercents(assetAmounts)
     const assets: Block[] = assetOrder
       .map((id) => {
         const g = byId.get(id)
         if (!g) return null
+        const amount = Number.isFinite(g.total) ? Math.max(0, g.total) : 0
         return {
           id,
           name: g.group.name,
           tone: g.group.tone,
-          amount: g.total,
-          percent: pct(g.total, assetsTotal),
+          amount,
+          percent: assetPercents[id] ?? 0,
           hasCard: g.accountsCount > 0,
         } satisfies Block
       })
@@ -580,13 +586,19 @@ export function AssetsScreen(props: {
       .filter((b) => b.hasCard)
 
     const debtRaw = byId.get('debt')
+    const debtPercent = (amount: number) => {
+      if (assetTotal <= 0) return 0
+      const exact = (amount / assetTotal) * 100
+      if (exact > 0 && exact < 1) return 1
+      return Math.round(exact)
+    }
     const debt: Block | null = debtRaw
       ? {
           id: 'debt',
           name: debtRaw.group.name,
           tone: debtRaw.group.tone,
-          amount: debtRaw.total,
-          percent: pct(debtRaw.total, assetsTotal),
+          amount: Number.isFinite(debtRaw.total) ? Math.max(0, debtRaw.total) : 0,
+          percent: debtPercent(Number.isFinite(debtRaw.total) ? Math.max(0, debtRaw.total) : 0),
           hasCard: debtRaw.accountsCount > 0,
         }
       : null
