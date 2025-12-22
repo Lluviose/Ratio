@@ -33,6 +33,8 @@ type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
 
 type Rect = { x: number; y: number; w: number; h: number }
 
+const LIST_GROUP_ORDER: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+
 type Block = {
   id: GroupId
   name: string
@@ -748,6 +750,14 @@ export function AssetsScreen(props: {
     return kinds
   }, [blocks.assets, blocks.debt, ratioLayout.bottomAssetId, ratioLayout.topAssetId, ratioLayout.hasDebt])
 
+  const overlayBlocksInListOrder = useMemo(() => {
+    const byId = new Map<GroupId, Block>()
+    for (const b of blocks.assets) byId.set(b.id, b)
+    if (blocks.debt) byId.set('debt', blocks.debt)
+
+    return LIST_GROUP_ORDER.map((id) => byId.get(id)).filter((b): b is Block => Boolean(b))
+  }, [blocks.assets, blocks.debt])
+
   const measureListRects = useCallback(() => {
     const root = viewportRef.current
     if (!root) return
@@ -784,7 +794,7 @@ export function AssetsScreen(props: {
     }
 
     // 固定顺序，确保层叠方向稳定（后面的色块盖住前面的色块）
-    const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+    const order = LIST_GROUP_ORDER
     const items: Array<{ id: GroupId; top: number; height: number; cardLeft: number }> = []
 
     for (const id of order) {
@@ -1180,27 +1190,8 @@ export function AssetsScreen(props: {
           />
         ) : null}
 
-        {blocks.debt ? (
-          <OverlayBlock
-            key={`debt-${animationKey}`}
-            block={blocks.debt}
-            kind="debt"
-            ratioRect={ratioLayout.rects.debt}
-            listRect={listRects.debt}
-            bubblePos={bubblePositions.get('debt')}
-            bubbleRadius={bubbleNodes.find(n => n.id === 'debt')?.radius}
-            scrollIdx={scrollIdx}
-            overlayFade={overlayFade}
-            labelsOpacity={labelsOpacity}
-            chartRadius={chartRadius}
-            listRadius={listRadius}
-            isReturning={isReturning}
-            isInitialLoad={isInitialLoad}
-            isReturningFromDetail={isReturningFromDetail}
-            blockIndex={0}
-            viewportWidth={viewport.w}
-          />
-        ) : null}
+        {/* Overlay blocks are rendered in list order (top -> bottom). Later items sit above earlier ones,
+            and the previous item is extended downward to show through the next item’s rounded corner. */}
 
         {/* 顶部色块先渲染，按顺序渲染
             每个色块向下延伸的部分垫在下方色块的圆角处
@@ -1251,14 +1242,14 @@ export function AssetsScreen(props: {
 
             我们只需要确保 OverlayBlock 在 List 模式下也向下延伸即可。
          */}
-        {blocks.assets.map((b, i) => (
+        {overlayBlocksInListOrder.map((b, i) => (
           <OverlayBlock
             key={`${b.id}-${animationKey}`}
             block={b}
             kind={blockKinds[b.id] ?? 'assetMiddle'}
             ratioRect={ratioLayout.rects[b.id]}
             listRect={listRects[b.id]}
-            displayHeight={ratioLayout.displayHeights[b.id]}
+            displayHeight={b.id === 'debt' ? undefined : ratioLayout.displayHeights[b.id]}
             bubblePos={bubblePositions.get(b.id)}
             bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
             scrollIdx={scrollIdx}
@@ -1269,7 +1260,7 @@ export function AssetsScreen(props: {
             isReturning={isReturning}
             isInitialLoad={isInitialLoad}
             isReturningFromDetail={isReturningFromDetail}
-            blockIndex={blocks.debt ? i + 1 : i}
+            blockIndex={i}
             viewportWidth={viewport.w}
           />
         ))}
