@@ -140,17 +140,12 @@ function OverlayBlock(props: {
     if (idx < 1) {
       return lerp(bRadius * 2, ratio.h, Math.max(0, idx))
     }
-    // List 模式下，色块高度需要包含延伸部分，以便被下一个色块盖住时不会漏底
-    // 下一个色块圆角处的空隙需要被当前色块的延伸部分填充
-    // list.h 是 measureListRects 测量出来的实际 DOM 高度
-    // 我们需要在此基础上增加延伸高度
-    // 注意：最后一个色块不需要延伸
-    const isLast = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
-    // 非最后一个色块向下延伸，填充下一个色块圆角产生的空白
-    // List 页面条目之间有间距，因此这里额外加上 stackGap，保证多层叠时不露底
-    const stackGap = 4
-    const extend = isLast ? 0 : listRadius + stackGap + 2
-    const listH = list.h + extend
+    // List 模式：list.h 由 measureListRects 计算，包含「到下一个条目顶部的距离」以及
+    // 「覆盖下一个色块圆角所需的重叠量」，确保：
+    // 1) 当前色块上沿与条目上沿对齐
+    // 2) 视觉上当前色块下沿对齐到下一个条目上沿
+    // 3) 下一个色块圆角空白由上一个色块填充（多层叠不露底）
+    const listH = list.h
 
     return lerp(ratio.h, listH, Math.min(1, Math.max(0, idx - 1)))
   })
@@ -538,6 +533,9 @@ export function AssetsScreen(props: {
   const listHeaderPointerEvents = useTransform(ratioProgress, (p) => (p < 0.05 ? 'none' : 'auto'))
   const miniBarPointerEvents = useTransform(miniBarOpacity, (o) => (o < 0.2 ? 'none' : 'auto'))
 
+  const chartRadius = 32
+  const listRadius = 30
+
   const blocks = useMemo(() => {
     const byId = new Map<GroupId, { group: AccountGroup; accountsCount: number; total: number }>()
     for (const g of grouped.groupCards) {
@@ -762,18 +760,57 @@ export function AssetsScreen(props: {
     const rootRect = root.getBoundingClientRect()
     const next: Partial<Record<GroupId, Rect>> = {}
     const blockGap = 12
+    const overlap = listRadius
 
-    for (const id of Object.keys(groupElsRef.current) as GroupId[]) {
+    const getTranslateX = (el: HTMLElement): number => {
+      const transform = window.getComputedStyle(el).transform
+      if (!transform || transform === 'none') return 0
+
+      const m2d = transform.match(/^matrix\((.+)\)$/)
+      if (m2d) {
+        const parts = m2d[1].split(',').map((p) => Number.parseFloat(p.trim()))
+        const tx = parts[4]
+        return Number.isFinite(tx) ? tx : 0
+      }
+
+      const m3d = transform.match(/^matrix3d\((.+)\)$/)
+      if (m3d) {
+        const parts = m3d[1].split(',').map((p) => Number.parseFloat(p.trim()))
+        const tx = parts[12]
+        return Number.isFinite(tx) ? tx : 0
+      }
+
+      return 0
+    }
+
+    // 固定顺序，确保层叠方向稳定（后面的色块盖住前面的色块）
+    const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+    const items: Array<{ id: GroupId; top: number; height: number; cardLeft: number }> = []
+
+    for (const id of order) {
       const el = groupElsRef.current[id]
       if (!el) continue
       const r = el.getBoundingClientRect()
-      const cardLeft = r.left - rootRect.left
-      const blockWidth = Math.max(0, Math.round(cardLeft - blockGap))
-      next[id] = {
+      const top = r.top - rootRect.top
+      const translateX = getTranslateX(el)
+      const cardLeft = r.left - rootRect.left - translateX
+      items.push({ id, top, height: r.height, cardLeft })
+    }
+
+    for (let i = 0; i < items.length; i += 1) {
+      const item = items[i]
+      if (!item) continue
+      const nextItem = items[i + 1]
+
+      const blockWidth = Math.max(0, Math.round(item.cardLeft - blockGap))
+      const baseHeight = nextItem ? Math.max(0, nextItem.top - item.top) : Math.max(0, item.height)
+      const blockHeight = nextItem ? baseHeight + overlap : baseHeight
+
+      next[item.id] = {
         x: 0,
-        y: r.top - rootRect.top,
+        y: item.top,
         w: blockWidth,
-        h: r.height,
+        h: blockHeight,
       }
     }
 
@@ -1014,9 +1051,6 @@ export function AssetsScreen(props: {
   }, [scheduleMeasure])
 
   useEffect(() => scheduleMeasure(), [expandedGroup, scheduleMeasure])
-
-  const chartRadius = 32
-  const listRadius = 30
 
   // 计算负债上方的白色填充块（负债比例低于100%时）
   const debtFillerRect = useMemo(() => {
