@@ -19,6 +19,38 @@ export type Snapshot = {
   accounts?: SnapshotAccount[]
 }
 
+function toFiniteNumber(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) ? v : 0
+}
+
+export function normalizeSnapshot(s: Snapshot): Snapshot {
+  const anySnap = s as unknown as Record<string, unknown>
+  const date = typeof anySnap.date === 'string' ? anySnap.date : ''
+  const accountsRaw = anySnap.accounts
+  const accounts = Array.isArray(accountsRaw)
+    ? accountsRaw
+        .map((a) => a as Record<string, unknown>)
+        .filter((a) => typeof a.id === 'string' && typeof a.type === 'string' && typeof a.name === 'string')
+        .map((a) => ({
+          id: a.id as string,
+          type: a.type as AccountTypeId,
+          name: a.name as string,
+          balance: toFiniteNumber(a.balance),
+        }))
+    : undefined
+
+  return {
+    date,
+    net: toFiniteNumber(anySnap.net),
+    debt: toFiniteNumber(anySnap.debt),
+    cash: toFiniteNumber(anySnap.cash ?? anySnap.liquid),
+    invest: toFiniteNumber(anySnap.invest),
+    fixed: toFiniteNumber(anySnap.fixed),
+    receivable: toFiniteNumber(anySnap.receivable),
+    accounts,
+  }
+}
+
 export function todayDateKey() {
   const d = new Date()
   const y = d.getFullYear()
@@ -37,8 +69,9 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
   }
 
   for (const a of accounts) {
+    const balance = Number.isFinite(a.balance) ? a.balance : 0
     const gid = getGroupIdByAccountType(a.type)
-    byGroup[gid] += a.balance
+    byGroup[gid] += balance
   }
 
   const assetsTotal = byGroup.liquid + byGroup.invest + byGroup.fixed + byGroup.receivable
