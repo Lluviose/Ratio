@@ -136,13 +136,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       cash: safeDiv(end.cash, end.debt),
     }
 
-    const allocation = {
-      cash: { ratio: safeDiv(end.cash, assetsEnd), amount: end.cash, color: colors.liquid },
-      invest: { ratio: safeDiv(end.invest, assetsEnd), amount: end.invest, color: colors.invest },
-      fixed: { ratio: safeDiv(end.fixed, assetsEnd), amount: end.fixed, color: colors.fixed },
-      receivable: { ratio: safeDiv(end.receivable, assetsEnd), amount: end.receivable, color: colors.receivable },
-    }
-
     const growth = {
       net: safeGrowth(delta.net, start.net),
       assets: safeGrowth(delta.assets, assetsStart),
@@ -162,7 +155,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       days,
       ratios,
       coverage,
-      allocation,
       growth,
     }
   }, [colors, range, snapshots])
@@ -237,43 +229,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                   <MetricTile label="负债/净资产" value={formatX(view.ratios.debtToNet)} />
                   <MetricTile label="净资产率" value={formatPct(view.ratios.netToAssets)} />
                   <MetricTile label="权益乘数" value={formatX(view.ratios.equityMultiplier)} />
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="card"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 }}
-            >
-              <div className="cardInner">
-                <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产配置占比</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                  <MetricTile
-                    label="流动资金"
-                    value={formatPct(view.allocation.cash.ratio)}
-                    sub={formatCny(view.allocation.cash.amount)}
-                    valueColor={view.allocation.cash.color}
-                  />
-                  <MetricTile
-                    label="投资"
-                    value={formatPct(view.allocation.invest.ratio)}
-                    sub={formatCny(view.allocation.invest.amount)}
-                    valueColor={view.allocation.invest.color}
-                  />
-                  <MetricTile
-                    label="固定资产"
-                    value={formatPct(view.allocation.fixed.ratio)}
-                    sub={formatCny(view.allocation.fixed.amount)}
-                    valueColor={view.allocation.fixed.color}
-                  />
-                  <MetricTile
-                    label="应收款"
-                    value={formatPct(view.allocation.receivable.ratio)}
-                    sub={formatCny(view.allocation.receivable.amount)}
-                    valueColor={view.allocation.receivable.color}
-                  />
                 </div>
               </div>
             </motion.div>
