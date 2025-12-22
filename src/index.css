@@ -312,7 +312,8 @@ a {
   justify-content: center;
   align-items: flex-end;
   z-index: 50;
-  animation: fadeIn 0.3s ease;
+  height: 100vh;
+  height: 100dvh;
 }
 
 .sheet {
@@ -324,8 +325,8 @@ a {
   border: 1px solid rgba(11, 15, 26, 0.10);
   border-bottom: none;
   max-height: 85vh;
+  max-height: 85dvh;
   overflow: hidden;
-  animation: slideUp 0.3s var(--ease-out);
   display: flex;
   flex-direction: column;
 }
