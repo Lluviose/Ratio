@@ -87,22 +87,11 @@ export function AssetsListPage(props: {
                   ease: [0.2, 0, 0, 1],
                 }}
                 style={{
-                  marginBottom: isExpanded ? 24 : -12 // 负 margin 让卡片更紧密
+                  paddingBottom: isExpanded ? 24 : 0
                 }}
               >
-                {/* Animated Background Layer */}
-                <div className="absolute inset-0 z-0 pointer-events-none">
-                    {/* Glass Effect Background */}
-                    <motion.div
-                        className="absolute inset-0 backdrop-blur-xl"
-                        style={{
-                           background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.2) 100%)',
-                           boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.4) inset, 0 1px 2px rgba(255, 255, 255, 0.3) inset',
-                           borderTopRightRadius: 30, // 只有右侧有圆角，匹配 OverlayBlock
-                           borderBottomRightRadius: i === groups.length - 1 ? 30 : 0 // 只有最后一个有右下圆角
-                        }}
-                    />
-                </div>
+                {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
+                <div className="absolute inset-0 z-0 opacity-0"></div>
 
                 <button
                   type="button"
