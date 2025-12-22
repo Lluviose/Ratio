@@ -473,6 +473,7 @@ export function AssetsScreen(props: {
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
+  const selectedTypeRef = useRef<AccountTypeId | null>(null)
   const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
   const [hideAmounts, setHideAmounts] = useState(false)
@@ -960,7 +961,7 @@ export function AssetsScreen(props: {
 
     let raf = 0
     const onScroll = () => {
-      if (!selectedType) {
+      if (!selectedTypeRef.current) {
         const w = el.clientWidth || 1
         const maxScroll = w * 2
         const current = el.scrollLeft
@@ -992,7 +993,7 @@ export function AssetsScreen(props: {
         const currentScroll = el.scrollLeft
         const maxScroll = w * 2
 
-        if (!selectedType) {
+        if (!selectedTypeRef.current) {
           // 如果在锁定状态
           if (edgeLockRef.current) {
              // 如果用户已经松手，或者是回弹过程中
@@ -1056,7 +1057,7 @@ export function AssetsScreen(props: {
       window.removeEventListener('touchend', onPointerEnd)
       window.removeEventListener('touchcancel', onPointerEnd)
     }
-  }, [edgePullTargetX, scrollLeft, selectedType])
+  }, [edgePullTargetX, scrollLeft])
 
   useEffect(() => {
     const el = listScrollRef.current
@@ -1410,6 +1411,7 @@ export function AssetsScreen(props: {
               grouped={grouped}
               getIcon={getIcon}
               onPickType={(type) => {
+                selectedTypeRef.current = type
                 setSelectedType(type)
                 scrollToPage(3)
               }}
@@ -1436,6 +1438,7 @@ export function AssetsScreen(props: {
               setIsReturningFromDetail(true)
               setAnimationKey(k => k + 1)
               scrollToPage(2)
+              selectedTypeRef.current = null
               setSelectedType(null)
             }}
             onEditAccount={onEditAccount}
