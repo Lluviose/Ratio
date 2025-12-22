@@ -215,7 +215,7 @@ function OverlayBlock(props: {
   // 基础字体大小
   const basePercentSize = 36 // 百分比数字的基础字体大小
   const basePercentSymbolSize = 15 // %符号的基础字体大小
-  const baseLabelSize = 17 // Ratio 图中资产/负债标签字号（非自适应时）
+  const baseLabelSize = 16 // Ratio 图中资产/负债标签字号（非自适应时）
   const baseLabelMargin = 4 // 文字标签的上边距
   const normalPadding = 16 // 正常模式的上下 padding
   const adaptivePaddingValue = 4 // 自适应模式的上下 padding
@@ -247,7 +247,8 @@ function OverlayBlock(props: {
   // 动态缩放时，百分比和文字使用相同的字体大小
   const percentSize = needsScaling ? Math.round(basePercentSize * fontScale) : basePercentSize
   const percentSymbolSize = needsScaling ? percentSize : basePercentSymbolSize
-  const labelSize = needsScaling ? percentSize : baseLabelSize
+  // Keep label size consistent with non-adaptive sizing; only shrink if the block is too small.
+  const labelSize = needsScaling ? Math.min(percentSize, baseLabelSize) : baseLabelSize
 
   // Padding: keep horizontal padding consistent so % stays left-aligned across blocks,
   // while allowing vertical padding to shrink in adaptive layouts.
