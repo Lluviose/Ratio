@@ -86,6 +86,7 @@ export function AccountDetailSheet(props: {
   const [noteValue, setNoteValue] = useState('')
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
+  const openedAtRef = useRef<number | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
   const [adjustAmount, setAdjustAmount] = useState('')
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
@@ -108,15 +109,28 @@ export function AccountDetailSheet(props: {
   }, [account, initialAction, open])
 
   useEffect(() => {
+    if (!open) {
+      openedAtRef.current = null
+      return
+    }
+    openedAtRef.current = performance.now()
+  }, [open])
+
+  useEffect(() => {
     if (!open) return
     if (action !== 'set_balance' && action !== 'adjust') return
     setMoreOpen(false)
+    const openedAt = openedAtRef.current
+    const openingMs = 280
+    const elapsed = openedAt == null ? Number.POSITIVE_INFINITY : performance.now() - openedAt
+    const delay = elapsed < openingMs ? Math.max(0, openingMs - elapsed) : 0
+
     const timer = window.setTimeout(() => {
       const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
       if (!el) return
       el.focus()
       el.select()
-    }, 0)
+    }, delay)
     return () => window.clearTimeout(timer)
   }, [action, open])
 

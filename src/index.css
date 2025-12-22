@@ -307,7 +307,7 @@ a {
   position: fixed;
   inset: 0;
   background: rgba(11, 15, 26, 0.4);
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(2px);
   display: flex;
   justify-content: center;
   align-items: flex-end;
