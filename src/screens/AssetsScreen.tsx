@@ -883,15 +883,21 @@ export function AssetsScreen(props: {
         const maxScroll = w * 2
         const current = el.scrollLeft
 
-        // 只有当用户正在按住并拖动时才应用阻尼
-        if (current > maxScroll && edgePointerDownRef.current && edgePointerXRef.current !== null) {
-          edgeLockRef.current = true
-          // 计算相对于屏幕宽度的额外拖动距离
-          // 由于 scrollLeft 可能在 bounce 过程中抖动，我们更信任 pointer 移动
-          // 这里简化处理：仍然基于 scrollLeft，但增加阈值锁定
-          const overscroll = current - maxScroll
-          edgePullTargetX.set(-rubberband(overscroll, 60, 160))
+        // 核心修正：无论是否有手势，只要不是 selectedType 状态，都强制不允许超过 maxScroll
+        if (current > maxScroll) {
+          // 如果用户正在按住并拖动，计算阻尼偏移
+          if (edgePointerDownRef.current && edgePointerXRef.current !== null) {
+            edgeLockRef.current = true
+            // 使用 pointer 位置来计算 delta，避免 scrollLeft 抖动影响
+            // 需要记录按下时的初始 pointerX，但这里简化处理：
+            // 我们通过计算当前 scrollLeft 超出多少来映射阻尼，但强制重置 scrollLeft
 
+            // 为了避免抖动，这里我们使用 current 超过 maxScroll 的部分
+            const overscroll = current - maxScroll
+            edgePullTargetX.set(-rubberband(overscroll, 60, 160))
+          }
+
+          // 强制重置滚动位置，防止看到空白页
           if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
           scrollLeft.set(maxScroll)
           return
@@ -905,24 +911,30 @@ export function AssetsScreen(props: {
         const maxScroll = w * 2
 
         if (!selectedType) {
-          // 如果锁定中，确保位置正确
+          // 如果在锁定状态
           if (edgeLockRef.current) {
-            // 如果用户松开手，或者已经滚回范围内
-            if (!edgePointerDownRef.current || currentScroll <= maxScroll) {
+             // 如果用户已经松手，或者是回弹过程中
+             if (!edgePointerDownRef.current) {
                edgeLockRef.current = false
                edgePullTargetX.set(0)
-            } else {
-               // 保持锁定状态，防止抖动
+             } else if (currentScroll <= maxScroll) {
+               // 还没松手但滚回了范围内
+               edgeLockRef.current = false
+               edgePullTargetX.set(0)
+             } else {
+               // 还在拖动且在边界外，强制锁住
                if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
                scrollLeft.set(maxScroll)
                return
-            }
+             }
           }
 
+          // 正常滚动情况
           scrollLeft.set(currentScroll)
           return
         }
 
+        // selectedType 状态（详情页），允许正常滚动
         edgeLockRef.current = false
         edgePullTargetX.set(0)
         scrollLeft.set(currentScroll)
