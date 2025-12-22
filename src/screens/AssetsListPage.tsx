@@ -44,9 +44,9 @@ export function AssetsListPage(props: {
   }
 
   return (
-    <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">     
+    <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">
       <div className="px-4 pt-[104px] pb-24">
-        <div className="flex flex-col gap-3 pl-24">
+        <div className="flex flex-col gap-0 pl-24">
           {groups.map((g, i) => {
             const id = g.group.id as GroupId
             const isExpanded = expandedGroup === id
@@ -78,7 +78,7 @@ export function AssetsListPage(props: {
               <motion.div
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
-                className="relative rounded-[22px] overflow-hidden backdrop-blur-xl"
+                className="relative overflow-hidden"
                 initial={needsEnterAnimation ? { opacity: 0, x: 100 } : false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{
@@ -87,37 +87,11 @@ export function AssetsListPage(props: {
                   ease: [0.2, 0, 0, 1],
                 }}
                 style={{
-                  // Removed static background, moved to children
-                  boxShadow: '0 4px 24px -4px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.9) inset, 0 1px 2px rgba(255, 255, 255, 0.8) inset',
-                  border: '1px solid rgba(255, 255, 255, 0.6)',
+                  paddingBottom: isExpanded ? 24 : 0
                 }}
               >
-                {/* Animated Background Layer */}
-                <div className="absolute inset-0 z-0">
-                    {/* Default White/Glass Background */}
-                    <motion.div 
-                        className="absolute inset-0"
-                        animate={{ opacity: isExpanded ? 0 : 1 }}
-                        transition={{ duration: 0.3 }}
-                        style={{
-                           background: id === 'debt'
-                            ? `linear-gradient(135deg, ${g.group.tone}D9 0%, ${g.group.tone}BF 100%)`
-                            : 'linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.78) 100%)'
-                        }}
-                    />
-                    {/* Expanded Tinted Background */}
-                    <motion.div 
-                        className="absolute inset-0"
-                        initial={false}
-                        animate={{ opacity: isExpanded ? 1 : 0 }}
-                        transition={{ duration: 0.3 }}
-                        style={{
-                           background: id === 'debt'
-                            ? `linear-gradient(135deg, ${g.group.tone}F2 0%, ${g.group.tone}E6 100%)`
-                            : `linear-gradient(135deg, ${g.group.tone}20 0%, ${g.group.tone}10 100%), linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,0.85))`
-                        }}
-                    />
-                </div>
+                {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
+                <div className="absolute inset-0 z-0 opacity-0"></div>
 
                 <button
                   type="button"

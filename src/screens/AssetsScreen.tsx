@@ -140,7 +140,16 @@ function OverlayBlock(props: {
     if (idx < 1) {
       return lerp(bRadius * 2, ratio.h, Math.max(0, idx))
     }
-    return lerp(ratio.h, list.h, Math.min(1, Math.max(0, idx - 1)))
+    // List 模式下，色块高度需要包含延伸部分，以便被下一个色块盖住时不会漏底
+    // 下一个色块圆角处的空隙需要被当前色块的延伸部分填充
+    // list.h 是 measureListRects 测量出来的实际 DOM 高度
+    // 我们需要在此基础上增加延伸高度
+    // 注意：最后一个色块不需要延伸
+    const isLast = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
+    const extend = isLast ? 0 : 32 // 延伸 32px
+    const listH = list.h + extend
+
+    return lerp(ratio.h, listH, Math.min(1, Math.max(0, idx - 1)))
   })
   
   const opacity = useTransform([overlayFade], ([a]) => a)
@@ -171,7 +180,11 @@ function OverlayBlock(props: {
                     ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
                     : { tl: 0, tr: 0, bl: 0, br: 0 }
 
-  const listCorner = { tl: listRadius, tr: listRadius, bl: listRadius, br: listRadius }
+  // List 视图下的圆角逻辑：
+  // 所有卡片都是左上/右上圆角，向下延伸覆盖
+  // 除了最后一个卡片底部也是圆角
+  const isLastBlock = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
+  const listCorner = { tl: listRadius, tr: listRadius, bl: isLastBlock ? listRadius : 0, br: isLastBlock ? listRadius : 0 }
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
@@ -1149,7 +1162,54 @@ export function AssetsScreen(props: {
         ) : null}
 
         {/* 顶部色块先渲染，按顺序渲染
-            每个色块向下延伸的部分垫在下方色块的圆角处 */}
+            每个色块向下延伸的部分垫在下方色块的圆角处
+
+            在 List 模式下，为了实现 Stack 效果（上方卡片圆角覆盖下方卡片顶部），
+            我们需要反向渲染：先渲染底部的，再渲染顶部的。
+            但在 Ratio 模式下，我们的逻辑是上方卡片直角，下方卡片被覆盖。
+
+            修正：List 模式下是每个卡片都有圆角头部，为了不漏出缝隙，我们让每个卡片向下延伸。
+            对于堆叠顺序：
+            List 模式：上方卡片盖住下方卡片的延伸部分？
+            不，应该是：
+            Item 1 (Top)
+            Item 2 (Below 1)
+
+            如果 Item 1 有圆角底部，Item 2 直角顶部，那 Item 1 盖住 Item 2。
+            如果 Item 1 直角底部，Item 2 圆角顶部，那 Item 1 盖住 Item 2 的圆角缝隙？
+
+            参考设计图：
+            列表页每个卡片都有圆角头部（tl/tr）。
+            这意味这 Item 2 的顶部圆角区域是透明的，会露出 Item 1 的底部。
+            为了不露馅，Item 1 必须向下延伸填充这个区域。
+            所以 Item 1 (z-index 高) 应该盖在 Item 2 (z-index 低) 上面吗？
+            不，通常列表是自然堆叠，后面的在上面。
+
+            如果后面的在上面 (Item 2 on top of Item 1)，那 Item 2 的圆角头部会盖住 Item 1 的底部。
+            这时 Item 1 的底部如果是直角，会被切掉吗？不会，只是被遮挡。
+            所以只要 Item 1 足够长，Item 2 盖上去就行。
+
+            当前的渲染顺序是：map 顺序 (Item 1, Item 2...) => DOM 顺序 (Item 1 在下, Item 2 在上)。
+            这就满足了 "Item 2 盖住 Item 1" 的需求。
+
+            但是！OverlayBlock 的设计是：
+            Ratio 模式：上层 Block (Item 1) 向下延伸，垫在 下层 Block (Item 2) 的圆角处。
+            这就要求 Item 1 在 Item 2 的 *下面* 才能被垫住？
+            不对，如果是垫在下面，那就是 Item 2 盖住 Item 1。
+
+            现状：DOM 顺序是 index 0 (Top) -> index N (Bottom)。
+            CSS 默认 stacking：后面的盖住前面的。
+            所以 Item N 盖住 ... 盖住 Item 1。
+
+            List 模式需求：
+            Item 1 (Top)
+            Item 2 (Below) -> 盖住 Item 1 的底部
+
+            所以现有的 DOM 顺序 (Item 1 rendered first, Item 2 rendered second) = Item 2 covers Item 1.
+            这是正确的堆叠顺序。
+
+            我们只需要确保 OverlayBlock 在 List 模式下也向下延伸即可。
+         */}
         {blocks.assets.map((b, i) => (
           <OverlayBlock
             key={`${b.id}-${animationKey}`}
