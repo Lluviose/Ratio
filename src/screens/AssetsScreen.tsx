@@ -467,8 +467,8 @@ export function AssetsScreen(props: {
   const edgeLockRef = useRef(false)
   const edgePointerDownRef = useRef(false)
   const edgePullTargetX = useMotionValue(0)
-  const edgePullX = useSpring(edgePullTargetX, { stiffness: 520, damping: 62, mass: 1 })
-  const edgePullScale = useTransform(edgePullX, [-24, 0], [0.997, 1])
+  const edgePullX = useSpring(edgePullTargetX, { stiffness: 400, damping: 40, mass: 1 })
+  const edgePullScale = useTransform(edgePullX, [-60, 0], [0.99, 1])
 
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
 
@@ -882,7 +882,7 @@ export function AssetsScreen(props: {
         const current = el.scrollLeft
         if (current > maxScroll) {
           edgeLockRef.current = true
-          edgePullTargetX.set(-rubberband(current - maxScroll, 24, 130))
+          edgePullTargetX.set(-rubberband(current - maxScroll, 60, 160))
           if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
           scrollLeft.set(maxScroll)
           return
