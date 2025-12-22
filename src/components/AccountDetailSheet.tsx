@@ -1,4 +1,4 @@
-import { createElement, useEffect, useMemo, useRef, useState } from 'react'
+import { createElement, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { ArrowLeftRight, Keyboard, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
@@ -92,6 +92,12 @@ export function AccountDetailSheet(props: {
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
   const [transferPeerId, setTransferPeerId] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
+
+  const handleClosePointerDown = (e: ReactPointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onClose()
+  }
 
   useEffect(() => {
     if (!open) return
@@ -358,7 +364,7 @@ export function AccountDetailSheet(props: {
         <div className="px-4 pt-5 pb-3 flex items-center justify-between" style={{ background: 'var(--bg)' }}>
           <button
             type="button"
-            onClick={onClose}
+            onPointerDown={handleClosePointerDown}
             className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
             aria-label="close"
           >
@@ -458,7 +464,11 @@ export function AccountDetailSheet(props: {
                 ) : null}
                 <button
                   type="button"
-                  onClick={cancelEdit}
+                  onPointerDown={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    cancelEdit()
+                  }}
                   className="px-2 py-2 text-[15px] font-semibold text-slate-700 hover:text-slate-900"
                 >
                   取消
