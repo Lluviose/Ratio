@@ -181,11 +181,13 @@ function OverlayBlock(props: {
                     : { tl: 0, tr: 0, bl: 0, br: 0 }
 
   // List 视图下的圆角逻辑：
-  // 所有卡片都是左上/右上圆角，向下延伸覆盖
-  // 除了最后一个卡片底部也是圆角
-  const isLastBlock = kind === 'assetBottom' || kind === 'assetBottomNoDebt' || kind === 'assetOnly' || kind === 'assetOnlyNoDebt' || kind === 'debt'
+  // - 左侧与屏幕齐平，不做圆角
+  // - 右上始终圆角
+  // - 只有列表最后一个条目的右下才做圆角
+  //   （有负债时：负债永远最后；最后一个资产不做底部圆角，避免和负债形成“双圆角”）
+  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
   // List 模式的彩色色块：左侧与屏幕齐平，不做圆角；右侧做圆角（末尾块底部也圆角）
-  const listCorner = { tl: 0, tr: listRadius, bl: 0, br: isLastBlock ? listRadius : 0 }
+  const listCorner = { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
@@ -207,11 +209,15 @@ function OverlayBlock(props: {
 
   const textColor = pickForegroundColor(block.tone)
 
+  const isDebt = kind === 'debt'
+
   // 计算文字布局和字体缩放
   // 基础字体大小
   const basePercentSize = 36 // 百分比数字的基础字体大小
   const basePercentSymbolSize = 15 // %符号的基础字体大小
-  const baseLabelSize = 13 // 文字标签的基础字体大小
+  const baseAssetLabelSize = 20 // 资产类别标签字体（非自适应时更大）
+  const baseDebtLabelSize = 13 // 负债块保持更克制的标签字号
+  const baseLabelSize = isDebt ? baseDebtLabelSize : baseAssetLabelSize
   const baseLabelMargin = 4 // 文字标签的上边距
   const normalPadding = 16 // 正常模式的上下 padding
   const adaptivePaddingValue = 4 // 自适应模式的上下 padding
@@ -224,7 +230,6 @@ function OverlayBlock(props: {
 
   // 根据可用高度计算布局和字体缩放
   const actualHeight = displayHeight ?? ratio.h
-  const isDebt = kind === 'debt'
 
   // 负债块不需要动态调整
   const useHorizontalLayout = !isDebt && actualHeight < verticalMinHeight
@@ -246,14 +251,18 @@ function OverlayBlock(props: {
   const percentSymbolSize = needsScaling ? percentSize : basePercentSymbolSize
   const labelSize = needsScaling ? percentSize : baseLabelSize
 
-  // 自适应模式下的 padding（正常 16px，自适应时缩小到 4px）
-  const adaptivePadding = useHorizontalLayout ? adaptivePaddingValue : normalPadding
-
-  // Content Centering for Bubbles
-  const padding = useTransform(scrollIdx, (idx) => {
+  // Padding: keep horizontal padding consistent so % stays left-aligned across blocks,
+  // while allowing vertical padding to shrink in adaptive layouts.
+  const paddingX = useTransform(scrollIdx, (idx) => {
     if (idx < 0.5) return 0 // Bubble 阶段无 padding
     const t = Math.min(1, (idx - 0.5) * 2)
-    return lerp(0, adaptivePadding, t)
+    return lerp(0, normalPadding, t)
+  })
+  const paddingYTarget = useHorizontalLayout ? adaptivePaddingValue : normalPadding
+  const paddingY = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return 0
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return lerp(0, paddingYTarget, t)
   })
   const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
   const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start')) // For debt col layout
@@ -377,7 +386,14 @@ function OverlayBlock(props: {
       </motion.div>
 
       <motion.div
-        style={{ opacity: labelsOpacity, color: textColor, padding }}
+        style={{
+          opacity: labelsOpacity,
+          color: textColor,
+          paddingLeft: paddingX,
+          paddingRight: paddingX,
+          paddingTop: paddingY,
+          paddingBottom: paddingY,
+        }}
         className="w-full h-full flex flex-col relative z-10"
       >
         <motion.div 
