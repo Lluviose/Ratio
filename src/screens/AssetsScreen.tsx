@@ -215,9 +215,7 @@ function OverlayBlock(props: {
   // 基础字体大小
   const basePercentSize = 36 // 百分比数字的基础字体大小
   const basePercentSymbolSize = 15 // %符号的基础字体大小
-  const baseAssetLabelSize = 20 // 资产类别标签字体（非自适应时更大）
-  const baseDebtLabelSize = 13 // 负债块保持更克制的标签字号
-  const baseLabelSize = isDebt ? baseDebtLabelSize : baseAssetLabelSize
+  const baseLabelSize = 18 // Ratio 图中资产/负债标签字号（非自适应时）
   const baseLabelMargin = 4 // 文字标签的上边距
   const normalPadding = 16 // 正常模式的上下 padding
   const adaptivePaddingValue = 4 // 自适应模式的上下 padding
