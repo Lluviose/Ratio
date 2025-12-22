@@ -76,6 +76,7 @@ export function AssetsListPage(props: {
             const id = g.group.id as GroupId
             const isExpanded = expandedGroup === id
             const cardBg = isExpanded ? withAlpha(g.group.tone, 0.42) : '#ffffff'
+            const listLeft = isExpanded ? 44 : 56
 
             const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
             const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().slice(-1)[0] : undefined
@@ -98,54 +99,78 @@ export function AssetsListPage(props: {
                 key={id}
                 ref={(el) => onGroupEl?.(id, el)}
                 className={clsx(
-                  'relative overflow-hidden rounded-[22px] border border-black/5 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.35)]',
-                  'ml-14',
+                  'relative',
                 )}
-                initial={needsEnterAnimation ? { opacity: 0, x: 100 } : false}
-                animate={{ opacity: 1, x: 0, y: 0 }}
-                transition={{
-                  duration: needsEnterAnimation ? 0.5 : 0.3,
-                  delay: needsEnterAnimation ? 0.06 + i * 0.04 : 0.06 + i * 0.02,
-                  ease: [0.2, 0, 0, 1],
-                }}
-                style={{
-                  paddingBottom: isExpanded ? 20 : 0,
-                  background: cardBg,
-                }}
+                initial={needsEnterAnimation ? { opacity: 0, x: 100, marginLeft: listLeft } : false}
+                animate={{ opacity: 1, x: 0, y: 0, marginLeft: listLeft }}
+                transition={
+                  {
+                    opacity: {
+                      duration: needsEnterAnimation ? 0.5 : 0.3,
+                      delay: needsEnterAnimation ? 0.06 + i * 0.04 : 0.06 + i * 0.02,
+                      ease: [0.2, 0, 0, 1],
+                    },
+                    x: {
+                      duration: needsEnterAnimation ? 0.5 : 0.3,
+                      delay: needsEnterAnimation ? 0.06 + i * 0.04 : 0.06 + i * 0.02,
+                      ease: [0.2, 0, 0, 1],
+                    },
+                    y: {
+                      duration: needsEnterAnimation ? 0.5 : 0.3,
+                      delay: needsEnterAnimation ? 0.06 + i * 0.04 : 0.06 + i * 0.02,
+                      ease: [0.2, 0, 0, 1],
+                    },
+                    marginLeft: {
+                      duration: 0.25,
+                      ease: 'easeInOut',
+                    },
+                  } as const
+                }
               >
-                {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
-                <div className="absolute inset-0 z-0 opacity-0"></div>
-
-                <button
-                  type="button"
-                  className="relative z-10 w-full text-left"
-                  onClick={() => onToggleGroup(id)}
-                  aria-expanded={isExpanded}
+                <div
+                  className={clsx(
+                    'relative overflow-hidden rounded-[22px] border border-black/5 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.35)]',
+                  )}
+                  style={{ background: cardBg }}
                 >
-                  <div className="px-4 py-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <div className="text-[15px] font-semibold tracking-tight text-slate-900">{g.group.name}</div>
-                          <div className="text-slate-400">
-                            {isExpanded ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
-                          </div>
-                        </div>
-                        <div className="mt-1 text-[11px] font-medium text-slate-500 truncate max-w-[220px]">
-                          {isExpanded ? '选择资产类别' : typeNames}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <div className={clsx('text-[17px] font-semibold tracking-tight text-slate-900', hideAmounts && maskedClass)}>
-                          {hideAmounts ? maskedText : formatCny(g.total)}
-                        </div>
-                        <div className="mt-1 text-[10px] font-medium text-slate-400">{formatTime(updatedAt)}</div>
-                      </div>
-                    </div>
+                  {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
+                  <div className="absolute inset-0 z-0 opacity-0"></div>
 
-                    {!isExpanded ? <div className="mt-2 text-[12px] text-slate-300 leading-none">...</div> : null}
-                  </div>
-                </button>
+                  <button
+                    type="button"
+                    className="relative z-10 w-full text-left"
+                    onClick={() => onToggleGroup(id)}
+                    aria-expanded={isExpanded}
+                  >
+                    <div className="px-4 py-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <div className="text-[15px] font-semibold tracking-tight text-slate-900">{g.group.name}</div>
+                            <div className="text-slate-400">
+                              {isExpanded ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
+                            </div>
+                          </div>
+                          {!isExpanded ? (
+                            <div className="mt-1 text-[11px] font-medium text-slate-500 truncate max-w-[220px]">
+                              {typeNames}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className={clsx('text-[17px] font-semibold tracking-tight text-slate-900', hideAmounts && maskedClass)}>
+                            {hideAmounts ? maskedText : formatCny(g.total)}
+                          </div>
+                          {!isExpanded ? (
+                            <div className="mt-1 text-[10px] font-medium text-slate-400">{formatTime(updatedAt)}</div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {!isExpanded ? <div className="mt-2 text-[12px] text-slate-300 leading-none">...</div> : null}
+                    </div>
+                  </button>
+                </div>
 
                 <AnimatePresence initial={false}>
                   {isExpanded ? (
@@ -157,8 +182,7 @@ export function AssetsListPage(props: {
                       transition={{ duration: 0.25, ease: 'easeInOut' }}
                       className="overflow-hidden"
                     >
-                      <div className="px-3 pb-3">
-                        <div className="h-px bg-white/70 mb-2" />
+                      <div className="px-3 pt-2 pb-3">
                         <div className="flex flex-col gap-2">
                           {typeCards.map((t) => {
                             const Icon = getIcon(t.type)
