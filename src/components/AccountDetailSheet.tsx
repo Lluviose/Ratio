@@ -1,5 +1,5 @@
-import { createElement, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
-import { ArrowLeftRight, Keyboard, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
@@ -80,6 +80,8 @@ export function AccountDetailSheet(props: {
   }, [accounts])
 
   const [action, setAction] = useState<ActionId>('none')
+  const [pageDir, setPageDir] = useState<-1 | 0 | 1>(0)
+  const [suppressOpsIntro, setSuppressOpsIntro] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
@@ -87,6 +89,7 @@ export function AccountDetailSheet(props: {
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
   const openedAtRef = useRef<number | null>(null)
+  const initKeyRef = useRef<string | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
   const [adjustAmount, setAdjustAmount] = useState('')
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
@@ -99,20 +102,53 @@ export function AccountDetailSheet(props: {
     onClose()
   }
 
-  useEffect(() => {
-    if (!open) return
+  const transitionToAction = (nextAction: ActionId) => {
+    if (nextAction === action) return
+    setMoreOpen(false)
+
+    if (action !== 'none' && nextAction === 'none') {
+      setPageDir(-1)
+      setSuppressOpsIntro(true)
+    } else if (action === 'none' && nextAction !== 'none') {
+      setPageDir(1)
+      setSuppressOpsIntro(false)
+    } else if (action !== 'none' && nextAction !== 'none') {
+      setPageDir(1)
+      setSuppressOpsIntro(false)
+    } else {
+      setPageDir(0)
+      setSuppressOpsIntro(false)
+    }
+
+    setAction(nextAction)
+  }
+
+  useLayoutEffect(() => {
+    if (!open) {
+      initKeyRef.current = null
+      setPageDir(0)
+      setSuppressOpsIntro(false)
+      return
+    }
+    if (!accountId || !account) return
+    const initKey = `${accountId}:${initialAction ?? 'none'}`
+    if (initKeyRef.current === initKey) return
+    initKeyRef.current = initKey
+
     const nextAction = initialAction ?? 'none'
+    setPageDir(0)
+    setSuppressOpsIntro(false)
     setAction(nextAction)
     setMoreOpen(false)
-    setRenameValue(account?.name ?? '')
-    setBalanceValue(account ? String(account.balance) : '')
+    setRenameValue(account.name)
+    setBalanceValue(String(account.balance))
     setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
     setTransferDirection('out')
     setTransferPeerId('')
     setTransferAmount('')
-  }, [account, initialAction, open])
+  }, [account, accountId, initialAction, open])
 
   useEffect(() => {
     if (!open) {
@@ -139,6 +175,12 @@ export function AccountDetailSheet(props: {
     }, delay)
     return () => window.clearTimeout(timer)
   }, [action, open])
+
+  useEffect(() => {
+    if (!open || action !== 'none' || !suppressOpsIntro) return
+    const timer = window.setTimeout(() => setSuppressOpsIntro(false), 0)
+    return () => window.clearTimeout(timer)
+  }, [action, open, suppressOpsIntro])
 
   const accountTypeInfo = useMemo(() => {
     if (!account) return null
@@ -176,6 +218,21 @@ export function AccountDetailSheet(props: {
   const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsed)
   const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === account.balance
 
+  const pageTransition = { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const }
+  const pageVariants = {
+    initial: (dir: number) => ({
+      opacity: 0,
+      x: dir === 0 ? 0 : dir * 18,
+      y: 10,
+    }),
+    animate: { opacity: 1, x: 0, y: 0 },
+    exit: (dir: number) => ({
+      opacity: 0,
+      x: dir === 0 ? 0 : -dir * 18,
+      y: -10,
+    }),
+  }
+
   const adjustAmountTrimmed = adjustAmount.trim()
   const adjustParsed = Number(adjustAmountTrimmed)
   const canSubmitAdjust =
@@ -211,7 +268,7 @@ export function AccountDetailSheet(props: {
     setTransferDirection('out')
     setTransferPeerId('')
     setTransferAmount('')
-    setAction('none')
+    transitionToAction('none')
   }
 
   const toggleBalanceSign = () => {
@@ -232,7 +289,7 @@ export function AccountDetailSheet(props: {
       return
     }
     if (next === account.name) {
-      setAction('none')
+      transitionToAction('none')
       return
     }
 
@@ -245,7 +302,7 @@ export function AccountDetailSheet(props: {
       afterName: next,
     })
     onRename(account.id, next)
-    setAction('none')
+    transitionToAction('none')
   }
 
   const submitSetBalance = () => {
@@ -262,7 +319,7 @@ export function AccountDetailSheet(props: {
 
     if (num === account.balance) {
       balanceInputRef.current?.blur()
-      setAction('none')
+      transitionToAction('none')
       return
     }
 
@@ -277,7 +334,7 @@ export function AccountDetailSheet(props: {
     onSetBalance(account.id, num)
     balanceInputRef.current?.blur()
     setNoteValue('')
-    setAction('none')
+    transitionToAction('none')
   }
 
   const submitAdjust = () => {
@@ -304,7 +361,7 @@ export function AccountDetailSheet(props: {
     setAdjustAmount('')
     setNoteValue('')
     adjustInputRef.current?.blur()
-    setAction('none')
+    transitionToAction('none')
   }
 
   const submitTransfer = () => {
@@ -345,12 +402,11 @@ export function AccountDetailSheet(props: {
     onTransfer(from.id, to.id, num)
     setTransferAmount('')
     setTransferPeerId('')
-    setAction('none')
+    transitionToAction('none')
   }
 
   const typeLabel = accountTypeInfo?.opt.name ?? account.type
   const TypeIcon = accountTypeInfo?.opt.icon
-  const isInlineEditing = action === 'adjust' || action === 'set_balance'
 
   return (
     <BottomSheet
@@ -379,7 +435,7 @@ export function AccountDetailSheet(props: {
                   onClick={() => {
                     setMoreOpen(false)
                     setRenameValue(account.name)
-                    setAction('rename')
+                    transitionToAction('rename')
                   }}
                   className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
                   aria-label="rename"
@@ -418,7 +474,7 @@ export function AccountDetailSheet(props: {
                             setTransferDirection('out')
                             setTransferPeerId('')
                             setTransferAmount('')
-                            setAction('transfer')
+                            transitionToAction('transfer')
                           }}
                         >
                           <span className="inline-flex items-center gap-2">
@@ -452,16 +508,6 @@ export function AccountDetailSheet(props: {
               </>
             ) : (
               <>
-                {isInlineEditing ? (
-                  <button
-                    type="button"
-                    onClick={refocusActiveInput}
-                    className="w-11 h-11 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
-                    aria-label="keyboard"
-                  >
-                    <Keyboard size={20} strokeWidth={2.5} />
-                  </button>
-                ) : null}
                 <button
                   type="button"
                   onPointerDown={(e) => {
@@ -484,7 +530,7 @@ export function AccountDetailSheet(props: {
         style={{ minHeight: '72vh' }}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.08 }}
+        transition={{ duration: 0.22, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
         onClick={() => setMoreOpen(false)}
       >
         <div className="px-4 pb-6">
@@ -501,10 +547,12 @@ export function AccountDetailSheet(props: {
             {action === 'none' ? (
               <motion.div
                 key="summary"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.18 }}
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
               >
                 <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
                   {formatCny(account.balance)}
@@ -518,7 +566,7 @@ export function AccountDetailSheet(props: {
                       setNoteValue('')
                       setAdjustDirection('plus')
                       setAdjustAmount('')
-                      setAction('adjust')
+                      transitionToAction('adjust')
                     }}
                     whileTap={{ scale: 0.99 }}
                     className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
@@ -531,7 +579,7 @@ export function AccountDetailSheet(props: {
                       setMoreOpen(false)
                       setNoteValue('')
                       setBalanceValue(String(account.balance))
-                      setAction('set_balance')
+                      transitionToAction('set_balance')
                     }}
                     whileTap={{ scale: 0.99 }}
                     className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
@@ -604,9 +652,13 @@ export function AccountDetailSheet(props: {
                         return (
                           <motion.div
                             key={op.id}
-                            initial={{ opacity: 0, y: 8 }}
+                            initial={suppressOpsIntro ? false : { opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: Math.min(0.25, i * 0.03) }}
+                            transition={
+                              suppressOpsIntro
+                                ? { duration: 0 }
+                                : { duration: 0.18, delay: Math.min(0.25, i * 0.03) }
+                            }
                             className={i === 0 ? '' : 'border-t border-black/5'}
                           >
                             <div className="px-4 py-4 flex items-start justify-between gap-4">
@@ -638,10 +690,12 @@ export function AccountDetailSheet(props: {
             ) : action === 'adjust' ? (
               <motion.div
                 key="adjust"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.18 }}
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
               >
                 <div className="mt-4 flex items-baseline gap-2">
                   <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
@@ -728,10 +782,12 @@ export function AccountDetailSheet(props: {
             ) : action === 'set_balance' ? (
               <motion.div
                 key="set_balance"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.18 }}
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
               >
                 <div className="mt-4 flex items-center justify-between gap-3">
                   <div className="flex items-baseline gap-2 flex-1 min-w-0">
@@ -796,10 +852,12 @@ export function AccountDetailSheet(props: {
             ) : action === 'rename' ? (
               <motion.div
                 key="rename"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.18 }}
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
               >
                 <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
                   {formatCny(account.balance)}
@@ -837,10 +895,12 @@ export function AccountDetailSheet(props: {
             ) : (
               <motion.div
                 key="transfer"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.18 }}
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
               >
                 <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
                   {formatCny(account.balance)}
