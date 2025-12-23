@@ -479,6 +479,7 @@ export function AssetsScreen(props: {
   const [hideAmounts, setHideAmounts] = useState(false)
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
+  const [scrollerWidth, setScrollerWidth] = useState(0)
   // 当 skipInitialAnimation 为 true 时，initialized 直接为 true，但仍需等待 viewport 测量完成
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
@@ -518,7 +519,7 @@ export function AssetsScreen(props: {
   }
 
   const scrollIdx = useTransform(scrollLeft, (v) => {
-    const w = viewport.w || 1
+    const w = scrollerWidth || viewport.w || 1
     return v / w
   })
 
@@ -789,7 +790,7 @@ export function AssetsScreen(props: {
     const root = viewportRef.current
     if (!root) return
 
-    const w = root.clientWidth || 1
+    const w = scrollerWidth || root.clientWidth || 1
     const idx = scrollLeft.get() / w
     // Measure only when near list page (index 2)
     if (Math.abs(idx - 2) > 0.12) return
@@ -852,7 +853,7 @@ export function AssetsScreen(props: {
     }
 
     setListRects(next)
-  }, [scrollLeft])
+  }, [scrollLeft, scrollerWidth])
 
   const scheduleMeasure = useCallback(() => {
     if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current)
@@ -881,6 +882,8 @@ export function AssetsScreen(props: {
       const w = el.clientWidth
       const h = el.clientHeight
       setViewport((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))
+      const nextScrollerWidth = scrollerRef.current?.clientWidth ?? 0
+      setScrollerWidth((prev) => (prev === nextScrollerWidth ? prev : nextScrollerWidth))
     }
     update()
 
