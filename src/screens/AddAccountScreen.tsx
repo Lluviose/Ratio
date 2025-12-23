@@ -1,8 +1,34 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
 import { pickForegroundColor, type ThemeColors } from '../lib/themes'
+
+function withAlpha(color: string, alpha: number): string {
+  const hex = color.trim()
+  if (!hex.startsWith('#')) return color
+  const raw = hex.slice(1)
+
+  let r: number
+  let g: number
+  let b: number
+
+  if (raw.length === 3) {
+    r = Number.parseInt(raw[0] + raw[0], 16)
+    g = Number.parseInt(raw[1] + raw[1], 16)
+    b = Number.parseInt(raw[2] + raw[2], 16)
+  } else if (raw.length === 6) {
+    r = Number.parseInt(raw.slice(0, 2), 16)
+    g = Number.parseInt(raw.slice(2, 4), 16)
+    b = Number.parseInt(raw.slice(4, 6), 16)
+  } else {
+    return color
+  }
+
+  if ([r, g, b].some((v) => Number.isNaN(v))) return color
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
 
 export function AddAccountScreen(props: {
   onBack: () => void
@@ -10,6 +36,7 @@ export function AddAccountScreen(props: {
   colors: ThemeColors
 }) {
   const { onBack, onPick, colors } = props
+  const [expandedGroup, setExpandedGroup] = useState<AccountGroupId | null>(null)
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
   const [customName, setCustomName] = useState('')
 
@@ -21,58 +48,90 @@ export function AddAccountScreen(props: {
     debt: accountTypeOptions.filter((t) => t.groupId === 'debt'),
   } as const
 
-  const header = (title: string, tone: string) => (
-    <div 
-      className="px-4 py-3 rounded-2xl font-black text-sm"
-      style={{ background: tone, color: pickForegroundColor(tone) }}
-    >
-      {title}
-    </div>
-  )
-
   const renderGroup = (groupId: AccountGroupId, index: number) => {
     const group = accountGroups[groupId]
     const items = grouped[groupId]
     const tone = colors[groupId]
+    const isExpanded = expandedGroup === groupId
+    const cardBg = isExpanded ? withAlpha(tone, 0.18) : 'var(--card)'
 
     return (
-      <motion.div 
-        key={groupId} 
+      <motion.div
+        key={groupId}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.1 }}
       >
-        {header(group.name, tone)}
-        <div className="flex flex-col mt-3 gap-2">
-          {items.map((t, i) => {
-            const Icon = t.icon
-            return (
-              <motion.button 
-                key={t.id} 
-                type="button" 
-                className="flex items-center gap-4 px-4 py-4 bg-[var(--card)] hover:bg-[var(--bg)] transition-colors rounded-2xl shadow-sm border border-[var(--hairline)]"
-                onClick={() => {
-                  setSelectedType(t.id)
-                  setCustomName('')
-                }}
-                whileTap={{ scale: 0.98 }}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 + i * 0.05 }}
+        <div
+          className="rounded-2xl shadow-sm border border-[var(--hairline)] overflow-hidden"
+          style={{ background: cardBg }}
+        >
+          <button
+            type="button"
+            className={'w-full px-4 py-4 flex items-center justify-between text-left ' + (isExpanded ? 'border-b border-[var(--hairline)]' : '')}
+            onClick={() => setExpandedGroup((prev) => (prev === groupId ? null : groupId))}
+            aria-expanded={isExpanded}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-3 h-3 rounded-full" style={{ background: tone }} />
+              <div className="min-w-0">
+                <div className="text-[15px] font-black text-[var(--text)] tracking-tight">
+                  {group.name}
+                </div>
+                <div className="mt-1 text-[11px] font-medium text-[var(--muted-text)]">
+                  {items.length} 项
+                </div>
+              </div>
+            </div>
+            <div className="w-9 h-9 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]">
+              {isExpanded ? <ChevronUp size={16} strokeWidth={3} /> : <ChevronDown size={16} strokeWidth={3} />}
+            </div>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {isExpanded ? (
+              <motion.div
+                key="types"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden"
               >
-                <span 
-                  className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
-                  style={{ background: tone, color: pickForegroundColor(tone) }}
-                >
-                  <Icon size={20} strokeWidth={2.5} />
-                </span>
-                <span className="flex-1 text-left font-black text-[15px] text-[var(--text)]">{t.name}</span>
-                <span className="w-8 h-8 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]">
-                   <ChevronRight size={16} strokeWidth={3} />
-                </span>
-              </motion.button>
-            )
-          })}
+                <div className="px-3 pt-2 pb-3 flex flex-col gap-2">
+                  {items.map((t, i) => {
+                    const Icon = t.icon
+                    return (
+                      <motion.button
+                        key={t.id}
+                        type="button"
+                        className="flex items-center gap-4 px-4 py-4 bg-[var(--card)] hover:bg-[var(--bg)] transition-colors rounded-2xl shadow-sm border border-[var(--hairline)]"
+                        onClick={() => {
+                          setSelectedType(t.id)
+                          setCustomName('')
+                        }}
+                        whileTap={{ scale: 0.98 }}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.03 }}
+                      >
+                        <span
+                          className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
+                          style={{ background: tone, color: pickForegroundColor(tone) }}
+                        >
+                          <Icon size={20} strokeWidth={2.5} />
+                        </span>
+                        <span className="flex-1 text-left font-black text-[15px] text-[var(--text)]">{t.name}</span>
+                        <span className="w-8 h-8 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]">
+                          <ChevronRight size={16} strokeWidth={3} />
+                        </span>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
         </div>
       </motion.div>
     )
@@ -92,7 +151,7 @@ export function AddAccountScreen(props: {
             <ChevronLeft size={20} strokeWidth={2.5} />
           </motion.button>
           <div className="text-lg font-black text-[var(--text)] tracking-tight">
-            添加账户
+            添加资产
           </div>
           <div style={{ width: 40 }} />
       </div>
