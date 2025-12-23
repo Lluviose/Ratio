@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as Matter from 'matter-js'
 import { motionValue, type MotionValue } from 'framer-motion'
 
@@ -10,41 +10,46 @@ export type BubbleNode = {
   value: number
 }
 
+export type BubblePosition = { x: MotionValue<number>; y: MotionValue<number> }
+
+export type BubblePhysics = {
+  positions: Map<string, BubblePosition>
+  flick: (id: string, velocity: { x: number; y: number }) => void
+}
+
+type ClusterBoost = { startMs: number; durationMs: number; strength: number }
+
 export function useBubblePhysics(
   nodes: BubbleNode[],
   width: number,
   height: number,
   isActive: boolean
-) {
-  // MotionValues for each node's position [x, y]
-  // Use useState lazy init for stable map reference without ref-access-during-render lint issues
-  const [positions] = useState(() => new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>())
+): BubblePhysics {
+  const [positions] = useState(() => new Map<string, BubblePosition>())
 
-  // Ensure all nodes have MotionValues
-  // We do this in render to ensure they exist before children need them
-  nodes.forEach(node => {
-      if (!positions.has(node.id)) {
-        positions.set(node.id, {
-          x: motionValue(width / 2),
-          y: motionValue(height / 2)
-        })
-      }
+  nodes.forEach((node) => {
+    if (positions.has(node.id)) return
+    positions.set(node.id, {
+      x: motionValue(width / 2),
+      y: motionValue(height / 2),
+    })
   })
 
   const engineRef = useRef<Matter.Engine | null>(null)
   const runnerRef = useRef<Matter.Runner | null>(null)
+  const bodiesRef = useRef(new Map<string, Matter.Body>())
   const knownIdsRef = useRef(new Set<string>())
+  const clusterBoostRef = useRef<ClusterBoost | null>(null)
 
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
 
     const engine = Matter.Engine.create()
     const world = engine.world
-    engine.gravity.y = 0 // No default gravity, we'll control it
+    engine.gravity.y = 0
     engine.gravity.x = 0
 
-    // Create bodies
-    const bodies = nodes.map(node => {
+    const bodies = nodes.map((node) => {
       const isKnown = knownIdsRef.current.has(node.id)
       const mv = positions.get(node.id)
       const prevX = mv?.x.get()
@@ -68,32 +73,31 @@ export function useBubblePhysics(
 
       const x = maxX >= minX ? Math.min(Math.max(x0, minX), maxX) : width / 2
       const y = maxY >= minY ? Math.min(Math.max(y0, minY), maxY) : height / 2
-      
-      const body = Matter.Bodies.circle(x, y, radius, {
+
+      return Matter.Bodies.circle(x, y, radius, {
         label: node.id,
-        frictionAir: 0.02,
-        restitution: 0.9,
-        density: 0.001,
-        render: { fillStyle: node.color }
+        frictionAir: 0.018,
+        restitution: 0.88,
+        density: 0.0012,
+        render: { fillStyle: node.color },
       })
-      return body
     })
 
-    // Add boundaries
     const wallOptions = { isStatic: true, render: { visible: false } }
     const walls = [
       Matter.Bodies.rectangle(width / 2, -500, width * 2, 1000, wallOptions),
       Matter.Bodies.rectangle(width / 2, height + 500, width * 2, 1000, wallOptions),
       Matter.Bodies.rectangle(-500, height / 2, 1000, height * 2, wallOptions),
-      Matter.Bodies.rectangle(width + 500, height / 2, 1000, height * 2, wallOptions)
+      Matter.Bodies.rectangle(width + 500, height / 2, 1000, height * 2, wallOptions),
     ]
 
     Matter.World.add(world, [...bodies, ...walls])
     engineRef.current = engine
-
+    runnerRef.current = null
+    bodiesRef.current = new Map(bodies.map((b) => [b.label, b]))
     knownIdsRef.current = new Set(nodes.map((n) => n.id))
+    clusterBoostRef.current = null
 
-    // Attractor
     const t0 = performance.now()
     const driftSeeds = new Map<string, { a: number; b: number }>()
     bodies.forEach((body) => {
@@ -108,15 +112,29 @@ export function useBubblePhysics(
       const cy = height / 2 + Math.cos(t * 0.13) * wander
 
       const pulse = Math.sin(t * 0.35)
-      const centerK = 0.000015 + 0.000005 * pulse // Adjusted for higher friction
+      const baseCenterK = 0.000015 + 0.000005 * pulse
       const swirlK = 0.000001 * Math.cos(t * 0.25)
+
+      let centerBoostMul = 1
+      const boost = clusterBoostRef.current
+      if (boost) {
+        const nowMs = performance.now()
+        const p = (nowMs - boost.startMs) / Math.max(1, boost.durationMs)
+        if (p >= 1) {
+          clusterBoostRef.current = null
+        } else {
+          const easeOut = 1 - Math.pow(p, 2)
+          centerBoostMul = 1 + boost.strength * 1.1 * easeOut
+        }
+      }
+      const centerK = baseCenterK * centerBoostMul
 
       bodies.forEach((body) => {
         const dx = cx - body.position.x
         const dy = cy - body.position.y
 
         Matter.Body.applyForce(body, body.position, {
-          x: dx * centerK + (-dy) * swirlK,
+          x: dx * centerK + -dy * swirlK,
           y: dy * centerK + dx * swirlK,
         })
 
@@ -135,21 +153,20 @@ export function useBubblePhysics(
 
     const runner = Matter.Runner.create()
     runnerRef.current = runner
-    
-    // Sync Matter.js positions to MotionValues
+
     const onAfterUpdate = () => {
-       bodies.forEach(body => {
-         const m = positions.get(body.label)
-         if (m) {
-           m.x.set(body.position.x)
-           m.y.set(body.position.y)
-         }
-       })
+      bodies.forEach((body) => {
+        const m = positions.get(body.label)
+        if (m) {
+          m.x.set(body.position.x)
+          m.y.set(body.position.y)
+        }
+      })
     }
 
     Matter.Events.on(engine, 'afterUpdate', onAfterUpdate)
 
-    bodies.forEach(body => {
+    bodies.forEach((body) => {
       const m = positions.get(body.label)
       if (m) {
         m.x.set(body.position.x)
@@ -165,8 +182,10 @@ export function useBubblePhysics(
       Matter.Engine.clear(engine)
       engineRef.current = null
       runnerRef.current = null
+      bodiesRef.current = new Map()
+      clusterBoostRef.current = null
     }
-  }, [width, height, nodes, positions]) // Added nodes to deps
+  }, [height, nodes, positions, width])
 
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
@@ -180,9 +199,8 @@ export function useBubblePhysics(
     } else {
       Matter.Runner.stop(runner)
     }
-  }, [isActive, width, height, nodes])
+  }, [height, isActive, nodes, width])
 
-  // Gyroscope / DeviceOrientation
   useEffect(() => {
     if (!isActive) return
     if (!engineRef.current) return
@@ -190,5 +208,68 @@ export function useBubblePhysics(
     engineRef.current.gravity.y = 0
   }, [isActive])
 
-  return positions
+  const flick = useCallback((id: string, velocity: { x: number; y: number }) => {
+    const body = bodiesRef.current.get(id)
+    if (!body) return
+
+    const vx0 = Number.isFinite(velocity.x) ? velocity.x : 0
+    const vy0 = Number.isFinite(velocity.y) ? velocity.y : 0
+    const speed0 = Math.hypot(vx0, vy0)
+    if (speed0 <= 0) return
+
+    const maxSpeed = 2200
+    const clampMul = speed0 > maxSpeed ? maxSpeed / speed0 : 1
+    const vx = vx0 * clampMul
+    const vy = vy0 * clampMul
+
+    const dvScale = 0.012
+    let dvx = vx * dvScale
+    let dvy = vy * dvScale
+
+    const dvMag = Math.hypot(dvx, dvy)
+    const maxDv = 18
+    if (dvMag > maxDv) {
+      const mul = maxDv / dvMag
+      dvx *= mul
+      dvy *= mul
+    }
+
+    Matter.Body.setVelocity(body, {
+      x: body.velocity.x + dvx,
+      y: body.velocity.y + dvy,
+    })
+
+    const spin = (dvx * 0.03 + dvy * -0.02) * (Math.random() < 0.5 ? -1 : 1)
+    Matter.Body.setAngularVelocity(body, body.angularVelocity + spin)
+
+    const origin = body.position
+    const influence = Math.max(220, Math.min(520, (body.circleRadius ?? 60) * 9))
+    const shockMax = Math.min(5.2, 1.4 + speed0 / 900)
+
+    bodiesRef.current.forEach((other) => {
+      if (other === body) return
+      const dx = other.position.x - origin.x
+      const dy = other.position.y - origin.y
+      const dist = Math.hypot(dx, dy)
+      if (dist <= 1 || dist > influence) return
+
+      const falloff = 1 - dist / influence
+      const kick = shockMax * falloff
+      const nx = dx / dist
+      const ny = dy / dist
+
+      Matter.Body.setVelocity(other, {
+        x: other.velocity.x + nx * kick,
+        y: other.velocity.y + ny * kick,
+      })
+    })
+
+    clusterBoostRef.current = {
+      startMs: performance.now(),
+      durationMs: 900,
+      strength: Math.min(1, speed0 / 1200),
+    }
+  }, [])
+
+  return useMemo(() => ({ positions, flick }), [flick, positions])
 }

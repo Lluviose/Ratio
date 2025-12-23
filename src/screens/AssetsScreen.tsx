@@ -640,7 +640,7 @@ export function AssetsScreen(props: {
     return nodes
   }, [grouped.groupCards])
 
-  const bubblePositions = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
+  const bubblePhysics = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -1283,7 +1283,7 @@ export function AssetsScreen(props: {
             ratioRect={ratioLayout.rects[b.id]}
             listRect={listRects[b.id]}
             displayHeight={b.id === 'debt' ? undefined : ratioLayout.displayHeights[b.id]}
-            bubblePos={bubblePositions.get(b.id)}
+            bubblePos={bubblePhysics.positions.get(b.id)}
             bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
@@ -1413,6 +1413,12 @@ export function AssetsScreen(props: {
             <BubbleChartPage
               isActive={isBubblePageActive}
               onNext={() => scrollToPage(1)}
+              gesture={{
+                nodes: bubbleNodes.map((n) => ({ id: n.id, radius: n.radius })),
+                positions: bubblePhysics.positions,
+                onFlick: (id, velocity) => bubblePhysics.flick(id, velocity),
+                getScrollLeft: () => scrollLeft.get(),
+              }}
             />
           </div>
         </div>
