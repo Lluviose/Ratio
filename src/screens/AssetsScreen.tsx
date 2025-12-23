@@ -471,7 +471,6 @@ export function AssetsScreen(props: {
   const moreRef = useRef<HTMLDivElement | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const measureRafRef = useRef<number | null>(null)
-  const snapTimerRef = useRef<number | null>(null)
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
@@ -519,16 +518,7 @@ export function AssetsScreen(props: {
     if (w <= 0) return
 
     const target = w * index
-    if (snapTimerRef.current) window.clearTimeout(snapTimerRef.current)
-
     el.scrollTo({ left: target, behavior: 'smooth' })
-
-    snapTimerRef.current = window.setTimeout(() => {
-      const current = el.scrollLeft
-      if (Math.abs(current - target) > 8) return
-      el.scrollLeft = target
-      scrollLeft.set(target)
-    }, 520)
   }
 
   const scrollIdx = useTransform(scrollLeft, (v) => {
