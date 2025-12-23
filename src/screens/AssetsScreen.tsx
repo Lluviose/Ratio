@@ -471,6 +471,7 @@ export function AssetsScreen(props: {
   const moreRef = useRef<HTMLDivElement | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const measureRafRef = useRef<number | null>(null)
+  const snapTimerRef = useRef<number | null>(null)
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
@@ -515,7 +516,19 @@ export function AssetsScreen(props: {
     const el = scrollerRef.current
     if (!el) return
     const w = el.clientWidth || 0
-    el.scrollTo({ left: w * index, behavior: 'smooth' })
+    if (w <= 0) return
+
+    const target = w * index
+    if (snapTimerRef.current) window.clearTimeout(snapTimerRef.current)
+
+    el.scrollTo({ left: target, behavior: 'smooth' })
+
+    snapTimerRef.current = window.setTimeout(() => {
+      const current = el.scrollLeft
+      if (Math.abs(current - target) > 8) return
+      el.scrollLeft = target
+      scrollLeft.set(target)
+    }, 520)
   }
 
   const scrollIdx = useTransform(scrollLeft, (v) => {
@@ -546,8 +559,11 @@ export function AssetsScreen(props: {
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
   const listHeaderOpacity = ratioProgress
-  const labelsOpacity = useTransform(ratioProgress, [0, 1], [1, 0])
-  const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])
+  const labelsOpacity = useTransform(ratioProgress, (p) => {
+    const raw = 1 - p
+    return raw < 0.05 ? 0 : raw
+  })
+  const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])   
   const miniBarY = useTransform(ratioProgress, [0, 1], [16, 0])
   const listHeaderPointerEvents = useTransform(ratioProgress, (p) => (p < 0.05 ? 'none' : 'auto'))
   const miniBarPointerEvents = useTransform(miniBarOpacity, (o) => (o < 0.2 ? 'none' : 'auto'))
