@@ -9,7 +9,6 @@ import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
-import { AssetsGroupTypesPage } from './AssetsGroupTypesPage'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
 
 /** Linear interpolation helper */
@@ -475,7 +474,7 @@ export function AssetsScreen(props: {
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
-  const [selectedGroup, setSelectedGroup] = useState<GroupId | null>(null)
+  const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
   const [hideAmounts, setHideAmounts] = useState(false)
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
@@ -791,7 +790,6 @@ export function AssetsScreen(props: {
   }, [blocks.assets, blocks.debt])
 
   const measureListRects = useCallback(() => {
-    if (selectedGroup !== null) return
     const root = viewportRef.current
     if (!root) return
 
@@ -858,7 +856,7 @@ export function AssetsScreen(props: {
     }
 
     setListRects(next)
-  }, [scrollLeft, scrollerWidth, selectedGroup])
+  }, [scrollLeft, scrollerWidth])
 
   const scheduleMeasure = useCallback(() => {
     if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current)
@@ -1095,10 +1093,7 @@ export function AssetsScreen(props: {
     }
   }, [scheduleMeasure])
 
-  useEffect(() => {
-    if (selectedGroup !== null) return
-    scheduleMeasure()
-  }, [scheduleMeasure, selectedGroup])
+  useEffect(() => scheduleMeasure(), [expandedGroup, scheduleMeasure])
 
   // 计算负债上方的白色填充块（负债比例低于100%时）
   const debtFillerRect = useMemo(() => {
@@ -1428,43 +1423,23 @@ export function AssetsScreen(props: {
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
           <motion.div className="w-full h-full" style={{ x: edgePullX, scale: edgePullScale }}>
-            <AnimatePresence mode="wait" initial={false}>
-              {selectedGroup === null ? (
-                <motion.div key={`groups-${animationKey}`} className="w-full h-full" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.15 }}>
-                  <AssetsListPage
-                    grouped={grouped}
-                    onPickGroup={(id) => {
-                      listScrollRef.current?.scrollTo({ top: 0 })
-                      setSelectedGroup(id)
-                    }}
-                    hideAmounts={hideAmounts}
-                    scrollRef={listScrollRef}
-                    onGroupEl={onGroupEl}
-                    isInitialLoad={isInitialLoad}
-                    isReturning={isReturning}
-                    isReturningFromDetail={isReturningFromDetail}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div key={`types-${selectedGroup}`} className="w-full h-full" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}>
-                  <AssetsGroupTypesPage
-                    grouped={grouped}
-                    groupId={selectedGroup}
-                    getIcon={getIcon}
-                    hideAmounts={hideAmounts}
-                    scrollRef={listScrollRef}
-                    onBack={() => {
-                      listScrollRef.current?.scrollTo({ top: 0 })
-                      setSelectedGroup(null)
-                    }}
-                    onPickType={(type) => {
-                      setSelectedType(type)
-                      scrollToPage(3)
-                    }}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <AssetsListPage
+              key={`list-${animationKey}`}
+              grouped={grouped}
+              getIcon={getIcon}
+              onPickType={(type) => {
+                setSelectedType(type)
+                scrollToPage(3)
+              }}
+              expandedGroup={expandedGroup}
+              onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
+              hideAmounts={hideAmounts}
+              scrollRef={listScrollRef}
+              onGroupEl={onGroupEl}
+              isInitialLoad={isInitialLoad}
+              isReturning={isReturning}
+              isReturningFromDetail={isReturningFromDetail}
+            />
           </motion.div>
         </div>
 
