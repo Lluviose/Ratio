@@ -1,123 +1,59 @@
-# React + TypeScript + Vite
+# ratio
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+一款**本地优先**的资产/负债管理小工具：用「账户」记录金额，用「分组」看资产结构，用「趋势/统计」回看变化；支持 PWA 安装与一键导入/导出备份。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 账户管理：流动资金 / 投资 / 固定资产 / 应收款 / 负债
+- 视图：占比总览、列表明细、气泡图、趋势、统计
+- 主题：多套主题色（含随机）
+- 数据：仅保存在浏览器 `localStorage`，支持导出/导入 JSON 备份
 
-## React Compiler
+## 开发
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 环境要求
 
-## Expanding the ESLint configuration
+- Node.js 20+（GitHub Actions 默认使用 20）
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### 本地启动
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm ci
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+打开 `http://localhost:5173`。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 常用命令
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `npm run dev`：启动开发服务器
+- `npm run build`：类型检查 + 构建
+- `npm run preview`：本地预览构建产物
+- `npm run lint`：ESLint
+- `npm test` / `npm run test:watch`：Vitest
 
-## 排错与修复记录（Build/Lint）
+## 数据与备份
 
-本节记录一次实际排查过程，便于后续遇到类似问题快速定位。
+- 数据默认存储在浏览器 `localStorage`，键名前缀为 `ratio.`。
+- 应用内「设置 → 备份与恢复」支持：
+  - 导出：下载 `ratio-backup-*.json`
+  - 导入：从 JSON 恢复（会覆盖当前设备数据，并自动刷新页面）
 
-### 1) `npm run build` 失败：组件里使用了 `motion` 但未导入
+## 部署（GitHub Pages）
 
-- **现象**
-  - `npm run build` 在 `tsc -b` 阶段直接报错，阻断构建。
-- **根因**
-  - 代码里使用了 `motion.div` / `AnimatePresence`，但文件未从 `framer-motion` 显式导入对应符号。
-- **修复**
-  - 在 `src/components/AccountDetailSheet.tsx` 顶部补全：
-    - `import { motion, AnimatePresence } from 'framer-motion'`
-- **验证**
-  - 运行：
-    - `npm run build`
+本仓库内置 GitHub Pages 工作流：`.github/workflows/deploy-pages.yml`，推送到 `main` 会自动构建并发布到 Pages。
 
-### 2) `npm run lint` 阻断：React Hooks 规则与动态组件问题
+要点：
 
-- **现象**
-  - `npm run lint` 出现规则报错/警告，导致 CI 或本地无法通过。
-- **处理要点（按遇到的规则归类）**
-  - **`react-hooks/rules-of-hooks`**
-    - **原因**：Hook（例如 `useMemo`）在条件分支后调用，导致“每次渲染 Hook 调用顺序不一致”。
-    - **处理**：保证所有 Hook 在组件顶部按固定顺序执行；如需分支逻辑，把分支放进 Hook 内部（例如在 `useMemo` 内 return），或把 early return 放在所有 Hook 之后。
-  - **`react-hooks/static-components`**（动态 Icon 组件）
-    - **原因**：在 render 过程中动态创建组件引用（例如 `const Icon = getIcon(type)`），会被认为“每次渲染都创建新组件”。
-    - **处理**：在 `src/screens/AssetsTypeDetailPage.tsx` 中改为使用稳定引用渲染：
-      - `createElement(info.opt.icon, { size: 18 })`
-  - **`react-hooks/set-state-in-effect`**（打开弹窗时重置表单状态）
-    - **原因**：BottomSheet 打开时用 `useEffect` 同步重置内部表单 state，会被该规则判定为“effect 内同步 setState”。
-    - **处理**：在 `eslint.config.js` 中关闭该规则：
-      - `'react-hooks/set-state-in-effect': 'off'`
-    - **备注**：这里属于 UI 交互需要（打开时初始化表单），不是外部系统同步导致的抖动。
-  - **`react-hooks/exhaustive-deps`**
-    - **原因**：`useEffect` 依赖数组不完整。
-    - **处理**：补全依赖（例如把 `account` 放入依赖），或重构代码减少对闭包变量的依赖。
+- Vite `base` 会根据 `GITHUB_REPOSITORY` 自动推导（见 `vite.config.ts`），工作流也会显式传入 `--base=/<repo>/`，确保资源路径正确。
+- Pages 设置里将 Source 设为 “GitHub Actions”。
 
-- **验证**
-  - 运行：
-    - `npm run lint`
+## 目录结构
 
-### 3) 提交前的最小自检清单
+- `src/screens`：页面（资产/趋势/统计/设置/引导等）
+- `src/components`：可复用组件（BottomSheet、图表等）
+- `src/lib`：数据模型与逻辑（accounts/ledger/snapshots/backup 等）
 
-- **Build**：`npm run build`
-- **Lint**：`npm run lint`
-- **Git**
-  - `git status -sb`
-  - `git rev-list --left-right --count HEAD...origin/main`（确认是否落后远端、是否需要先 pull）
+## 排错
+
+常见问题与处理记录见 `TROUBLESHOOTING.md`。
