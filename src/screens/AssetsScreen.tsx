@@ -57,6 +57,7 @@ function OverlayBlock(props: {
   displayHeight?: number
   bubblePos?: { x: MotionValue<number>; y: MotionValue<number> }
   bubbleRadius?: number
+  burstProgress?: MotionValue<number>
   scrollIdx: MotionValue<number>
   overlayFade: MotionValue<number>
   labelsOpacity: MotionValue<number>
@@ -76,6 +77,7 @@ function OverlayBlock(props: {
     displayHeight,
     bubblePos,
     bubbleRadius,
+    burstProgress,
     scrollIdx,
     overlayFade,
     labelsOpacity,
@@ -153,7 +155,24 @@ function OverlayBlock(props: {
     return lerp(ratio.h, listH, Math.min(1, Math.max(0, idx - 1)))
   })
   
-  const opacity = useTransform([overlayFade], ([a]) => a)
+  const opacity = overlayFade
+  const fallbackBurst = useMotionValue(0)
+  const burstP = burstProgress ?? fallbackBurst
+  const burstOpacityRaw = useTransform(burstP, [0, 1], [1, 0])
+  const burstScaleRaw = useTransform(burstP, [0, 1], [1, 0.92])
+  const bubblePhase = useTransform(scrollIdx, (idx) => (idx < 0.95 ? 1 : 0) * 1)
+  const burstOpacityMul = useTransform([burstOpacityRaw, bubblePhase], (values) => {
+    const [o, m] = values as [number, number]
+    return m * o + (1 - m)
+  })
+  const burstScale = useTransform([burstScaleRaw, bubblePhase], (values) => {
+    const [s, m] = values as [number, number]
+    return m * s + (1 - m)
+  })
+  const finalOpacity = useTransform([opacity, burstOpacityMul], (values) => {
+    const [o, m] = values as [number, number]
+    return o * m
+  })
 
   // 圆角逻辑：
   // - 有负债时：负债左上角无圆角（与资产区对齐），资产左边无圆角
@@ -367,7 +386,10 @@ function OverlayBlock(props: {
         borderTopRightRadius: tr,
         borderBottomLeftRadius: bl,
         borderBottomRightRadius: br,
-        opacity,
+        opacity: finalOpacity,
+        scale: burstScale,
+        originX: 0.5,
+        originY: 0.5,
         overflow: 'hidden',
       }}
     >
@@ -639,6 +661,12 @@ export function AssetsScreen(props: {
     }
     return nodes
   }, [grouped.groupCards])
+
+  const bubbleColorById = useMemo(() => {
+    const m = new Map<string, string>()
+    bubbleNodes.forEach((n) => m.set(n.id, n.color))
+    return m
+  }, [bubbleNodes])
 
   const bubblePhysics = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
@@ -1285,6 +1313,7 @@ export function AssetsScreen(props: {
             displayHeight={b.id === 'debt' ? undefined : ratioLayout.displayHeights[b.id]}
             bubblePos={bubblePhysics.positions.get(b.id)}
             bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
+            burstProgress={bubblePhysics.burstProgress.get(b.id)}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
@@ -1297,6 +1326,43 @@ export function AssetsScreen(props: {
             viewportWidth={viewport.w}
           />
         ))}
+
+        {isBubblePageActive
+          ? Array.from(bubblePhysics.bursts.entries()).flatMap(([parentId, burst]) => {
+              const color = bubbleColorById.get(parentId) ?? 'rgba(0,0,0,0.25)'
+              return burst.shards.map((shard) => (
+                <motion.div
+                  key={shard.id}
+                  className="absolute left-0 top-0 pointer-events-none"
+                  style={{
+                    x: shard.x,
+                    y: shard.y,
+                    width: shard.radius * 2,
+                    height: shard.radius * 2,
+                    borderRadius: shard.radius,
+                    background: color,
+                    opacity: burst.alpha,
+                    overflow: 'hidden',
+                    boxShadow: '0 10px 24px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.22), transparent 60%)',
+                    }}
+                  />
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      boxShadow:
+                        'inset -8px -8px 16px rgba(0,0,0,0.08), inset 8px 8px 16px rgba(255,255,255,0.18)',
+                    }}
+                  />
+                </motion.div>
+              ))
+            })
+          : null}
         </div>
       ) : null}
 
@@ -1417,6 +1483,7 @@ export function AssetsScreen(props: {
                 nodes: bubbleNodes.map((n) => ({ id: n.id, radius: n.radius })),
                 positions: bubblePhysics.positions,
                 onFlick: (id, velocity) => bubblePhysics.flick(id, velocity),
+                onBurst: (id, point) => bubblePhysics.burst(id, point),
                 getScrollLeft: () => scrollLeft.get(),
               }}
             />

@@ -6,6 +6,7 @@ type BubbleGesture = {
   nodes: Array<{ id: string; radius: number }>
   positions: Map<string, { x: MotionValue<number>; y: MotionValue<number> }>
   onFlick: (id: string, velocity: { x: number; y: number }, point: { x: number; y: number }) => void
+  onBurst?: (id: string, point: { x: number; y: number }) => void
   getScrollLeft?: () => number
 }
 
@@ -20,6 +21,8 @@ type Tracking = {
   samples: PointerSample[]
 }
 
+type RapidTap = { bubbleId: string; count: number; tMs: number }
+
 export function BubbleChartPage(props: {
   isActive: boolean
   onNext: () => void
@@ -28,6 +31,7 @@ export function BubbleChartPage(props: {
   const { isActive, onNext, gesture } = props
 
   const trackingRef = useRef<Tracking | null>(null)
+  const rapidTapRef = useRef<RapidTap | null>(null)
 
   const pickBubbleId = useCallback(
     (x: number, y: number) => {
@@ -67,8 +71,10 @@ export function BubbleChartPage(props: {
       if (e.pointerType === 'mouse' && e.button !== 0) return
 
       const rect = e.currentTarget.getBoundingClientRect()
-      const x = e.clientX - rect.left
+      const scrollLeft = gesture.getScrollLeft?.() ?? 0
+      const pageX = e.clientX - rect.left
       const y = e.clientY - rect.top
+      const x = pageX - scrollLeft
       const bubbleId = pickBubbleId(x, y)
       if (!bubbleId) return
 
@@ -76,7 +82,7 @@ export function BubbleChartPage(props: {
       trackingRef.current = {
         pointerId: e.pointerId,
         bubbleId,
-        startScrollLeft: gesture.getScrollLeft?.() ?? 0,
+        startScrollLeft: scrollLeft,
         startX: x,
         startY: y,
         samples: [{ x, y, tMs }],
@@ -90,8 +96,9 @@ export function BubbleChartPage(props: {
     if (!tracking || tracking.pointerId !== e.pointerId) return
 
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = e.clientX - rect.left
+    const pageX = e.clientX - rect.left
     const y = e.clientY - rect.top
+    const x = pageX - tracking.startScrollLeft
     const tMs = performance.now()
 
     tracking.samples.push({ x, y, tMs })
@@ -109,8 +116,9 @@ export function BubbleChartPage(props: {
       if (Math.abs(endScrollLeft - tracking.startScrollLeft) > 12) return
 
       const rect = e.currentTarget.getBoundingClientRect()
-      const x = e.clientX - rect.left
+      const pageX = e.clientX - rect.left
       const y = e.clientY - rect.top
+      const x = pageX - tracking.startScrollLeft
 
       const tMs = performance.now()
       tracking.samples.push({ x, y, tMs })
@@ -135,6 +143,23 @@ export function BubbleChartPage(props: {
       const speed = Math.hypot(vx, vy)
 
       const isFlick = travel >= 14 && speed >= 380
+      if (isFlick) {
+        rapidTapRef.current = null
+      }
+
+      if (!isFlick && gesture.onBurst) {
+        const prev = rapidTapRef.current
+        const dt = prev ? last.tMs - prev.tMs : Number.POSITIVE_INFINITY
+        const nextCount = prev && prev.bubbleId === tracking.bubbleId && dt <= 260 ? prev.count + 1 : 1
+        rapidTapRef.current = { bubbleId: tracking.bubbleId, count: nextCount, tMs: last.tMs }
+
+        if (nextCount >= 3) {
+          rapidTapRef.current = null
+          gesture.onBurst(tracking.bubbleId, { x: last.x, y: last.y })
+          return
+        }
+      }
+
       if (!isFlick) {
         const pos = gesture.positions.get(tracking.bubbleId)
         const cx = pos?.x.get() ?? last.x
