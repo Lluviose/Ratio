@@ -1,0 +1,19 @@
+@media (pointer: coarse) {
+  /* Avoid accidental long-press copy/paste menus outside of editable fields. */
+  body,
+  body * {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable],
+  [contenteditable] * {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
