@@ -86,10 +86,8 @@ export function AccountDetailSheet(props: {
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
   const [noteValue, setNoteValue] = useState('')
-  const renameInputRef = useRef<HTMLInputElement | null>(null)
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
-  const transferAmountInputRef = useRef<HTMLInputElement | null>(null)
   const openedAtRef = useRef<number | null>(null)
   const initKeyRef = useRef<string | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
@@ -162,25 +160,15 @@ export function AccountDetailSheet(props: {
 
   useEffect(() => {
     if (!open) return
-    if (action === 'none') return
+    if (action !== 'set_balance' && action !== 'adjust') return
     setMoreOpen(false)
     const openedAt = openedAtRef.current
     const openingMs = 280
-    const switchMs = 120
-    const elapsed = openedAt == null ? 0 : performance.now() - openedAt
-    const delay = elapsed < openingMs ? Math.max(0, openingMs - elapsed) : switchMs
+    const elapsed = openedAt == null ? Number.POSITIVE_INFINITY : performance.now() - openedAt
+    const delay = elapsed < openingMs ? Math.max(0, openingMs - elapsed) : 0
 
     const timer = window.setTimeout(() => {
-      const el =
-        action === 'set_balance'
-          ? balanceInputRef.current
-          : action === 'adjust'
-            ? adjustInputRef.current
-            : action === 'rename'
-              ? renameInputRef.current
-              : action === 'transfer'
-                ? transferAmountInputRef.current
-                : null
+      const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
       if (!el) return
       el.focus()
       el.select()
@@ -878,7 +866,6 @@ export function AccountDetailSheet(props: {
                 <div className="mt-5">
                   <div className="text-[13px] font-semibold text-slate-500">账户名称</div>
                   <input
-                    ref={renameInputRef}
                     className="input mt-2"
                     value={renameValue}
                     onChange={(e) => setRenameValue(e.target.value)}
@@ -949,7 +936,6 @@ export function AccountDetailSheet(props: {
                       <div className="relative">
                         <input
                           className="input"
-                          ref={transferAmountInputRef}
                           inputMode="decimal"
                           placeholder="0.00"
                           value={transferAmount}
