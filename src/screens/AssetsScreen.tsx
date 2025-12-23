@@ -545,7 +545,7 @@ export function AssetsScreen(props: {
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
   const listHeaderOpacity = ratioProgress
-  const labelsOpacity = useTransform(ratioProgress, [0, 0.6, 1], [1, 0, 0])
+  const labelsOpacity = useTransform(ratioProgress, [0, 1], [1, 0])
   const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])
   const miniBarY = useTransform(ratioProgress, [0, 1], [16, 0])
   const listHeaderPointerEvents = useTransform(ratioProgress, (p) => (p < 0.05 ? 'none' : 'auto'))
