@@ -292,7 +292,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
         <motion.div
           ref={chartRef}
-          style={{ height: 240, marginTop: 24 }}
+          style={{ height: 240, marginTop: 24, position: 'relative', zIndex: 1 }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
@@ -315,6 +315,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               />
               <Tooltip
                 content={tooltip}
+                wrapperStyle={{ zIndex: 10 }}
                 cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
               />
               {mode === 'netDebt' ? (
