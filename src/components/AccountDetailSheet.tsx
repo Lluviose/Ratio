@@ -571,7 +571,7 @@ export function AccountDetailSheet(props: {
                     whileTap={{ scale: 0.99 }}
                     className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
                   >
-                    增减金额
+                    期间增减
                   </motion.button>
                   <motion.button
                     type="button"
@@ -590,10 +590,14 @@ export function AccountDetailSheet(props: {
 
                 <div className="mt-7 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-500">
-                    <span>变动记录</span>
+                    <span>期间变动</span>
                     <SlidersHorizontal size={14} strokeWidth={2.5} className="opacity-60" />
                   </div>
                   <div className="text-[13px] font-semibold text-slate-400">金额</div>
+                </div>
+
+                <div className="mt-1 text-[11px] font-semibold text-slate-400/80">
+                  这里记录的是期间净流量/校准/转账（非逐笔流水）
                 </div>
 
                 <div className="mt-3 rounded-[22px] bg-white/70 border border-white/70 overflow-hidden">
@@ -621,7 +625,7 @@ export function AccountDetailSheet(props: {
                         }
 
                         if (op.kind === 'adjust') {
-                          title = op.delta >= 0 ? '增加金额' : '减少金额'
+                          title = op.delta >= 0 ? '期间净流入' : '期间净流出'
                           delta = op.delta
                           after = op.after
                         }
@@ -728,7 +732,11 @@ export function AccountDetailSheet(props: {
                     onChange={(e) => setNoteValue(e.target.value)}
                     aria-label="note"
                   />
-                  <div className="text-[13px] font-semibold text-slate-700">增减金额</div>
+                  <div className="text-[13px] font-semibold text-slate-700">期间增减</div>
+                </div>
+
+                <div className="mt-2 text-[11px] font-semibold text-slate-400">
+                  “+”=期间净流入，“-”=期间净流出（非逐笔流水）
                 </div>
 
                 <div className="mt-4 flex rounded-full bg-slate-200/80 p-1">

@@ -131,7 +131,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
     return (
       <div className="flex flex-col h-full bg-[#f5f6f8] pt-12 px-4">
          <div className="bg-white rounded-3xl p-5 shadow-sm border border-black/5">
-            <div className="text-center font-black text-sm mb-6">年度收支分析</div>
+            <div className="text-center font-black text-sm mb-6">年度资产变化分析</div>
             
             <div className="h-40 flex items-end justify-between px-2 gap-2">
                {[0.4, 0.7, 0.3, 0.85, 0.5, 0.9, 0.6].map((h, i) => (
@@ -159,9 +159,9 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
             </div>
             
             <div className="flex justify-between mt-3 border-t pt-3 border-dashed border-gray-100">
-               <div className="text-[10px] font-bold text-gray-400">支出</div>
-               <div className="text-[10px] font-bold text-gray-900">收入</div>
-               <div className="text-[10px] font-bold text-gray-400">结余</div>
+               <div className="text-[10px] font-bold text-gray-400">总资产</div>
+               <div className="text-[10px] font-bold text-gray-900">净资产</div>
+               <div className="text-[10px] font-bold text-gray-400">负债</div>
             </div>
          </div>
       </div>

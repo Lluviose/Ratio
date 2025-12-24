@@ -67,9 +67,11 @@ function ChatMarkdown(props: { children: string }) {
 }
 
 function prettyError(err: unknown) {
-  if (err instanceof Error) return err.message
-  if (typeof err === 'string') return err
-  return 'Unknown error'
+  const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error'
+  if (/load failed|failed to fetch|networkerror|cors/i.test(raw)) {
+    return `无法连接到 AI 端点（${AI_BASE_URL}）。请检查网络/端点可用性，以及是否存在 CORS 或证书问题。`
+  }
+  return raw
 }
 
 export function AiAssistant() {
@@ -84,7 +86,6 @@ export function AiAssistant() {
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const financialContextMessageRef = useRef<AiChatMessage | null>(null)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -137,18 +138,25 @@ export function AiAssistant() {
   }, [messages.length, sending])
 
   function getFinancialContextMessage(): AiChatMessage {
-    if (financialContextMessageRef.current) return financialContextMessageRef.current
-
     const ctx = buildAiFinancialContext()
     const json = JSON.stringify(ctx, null, 2)
-    const msg: AiChatMessage = {
+    return {
       role: 'system',
       content:
-        '你是一个严谨的个人财务分析助手。下面是用户在本地记录的财务数据 JSON（账户/流水/快照/操作等），请以此作为上下文进行分析与建议。\n\n' +
+        '你是一个严谨的个人财务分析助手。\n' +
+        '下面是用户在本地记录的财务数据 JSON，请把它当作本次对话的唯一事实来源。\n' +
+        '\n' +
+        '重要语义（请严格遵守）：\n' +
+        '- 本项目不是逐笔记账：用户通常不会记录每一笔交易。\n' +
+        '- accountOps.kind="adjust" 表示“期间净流量/净变动”的汇总记录，不是单笔交易；delta>0=净流入，delta<0=净流出。\n' +
+        '- accountOps.kind="set_balance" 是余额校准/覆盖；差额可能同时包含流量与估值变动。\n' +
+        '- accountOps.kind="transfer" 是账户间内部转移，不改变净资产；不要把它当作收入/支出。\n' +
+        '- snapshots 是不同日期的余额快照；相邻快照的差值代表期间总变化（可能包含流量+估值波动），不能拆成逐笔明细。\n' +
+        '- ledger（如果存在）可能是可选/不完整的明细，不要假设覆盖全部。\n' +
+        '\n' +
+        '回答要求：基于 JSON 推理；缺信息先提问；不要编造不存在的交易/分类。\n\n' +
         json,
     }
-    financialContextMessageRef.current = msg
-    return msg
   }
 
   async function send(text: string) {
@@ -349,7 +357,7 @@ export function AiAssistant() {
                     <div className="px-5 pt-5 pb-3">
                       <div className="text-[15px] font-extrabold tracking-tight text-slate-900">隐私提示</div>
                       <div className="mt-2 text-[12px] font-semibold text-slate-600 leading-relaxed">
-                        为了进行 AI 分析，你的财务数据将以 JSON 形式发送到第三方模型端点（包含账户/流水/快照等）。请确认你理解并同意后继续使用。
+                        为了进行 AI 分析，你的财务数据将以 JSON 形式发送到第三方模型端点（包含账户、快照、期间变动记录等）。请确认你理解并同意后继续使用。
                       </div>
                       {transportIssue ? (
                         <div className="mt-2 text-[12px] font-semibold text-rose-600 leading-relaxed">

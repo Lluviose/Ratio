@@ -200,6 +200,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       <div style={{ marginTop: 10 }}>
         <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
         <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>Top变动账户</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted-text)', opacity: 0.75, marginTop: -6, marginBottom: 8 }}>
+          基于相邻快照余额差（含流量/估值波动）
+        </div>
         {!canCompare ? (
           <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>暂无对比快照</div>
         ) : !hasAccountDetails ? (

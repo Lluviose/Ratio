@@ -157,7 +157,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       coverage,
       growth,
     }
-  }, [colors, range, snapshots])
+  }, [range, snapshots])
 
   return (
     <div className="stack" style={{ padding: '0 16px' }}>
@@ -241,6 +241,9 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             >
               <div className="cardInner">
                 <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>区间变化</div>
+                <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
+                  基于快照差值（含流量/估值波动）
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
                   <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
