@@ -8,6 +8,7 @@ import { StatsScreen } from './screens/StatsScreen'
 import { TrendScreen } from './screens/TrendScreen'
 import { AccountDetailSheet } from './components/AccountDetailSheet'
 import { AddAccountScreen } from './screens/AddAccountScreen'
+import { AiAssistant } from './components/AiAssistant'
 import { type Account } from './lib/accounts'
 import { useAccounts } from './lib/useAccounts'
 import { useSnapshots } from './lib/useSnapshots'
@@ -257,6 +258,7 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
+              {tab === 'assets' && view === 'main' && selectedAccountId == null ? <AiAssistant /> : null}
 
               <AccountDetailSheet
                 open={Boolean(selectedAccountId)}

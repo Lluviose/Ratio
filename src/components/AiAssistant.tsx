@@ -217,10 +217,17 @@ export function AiAssistant() {
 
             <motion.div
               className="absolute right-4 bottom-20 w-[min(360px,calc(100%-32px))] h-[520px] max-h-[calc(100%-112px)] rounded-[28px] bg-white/85 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
-              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              style={{ originX: 1, originY: 1 }}
+              initial={{ opacity: 0, y: 18, scale: 0.88 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, y: 18, scale: 0.94 }}
+              transition={{
+                type: 'spring',
+                stiffness: 420,
+                damping: 34,
+                mass: 0.9,
+                opacity: { duration: 0.14, ease: [0.16, 1, 0.3, 1] },
+              }}
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
@@ -385,7 +392,7 @@ export function AiAssistant() {
       </AnimatePresence>
 
       <div className="absolute right-4 bottom-4 pointer-events-auto">
-        <button
+        <motion.button
           type="button"
           aria-label="AI analysis"
           className={
@@ -394,9 +401,12 @@ export function AiAssistant() {
               : 'w-11 h-11 rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] flex items-center justify-center shadow-[0_10px_24px_-6px_rgb(var(--primary-rgb)/0.45)]'
           }
           onClick={() => setOpen((v) => !v)}
+          animate={open ? { rotate: 8, scale: 1.04 } : { rotate: 0, scale: 1 }}
+          whileTap={{ scale: 0.94 }}
+          transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
         >
           <Sparkles size={18} strokeWidth={2.6} />
-        </button>
+        </motion.button>
       </div>
     </div>
   )

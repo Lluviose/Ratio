@@ -10,7 +10,6 @@ import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
-import { AiAssistant } from '../components/AiAssistant'
 
 /** Linear interpolation helper */
 function lerp(a: number, b: number, t: number): number {
@@ -1559,8 +1558,6 @@ export function AssetsScreen(props: {
           />
         </div>
       </div>
-
-      <AiAssistant />
     </div>
   )
 }
