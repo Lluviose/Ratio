@@ -1,7 +1,7 @@
 export const AI_BASE_URL = 'https://cliapi.shinonome.com.cn' as const
 export const AI_API_KEY = 'caiwu' as const
 export const AI_MODEL = 'gpt-5.2' as const
-export const AI_REASONING_EFFORT = 'xhigh' as const
+export const AI_REASONING_EFFORT = 'high' as const
 
 export type AiChatMessage = {
   role: 'system' | 'user' | 'assistant'
