@@ -19,6 +19,23 @@ export type AiFinancialContextV1 = {
   }
 }
 
+export function getAiEndpointIssue(baseUrl: string = AI_BASE_URL): string | null {
+  if (typeof window === 'undefined') return null
+
+  let aiUrl: URL
+  try {
+    aiUrl = new URL(baseUrl)
+  } catch {
+    return 'AI 端点地址无效'
+  }
+
+  if (window.location.protocol === 'https:' && aiUrl.protocol === 'http:') {
+    return '当前页面为 HTTPS，浏览器会拦截 HTTP AI 接口请求'
+  }
+
+  return null
+}
+
 function safeJsonParse(raw: string | null): unknown {
   if (raw == null) return null
   try {
@@ -72,6 +89,9 @@ function readResponseContent(value: unknown): string | undefined {
 
 export async function fetchAiChatCompletion(args: { messages: AiChatMessage[]; signal?: AbortSignal }) {
   const { messages, signal } = args
+
+  const issue = getAiEndpointIssue()
+  if (issue) throw new Error(issue)
 
   const url = new URL('/v1/chat/completions', AI_BASE_URL)
   const res = await fetch(url, {

@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildAiFinancialContext, fetchAiChatCompletion, type AiChatMessage } from '../lib/ai'
+import { buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, type AiChatMessage } from '../lib/ai'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type UiMessage = {
@@ -23,6 +23,8 @@ export function AiAssistant() {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
 
+  const transportIssue = useMemo(() => getAiEndpointIssue(), [])
+
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const hasSentContextRef = useRef(false)
@@ -34,8 +36,9 @@ export function AiAssistant() {
     if (privacyOpen) return false
     if (!privacyAccepted) return false
     if (sending) return false
+    if (transportIssue) return false
     return input.trim().length > 0
-  }, [input, open, privacyAccepted, privacyOpen, sending])
+  }, [input, open, privacyAccepted, privacyOpen, sending, transportIssue])
 
   useEffect(() => {
     if (!open) return
@@ -77,6 +80,17 @@ export function AiAssistant() {
   }, [messages.length, sending])
 
   async function send(text: string) {
+    if (transportIssue) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `${transportIssue}。请在本地 http 环境使用（如 \`npm run dev\`），或为该端点配置 HTTPS 反向代理/网关后再试。`,
+        },
+      ])
+      return
+    }
+
     if (!privacyAccepted) {
       setPrivacyOpen(true)
       return
@@ -155,6 +169,11 @@ export function AiAssistant() {
                   <div className="mt-1 text-[11px] font-semibold text-slate-500/80">
                     提示：刷新页面将清空聊天记录
                   </div>
+                  {transportIssue ? (
+                    <div className="mt-1 text-[11px] font-semibold text-rose-600/90">
+                      {transportIssue}
+                    </div>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -172,7 +191,9 @@ export function AiAssistant() {
               >
                 {messages.length === 0 ? (
                   <div className="mt-6 rounded-[18px] border border-white/70 bg-white/65 px-4 py-3 text-[12px] font-semibold text-slate-600 leading-relaxed">
-                    你可以问我：资产结构是否健康、负债压力如何、近期变化原因、下一步优化建议等。
+                    {transportIssue
+                      ? '当前环境无法直接连接 AI 端点。建议在本地 http 环境使用（例如运行 `npm run dev`），或为端点配置 HTTPS 反向代理。'
+                      : '你可以问我：资产结构是否健康、负债压力如何、近期变化原因、下一步优化建议等。'}
                   </div>
                 ) : null}
 
@@ -211,8 +232,14 @@ export function AiAssistant() {
                       e.preventDefault()
                       if (canSend) void send(input)
                     }}
-                    placeholder={privacyAccepted ? '输入你的问题…' : '请先阅读隐私提示'}
-                    disabled={!privacyAccepted || privacyOpen || sending}
+                    placeholder={
+                      transportIssue
+                        ? '当前环境无法连接接口'
+                        : privacyAccepted
+                          ? '输入你的问题…'
+                          : '请先阅读隐私提示'
+                    }
+                    disabled={!privacyAccepted || privacyOpen || sending || Boolean(transportIssue)}
                     rows={1}
                     className="flex-1 resize-none rounded-[18px] border border-white/70 bg-white/80 px-3 py-2 text-[13px] font-semibold text-slate-900 outline-none focus:border-[var(--primary)] focus:shadow-[0_0_0_4px_rgb(var(--primary-rgb)/0.15)] disabled:opacity-60"
                     style={{ minHeight: 44, maxHeight: 120 }}
@@ -253,6 +280,11 @@ export function AiAssistant() {
                       <div className="mt-2 text-[12px] font-semibold text-slate-600 leading-relaxed">
                         为了进行 AI 分析，你的财务数据将以 JSON 形式发送到第三方模型端点（包含账户/流水/快照等）。请确认你理解并同意后继续使用。
                       </div>
+                      {transportIssue ? (
+                        <div className="mt-2 text-[12px] font-semibold text-rose-600 leading-relaxed">
+                          {transportIssue}，需要 http 环境或 HTTPS 反向代理才能使用。
+                        </div>
+                      ) : null}
                       <div className="mt-2 text-[11px] font-semibold text-slate-500/80 break-all">
                         端点：http://148.135.120.144:8317
                       </div>
