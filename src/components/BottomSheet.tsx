@@ -1,6 +1,26 @@
 import { X } from 'lucide-react'
-import { type CSSProperties, type ReactNode, useEffect } from 'react'
+import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+
+const openSheetStack: string[] = []
+
+function makeSheetId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function pushOpenSheet(id: string) {
+  openSheetStack.push(id)
+}
+
+function removeOpenSheet(id: string) {
+  const idx = openSheetStack.lastIndexOf(id)
+  if (idx >= 0) openSheetStack.splice(idx, 1)
+}
+
+function isTopSheet(id: string) {
+  return openSheetStack[openSheetStack.length - 1] === id
+}
 
 export function BottomSheet(props: {
   open: boolean
@@ -27,14 +47,25 @@ export function BottomSheet(props: {
     bodyStyle,
   } = props
 
+  const sheetIdRef = useRef<string>(makeSheetId())
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+
   useEffect(() => {
     if (!open) return
+    const sheetId = sheetIdRef.current
+    pushOpenSheet(sheetId)
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape' && isTopSheet(sheetId)) onCloseRef.current()
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [onClose, open])
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      removeOpenSheet(sheetId)
+    }
+  }, [open])
 
   return (
     <AnimatePresence>

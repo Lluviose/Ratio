@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
+import { useOverlay } from '../lib/overlay'
 import type { Transaction, TxType } from '../lib/ledger'
 import { normalizeAmount } from '../lib/ledger'
 
@@ -14,11 +15,13 @@ export function AddTransactionSheet(props: {
   accounts?: string[]
 }) {
   const { open, onClose, onSubmit, accounts } = props
+  const { toast } = useOverlay()
 
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
 
   const [type, setType] = useState<TxType>('expense')
   const [amount, setAmount] = useState('')
+  const amountInputRef = useRef<HTMLInputElement | null>(null)
   const [category, setCategory] = useState(categories[0] ?? '其他')
   const accountOptions = (accounts && accounts.length > 0 ? accounts : defaultAccounts)
   const [account, setAccount] = useState(accountOptions[0] ?? '现金')
@@ -39,7 +42,9 @@ export function AddTransactionSheet(props: {
   const submit = () => {
     const num = Number(amount)
     if (!Number.isFinite(num) || num <= 0) {
-      alert('请输入正确金额')
+      toast('请输入正确金额', { tone: 'danger' })
+      amountInputRef.current?.focus()
+      amountInputRef.current?.select()
       return
     }
 
@@ -79,7 +84,8 @@ export function AddTransactionSheet(props: {
                 placeholder="0.00"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
+                ref={amountInputRef}
+                style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}      
                 autoFocus
               />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>

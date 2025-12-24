@@ -15,6 +15,7 @@ import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
 import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
+import { OverlayProvider } from './components/OverlayProvider'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
@@ -116,7 +117,8 @@ export default function App() {
   return (
     <div className="appViewport">
       <div className="appFrame">
-        <AnimatePresence mode="wait">
+        <OverlayProvider>
+          <AnimatePresence mode="wait">
           {!tourSeen ? (
             <motion.div
               key="tour"
@@ -280,7 +282,8 @@ export default function App() {
               />
             </motion.div>
           )}
-        </AnimatePresence>
+          </AnimatePresence>
+        </OverlayProvider>
       </div>
     </div>
   )

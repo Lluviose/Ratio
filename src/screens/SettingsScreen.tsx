@@ -2,6 +2,7 @@ import { Check, Download, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
+import { queueToastAfterReload, useOverlay } from '../lib/overlay'
 import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import type { ThemeId, ThemeOption } from '../lib/themes'
@@ -21,6 +22,7 @@ export function SettingsScreen(props: {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
+  const { toast, confirm } = useOverlay()
 
   const randomSwatches = themeOptions.filter((t) => t.id !== 'random').map((t) => t.colors.invest)
 
@@ -41,27 +43,33 @@ export function SettingsScreen(props: {
       setTimeout(() => URL.revokeObjectURL(url), 0)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Export failed'
-      window.alert(msg)
+      toast(msg, { tone: 'danger' })
     } finally {
       setBusy(false)
     }
   }
 
   const importBackup = async (file: File) => {
+    const ok = await confirm({
+      title: '导入备份',
+      message: '导入备份会覆盖当前设备上的所有数据，是否继续？',
+      confirmText: '继续导入',
+      cancelText: '取消',
+      tone: 'danger',
+    })
+    if (!ok) return
+
     setBusy(true)
     try {
       const text = await file.text()
       const backup = parseRatioBackup(text)
-      const ok = window.confirm('导入备份会覆盖当前设备上的所有数据，是否继续？')
-      if (!ok) return
-
       const res = restoreRatioBackup(backup)
-      window.alert(`已恢复 ${res.restoredKeys.length} 项数据，页面将自动刷新。`)
+      queueToastAfterReload(`已恢复 ${res.restoredKeys.length} 项数据`, { tone: 'success' })
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Import failed'
-      window.alert(msg)
-  } finally {
+      toast(msg, { tone: 'danger' })
+    } finally {
       setBusy(false)
     }
   }

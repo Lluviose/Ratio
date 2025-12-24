@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { BottomSheet } from './BottomSheet'
+import { useOverlay } from '../lib/overlay'
 import { formatCny } from '../lib/format'
 
 export function EditBalanceSheet(props: {
@@ -11,12 +12,16 @@ export function EditBalanceSheet(props: {
 }) {
   const { open, title, initialValue, onClose, onSave } = props
 
+  const { toast } = useOverlay()
+
   const inputRef = useRef<HTMLInputElement | null>(null)
 
   const submit = () => {
     const num = Number(inputRef.current?.value ?? '')
     if (!Number.isFinite(num)) {
-      alert('请输入正确余额')
+      toast('请输入正确余额', { tone: 'danger' })
+      inputRef.current?.focus()
+      inputRef.current?.select()
       return
     }
     onSave(num)

@@ -3,6 +3,7 @@ import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } 
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
+import { useOverlay } from '../lib/overlay'
 import { formatCny } from '../lib/format'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
 import { type ThemeColors } from '../lib/themes'
@@ -67,6 +68,8 @@ export function AccountDetailSheet(props: {
     onAddOp,
     colors,
   } = props
+
+  const { toast, confirm } = useOverlay()
 
   const account = useMemo(() => {
     if (!accountId) return null
@@ -285,7 +288,7 @@ export function AccountDetailSheet(props: {
   const submitRename = () => {
     const next = renameValue.trim()
     if (!next) {
-      alert('请输入名称')
+      toast('请输入名称', { tone: 'danger' })
       return
     }
     if (next === account.name) {
@@ -308,12 +311,14 @@ export function AccountDetailSheet(props: {
   const submitSetBalance = () => {
     const raw = balanceValue.trim()
     if (!raw) {
-      alert('请输入正确余额')
+      toast('请输入正确余额', { tone: 'danger' })
+      refocusActiveInput()
       return
     }
     const num = Number(raw)
     if (!Number.isFinite(num)) {
-      alert('请输入正确余额')
+      toast('请输入正确余额', { tone: 'danger' })
+      refocusActiveInput()
       return
     }
 
@@ -341,7 +346,8 @@ export function AccountDetailSheet(props: {
     const raw = adjustAmount.trim()
     const num = Number(raw)
     if (!raw || !Number.isFinite(num) || num <= 0) {
-      alert('请输入正确金额')
+      toast('请输入正确金额', { tone: 'danger' })
+      refocusActiveInput()
       return
     }
 
@@ -366,18 +372,18 @@ export function AccountDetailSheet(props: {
 
   const submitTransfer = () => {
     if (!transferPeerId) {
-      alert('请选择账户')
+      toast('请选择账户', { tone: 'danger' })
       return
     }
     const peer = byId.get(transferPeerId)
     if (!peer) {
-      alert('账户不存在')
+      toast('账户不存在', { tone: 'danger' })
       return
     }
 
     const num = Number(transferAmount)
     if (!Number.isFinite(num) || num <= 0) {
-      alert('请输入正确金额')
+      toast('请输入正确金额', { tone: 'danger' })
       return
     }
 
@@ -488,9 +494,16 @@ export function AccountDetailSheet(props: {
                         <button
                           type="button"
                           className="w-full px-4 py-3 text-left text-[13px] font-semibold text-rose-600 hover:bg-rose-50"
-                          onClick={() => {
+                          onClick={async () => {
                             setMoreOpen(false)
-                            if (window.confirm(`确定要删除账户「${account.name}」吗？此操作不可撤销。`)) {
+                            const ok = await confirm({
+                              title: '删除账户',
+                              message: `确定要删除账户「${account.name}」吗？此操作不可撤销。`,
+                              confirmText: '删除',
+                              cancelText: '取消',
+                              tone: 'danger',
+                            })
+                            if (ok) {
                               onDelete(account.id)
                               onClose()
                             }
@@ -1173,9 +1186,16 @@ export function AccountDetailSheet(props: {
 
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       setMoreOpen(false)
-                      if (window.confirm(`确定要删除账户「${account.name}」吗？此操作不可撤销。`)) {
+                      const ok = await confirm({
+                        title: '删除账户',
+                        message: `确定要删除账户「${account.name}」吗？此操作不可撤销。`,
+                        confirmText: '删除',
+                        cancelText: '取消',
+                        tone: 'danger',
+                      })
+                      if (ok) {
                         onDelete(account.id)
                         onClose()
                       }
