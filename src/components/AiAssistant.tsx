@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Sparkles, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AI_BASE_URL, buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, type AiChatMessage } from '../lib/ai'
@@ -88,6 +88,7 @@ export function AiAssistant() {
   const abortRef = useRef<AbortController | null>(null)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const lastAssistantMessageRef = useRef<HTMLDivElement | null>(null)
 
   const canSend = useMemo(() => {
     if (!open) return false
@@ -128,13 +129,20 @@ export function AiAssistant() {
     setPrivacyOpen(false)
   }, [open])
 
-  useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    const raf = window.requestAnimationFrame(() => {
-      el.scrollTop = el.scrollHeight
-    })
-    return () => window.cancelAnimationFrame(raf)
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (!container) return
+
+    const last = messages[messages.length - 1]
+    if (last?.role === 'assistant' && !sending) {
+      const bubble = lastAssistantMessageRef.current
+      if (bubble && bubble.scrollHeight > container.clientHeight) {
+        bubble.scrollIntoView({ block: 'start' })
+        return
+      }
+    }
+
+    container.scrollTop = container.scrollHeight
   }, [messages.length, sending])
 
   function getFinancialContextMessage(): AiChatMessage {
@@ -284,6 +292,7 @@ export function AiAssistant() {
                     ) : (
                       <div
                         key={idx}
+                        ref={idx === messages.length - 1 ? lastAssistantMessageRef : null}
                         className="mr-auto max-w-[85%] rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm break-words"
                       >
                         <ChatMarkdown>{m.content}</ChatMarkdown>
