@@ -368,38 +368,33 @@ function OverlayBlock(props: {
 
   return (
     <motion.div
-      className="absolute pointer-events-none left-0 top-0"
-      style={{ width: 0, height: 0 }}
-      initial={needsEnterAnimation ? { x: enterTranslateX, opacity: 0 } : false}
-      animate={{ x: 0, opacity: 1 }}
+      className="absolute pointer-events-none"
+      initial={needsEnterAnimation ? { translateX: enterTranslateX, opacity: 0 } : false}
+      animate={{ translateX: 0, opacity: 1 }}
       transition={needsEnterAnimation ? {
         duration: 0.5,
         delay: blockIndex * 0.04,
         ease: [0.2, 0, 0, 1]
       } : undefined}
+      style={{
+        left: x,
+        top: y,
+        width: w,
+        height: h,
+        background: block.tone,
+        borderTopLeftRadius: tl,
+        borderTopRightRadius: tr,
+        borderBottomLeftRadius: bl,
+        borderBottomRightRadius: br,
+        opacity: finalOpacity,
+        scale: burstScale,
+        originX: 0.5,
+        originY: 0.5,
+        overflow: 'hidden',
+      }}
     >
-      <motion.div
-        className="absolute left-0 top-0"
-        style={{
-          x,
-          y,
-          width: w,
-          height: h,
-          background: block.tone,
-          borderTopLeftRadius: tl,
-          borderTopRightRadius: tr,
-          borderBottomLeftRadius: bl,
-          borderBottomRightRadius: br,
-          opacity: finalOpacity,
-          scale: burstScale,
-          originX: 0.5,
-          originY: 0.5,
-          overflow: 'hidden',
-          willChange: 'transform',
-        }}
-      >
       {/* Sphere 3D Effects Overlay */}
-      <motion.div
+      <motion.div 
         className="absolute inset-0 z-0"
         style={{ opacity: sphereEffectOpacity }}
       >
@@ -476,7 +471,6 @@ function OverlayBlock(props: {
             </motion.div>
 
         </motion.div>
-      </motion.div>
       </motion.div>
     </motion.div>
   )
