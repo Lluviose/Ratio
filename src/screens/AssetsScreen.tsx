@@ -1050,6 +1050,7 @@ export function AssetsScreen(props: {
         }
       }
 
+      scrollLeft.set(el.scrollLeft)
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         const w = el.clientWidth || 1
