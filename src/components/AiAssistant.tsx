@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, type AiChatMessage } from '../lib/ai'
+import { AI_BASE_URL, buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, type AiChatMessage } from '../lib/ai'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type UiMessage = {
@@ -286,7 +286,7 @@ export function AiAssistant() {
                         </div>
                       ) : null}
                       <div className="mt-2 text-[11px] font-semibold text-slate-500/80 break-all">
-                        端点：http://148.135.120.144:8317
+                        端点：{AI_BASE_URL}
                       </div>
                     </div>
 
