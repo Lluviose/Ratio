@@ -1,12 +1,69 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { ArrowUp, Sparkles, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { AI_BASE_URL, buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, type AiChatMessage } from '../lib/ai'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type UiMessage = {
   role: 'user' | 'assistant'
   content: string
+}
+
+function ChatMarkdown(props: { children: string }) {
+  return (
+    <div className="aiMarkdown">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
+          ul: ({ children }) => <ul className="my-2 pl-5 list-disc space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="my-2 pl-5 list-decimal space-y-1">{children}</ol>,
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          a: ({ href, children }) =>
+            href ? (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className="underline decoration-slate-300 hover:decoration-slate-400"
+              >
+                {children}
+              </a>
+            ) : (
+              <span>{children}</span>
+            ),
+          blockquote: ({ children }) => (
+            <blockquote className="my-2 pl-3 border-l-2 border-slate-300/80 text-slate-700">{children}</blockquote>
+          ),
+          h1: ({ children }) => <h1 className="my-2 text-[15px] font-extrabold">{children}</h1>,
+          h2: ({ children }) => <h2 className="my-2 text-[14px] font-extrabold">{children}</h2>,
+          h3: ({ children }) => <h3 className="my-2 text-[13px] font-extrabold">{children}</h3>,
+          hr: () => <hr className="my-3 border-white/60" />,
+          pre: ({ children }) => <pre className="aiMarkdownPre">{children}</pre>,
+          code: ({ children, className }) => {
+            const text = String(children).replace(/\n$/, '')
+            const cls = className ? `aiMarkdownCode ${className}` : 'aiMarkdownCode'
+            return <code className={cls}>{text}</code>
+          },
+          table: ({ children }) => (
+            <div className="my-2 max-w-full overflow-auto rounded-[14px] border border-white/60 bg-white/60">
+              <table className="min-w-full text-[12px]">{children}</table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="px-2 py-2 text-left font-extrabold text-slate-800 border-b border-white/60">{children}</th>
+          ),
+          td: ({ children }) => (
+            <td className="px-2 py-2 align-top border-b border-white/50 text-slate-700">{children}</td>
+          ),
+        }}
+      >
+        {props.children}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 function prettyError(err: unknown) {
@@ -199,17 +256,21 @@ export function AiAssistant() {
 
                 <div className="mt-3 grid gap-2">
                   {messages.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className={
-                        m.role === 'user'
-                          ? 'ml-auto max-w-[85%] rounded-[18px] bg-[var(--primary)] text-[var(--primary-contrast)] px-3 py-2 text-[13px] font-semibold leading-relaxed shadow-sm'
-                          : 'mr-auto max-w-[85%] rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm'
-                      }
-                      style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
-                    >
-                      {m.content}
-                    </div>
+                    m.role === 'user' ? (
+                      <div
+                        key={idx}
+                        className="ml-auto max-w-[85%] rounded-[18px] bg-[var(--primary)] text-[var(--primary-contrast)] px-3 py-2 text-[13px] font-semibold leading-relaxed shadow-sm whitespace-pre-wrap break-words"
+                      >
+                        {m.content}
+                      </div>
+                    ) : (
+                      <div
+                        key={idx}
+                        className="mr-auto max-w-[85%] rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm break-words"
+                      >
+                        <ChatMarkdown>{m.content}</ChatMarkdown>
+                      </div>
+                    )
                   ))}
 
                   {sending ? (
