@@ -14,25 +14,49 @@ export default defineConfig(() => {
       react(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['pwa.svg'],
-        manifest: {
-          name: 'ratio',
-          short_name: 'ratio',
-          description: 'ratio',
-          theme_color: '#4f46e5',
-          background_color: '#f2f4f7',
-          display: 'standalone',
-          scope: base,
-          start_url: base,
-          icons: [
+        injectRegister: false,
+        includeAssets: [
+          'pwa.svg',
+          'apple-touch-icon.png',
+          'manifest.webmanifest',
+          'pwa-192x192.png',
+          'pwa-512x512.png',
+          'pwa-maskable-192x192.png',
+          'pwa-maskable-512x512.png',
+        ],
+        workbox: {
+          navigateFallback: 'index.html',
+          skipWaiting: true,
+          clientsClaim: true,
+          runtimeCaching: [
             {
-              src: 'pwa.svg',
-              sizes: '512x512',
-              type: 'image/svg+xml',
-              purpose: 'any maskable',
+              urlPattern: /^https:\/\/fonts\.googleapis\.com\/css2/i,
+              handler: 'StaleWhileRevalidate',
+              options: {
+                cacheName: 'google-fonts-stylesheets',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+              },
+            },
+            {
+              urlPattern: /^https:\/\/fonts\.gstatic\.com\/s\//i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'google-fonts-webfonts',
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+                expiration: {
+                  maxEntries: 20,
+                  maxAgeSeconds: 60 * 60 * 24 * 365,
+                },
+              },
             },
           ],
         },
+        manifest: false,
       }),
     ],
   }

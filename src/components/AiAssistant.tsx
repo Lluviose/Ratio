@@ -76,6 +76,7 @@ function prettyError(err: unknown) {
 
 export function AiAssistant() {
   const [open, setOpen] = useState(false)
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [privacyAccepted, setPrivacyAccepted] = useLocalStorageState<boolean>('ratio.aiPrivacyAccepted', false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [messages, setMessages] = useState<UiMessage[]>([])
@@ -95,9 +96,20 @@ export function AiAssistant() {
     if (privacyOpen) return false
     if (!privacyAccepted) return false
     if (sending) return false
+    if (!isOnline) return false
     if (transportIssue) return false
     return input.trim().length > 0
-  }, [input, open, privacyAccepted, privacyOpen, sending, transportIssue])
+  }, [input, isOnline, open, privacyAccepted, privacyOpen, sending, transportIssue])
+
+  useEffect(() => {
+    const update = () => setIsOnline(navigator.onLine)
+    window.addEventListener('online', update)
+    window.addEventListener('offline', update)
+    return () => {
+      window.removeEventListener('online', update)
+      window.removeEventListener('offline', update)
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -168,6 +180,14 @@ export function AiAssistant() {
   }
 
   async function send(text: string) {
+    if (!isOnline) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: '当前离线，AI 分析不可用。请联网后再试。' },
+      ])
+      return
+    }
+
     if (transportIssue) {
       setMessages((prev) => [
         ...prev,
@@ -257,6 +277,11 @@ export function AiAssistant() {
                       {transportIssue}
                     </div>
                   ) : null}
+                  {!isOnline ? (
+                    <div className="mt-1 text-[11px] font-semibold text-amber-700/90">
+                      当前离线，AI 暂不可用
+                    </div>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -274,7 +299,9 @@ export function AiAssistant() {
               >
                 {messages.length === 0 ? (
                   <div className="mt-6 rounded-[18px] border border-white/70 bg-white/65 px-4 py-3 text-[12px] font-semibold text-slate-600 leading-relaxed">
-                    {transportIssue
+                    {!isOnline
+                      ? '当前离线，AI 分析不可用。请联网后再试。'
+                      : transportIssue
                       ? '当前环境无法直接连接 AI 端点。建议在本地 http 环境使用（例如运行 `npm run dev`），或为端点配置 HTTPS 反向代理。'
                       : '你可以问我：资产结构是否健康、负债压力如何、近期变化原因、下一步优化建议等。'}
                   </div>
@@ -323,11 +350,19 @@ export function AiAssistant() {
                     placeholder={
                       transportIssue
                         ? '当前环境无法连接接口'
+                        : !isOnline
+                          ? '离线：AI 暂不可用'
                         : privacyAccepted
                           ? '输入你的问题…'
                           : '请先阅读隐私提示'
                     }
-                    disabled={!privacyAccepted || privacyOpen || sending || Boolean(transportIssue)}
+                    disabled={
+                      !privacyAccepted ||
+                      privacyOpen ||
+                      sending ||
+                      Boolean(transportIssue) ||
+                      !isOnline
+                    }
                     rows={1}
                     className="flex-1 resize-none rounded-[18px] border border-white/70 bg-white/80 px-3 py-2 text-[13px] font-semibold text-slate-900 outline-none focus:border-[var(--primary)] focus:shadow-[0_0_0_4px_rgb(var(--primary-rgb)/0.15)] disabled:opacity-60"
                     style={{ minHeight: 44, maxHeight: 120 }}
