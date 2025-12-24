@@ -821,12 +821,14 @@ export function AssetsScreen(props: {
     const root = viewportRef.current
     if (!root) return
 
-    const w = scrollerWidth || root.clientWidth || 1
-    const idx = scrollLeft.get() / w
-    // Measure only when near list page (index 2)
-    if (Math.abs(idx - 2) > 0.12) return
+    const scroller = scrollerRef.current
+    const pageW = scroller?.clientWidth || scrollerWidth || root.clientWidth || 0
+    if (pageW <= 0) return
+    const currentScrollLeft = scroller?.scrollLeft ?? scrollLeft.get()
+    const listPageOffsetX = pageW * 2 - currentScrollLeft
 
     const rootRect = root.getBoundingClientRect()
+    const maxBlockWidth = Math.max(0, Math.round(rootRect.width))
     const next: Partial<Record<GroupId, Rect>> = {}
     const blockGap = 12
     const overlap = listRadius
@@ -835,16 +837,31 @@ export function AssetsScreen(props: {
       const transform = window.getComputedStyle(el).transform
       if (!transform || transform === 'none') return 0
 
+      if (typeof DOMMatrixReadOnly !== 'undefined') {
+        try {
+          const m = new DOMMatrixReadOnly(transform)
+          return Number.isFinite(m.m41) ? m.m41 : 0
+        } catch {
+          // fall through to string parsing
+        }
+      }
+
       const m2d = transform.match(/^matrix\((.+)\)$/)
       if (m2d) {
-        const parts = m2d[1].split(',').map((p) => Number.parseFloat(p.trim()))
+        const parts = m2d[1]
+          .split(/[,\s]+/)
+          .filter(Boolean)
+          .map((p) => Number.parseFloat(p.trim()))
         const tx = parts[4]
         return Number.isFinite(tx) ? tx : 0
       }
 
       const m3d = transform.match(/^matrix3d\((.+)\)$/)
       if (m3d) {
-        const parts = m3d[1].split(',').map((p) => Number.parseFloat(p.trim()))
+        const parts = m3d[1]
+          .split(/[,\s]+/)
+          .filter(Boolean)
+          .map((p) => Number.parseFloat(p.trim()))
         const tx = parts[12]
         return Number.isFinite(tx) ? tx : 0
       }
@@ -871,7 +888,8 @@ export function AssetsScreen(props: {
       if (!item) continue
       const nextItem = items[i + 1]
 
-      const blockWidth = Math.max(0, Math.round(item.cardLeft - blockGap))
+      const cardLeftOnListPage = item.cardLeft - listPageOffsetX
+      const blockWidth = Math.min(maxBlockWidth, Math.max(0, Math.round(cardLeftOnListPage - blockGap)))
       const baseHeight = nextItem ? Math.max(0, nextItem.top - item.top) : Math.max(0, item.height)
       const blockHeight = nextItem ? baseHeight + overlap : baseHeight
 
@@ -940,7 +958,7 @@ export function AssetsScreen(props: {
 
     // Start at Page 2 (List) - 直接设置，不触发动画
     el.scrollLeft = w * 2
-    scrollLeft.set(w * 2)
+    scrollLeft.set(el.scrollLeft)
 
     measureListRects()
     setInitialized(true)
