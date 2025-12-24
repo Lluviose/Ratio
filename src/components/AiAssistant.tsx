@@ -84,7 +84,7 @@ export function AiAssistant() {
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  const hasSentContextRef = useRef(false)
+  const financialContextMessageRef = useRef<AiChatMessage | null>(null)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -136,6 +136,21 @@ export function AiAssistant() {
     return () => window.cancelAnimationFrame(raf)
   }, [messages.length, sending])
 
+  function getFinancialContextMessage(): AiChatMessage {
+    if (financialContextMessageRef.current) return financialContextMessageRef.current
+
+    const ctx = buildAiFinancialContext()
+    const json = JSON.stringify(ctx, null, 2)
+    const msg: AiChatMessage = {
+      role: 'system',
+      content:
+        '你是一个严谨的个人财务分析助手。下面是用户在本地记录的财务数据 JSON（账户/流水/快照/操作等），请以此作为上下文进行分析与建议。\n\n' +
+        json,
+    }
+    financialContextMessageRef.current = msg
+    return msg
+  }
+
   async function send(text: string) {
     if (transportIssue) {
       setMessages((prev) => [
@@ -167,25 +182,13 @@ export function AiAssistant() {
     const controller = new AbortController()
     abortRef.current = controller
 
-    const shouldSendContext = !hasSentContextRef.current
     try {
-      const apiMessages: AiChatMessage[] = []
-      if (shouldSendContext) {
-        const ctx = buildAiFinancialContext()
-        const json = JSON.stringify(ctx, null, 2)
-        apiMessages.push({
-          role: 'system',
-          content:
-            '你是一个严谨的个人财务分析助手。下面是用户在本地记录的财务数据 JSON（账户/流水/快照/操作等），请以此作为上下文进行分析与建议。\n\n' +
-            json,
-        })
-      }
+      const apiMessages: AiChatMessage[] = [getFinancialContextMessage()]
 
       for (const m of history) apiMessages.push({ role: m.role, content: m.content })
 
       const content = await fetchAiChatCompletion({ messages: apiMessages, signal: controller.signal })
       setMessages((prev) => [...prev, { role: 'assistant', content }])
-      if (shouldSendContext) hasSentContextRef.current = true
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
       setMessages((prev) => [
