@@ -204,7 +204,8 @@ export function BubbleChartPage(props: {
           transition={{ delay: 0.2 }}
           type="button"
           onClick={onNext}
-          className="w-10 h-10 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm pointer-events-auto"
+          style={{ pointerEvents: isActive ? 'auto' : 'none' }}
+          className="w-10 h-10 rounded-full bg-white/80 border border-white/70 text-slate-700 flex items-center justify-center shadow-sm"
           aria-label="next"
         >
           <ChevronRight size={20} strokeWidth={2.5} />
