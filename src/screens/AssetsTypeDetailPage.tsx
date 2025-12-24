@@ -1,9 +1,20 @@
-import { type ComponentType, createElement, useMemo } from 'react'
-import { ChevronLeft } from 'lucide-react'
-import { motion } from 'framer-motion'
+import { type ComponentType, createElement, useEffect, useMemo, useState } from 'react'
+import { ChevronLeft, GripVertical, MoreHorizontal } from 'lucide-react'
+import { AnimatePresence, motion, Reorder } from 'framer-motion'
+import { BottomSheet } from '../components/BottomSheet'
+import {
+  ACCOUNT_ORDER_BY_TYPE_KEY,
+  ACCOUNT_SORT_MODE_KEY,
+  mergeOrder,
+  sortAccountsByBalanceDesc,
+  sortByOrder,
+  type AccountSortMode,
+  type ManualAccountOrderByType,
+} from '../lib/accountSort'
 import { formatCny } from '../lib/format'
 import { accountGroups, getAccountTypeOption, type Account, type AccountTypeId } from '../lib/accounts'
 import { pickForegroundColor } from '../lib/themes'
+import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 export function AssetsTypeDetailPage(props: {
   type: AccountTypeId | null
@@ -16,6 +27,16 @@ export function AssetsTypeDetailPage(props: {
 }) {
   const { type, accounts, onBack, onEditAccount, hideAmounts, themeColor } = props
 
+  const [accountSortMode] = useLocalStorageState<AccountSortMode>(ACCOUNT_SORT_MODE_KEY, 'balance')
+  const [manualAccountOrderByType, setManualAccountOrderByType] = useLocalStorageState<ManualAccountOrderByType>(
+    ACCOUNT_ORDER_BY_TYPE_KEY,
+    {},
+  )
+
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [sortOpen, setSortOpen] = useState(false)
+  const [sortDraft, setSortDraft] = useState<string[]>([])
+
   const info = useMemo(() => {
     if (!type) return null
     const opt = getAccountTypeOption(type)
@@ -25,15 +46,30 @@ export function AssetsTypeDetailPage(props: {
 
   const list = useMemo(() => {
     if (!type) return []
-    return accounts.filter((a) => a.type === type)
-  }, [accounts, type])
+    const raw = accounts.filter((a) => a.type === type)
+    if (accountSortMode === 'balance') return sortAccountsByBalanceDesc(raw)
+    return sortByOrder(
+      raw,
+      (a) => a.id,
+      mergeOrder(
+        raw.map((a) => a.id),
+        manualAccountOrderByType[type],
+      ),
+    )
+  }, [accountSortMode, accounts, manualAccountOrderByType, type])
 
-  const total = useMemo(() => list.reduce((s, a) => s + a.balance, 0), [list])
+  const total = useMemo(() => list.reduce((s, a) => s + a.balance, 0), [list])  
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
 
+  useEffect(() => {
+    setMoreOpen(false)
+    setSortOpen(false)
+    setSortDraft([])
+  }, [type])
+
   if (!type || !info) {
-    return <div className="h-full" style={{ background: 'var(--bg)' }} />
+    return <div className="h-full" style={{ background: 'var(--bg)' }} />       
   }
 
   return (
@@ -67,6 +103,47 @@ export function AssetsTypeDetailPage(props: {
               {hideAmounts ? maskedText : formatCny(total)}
             </div>
           </div>
+
+          {accountSortMode === 'manual' ? (
+            <div className="relative">
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setMoreOpen((v) => !v)
+                }}
+                aria-label="more"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+
+              <AnimatePresence>
+                {moreOpen ? (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-0 top-full mt-2 min-w-[160px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
+                  >
+                    <button
+                      type="button"
+                      className="w-full px-4 py-3 text-left text-[13px] font-medium text-slate-800 hover:bg-black/5"
+                      onClick={() => {
+                        setMoreOpen(false)
+                        setSortDraft(list.map((a) => a.id))
+                        setSortOpen(true)
+                      }}
+                    >
+                      排序
+                    </button>
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
+            </div>
+          ) : null}
         </div>
       </motion.div>
 
@@ -115,6 +192,57 @@ export function AssetsTypeDetailPage(props: {
           </div>
         </motion.div>
       </div>
+
+      <BottomSheet
+        open={sortOpen}
+        title={`排序 - ${info.opt.name}`}
+        onClose={() => {
+          if (type) {
+            setManualAccountOrderByType((prev) => ({ ...prev, [type]: sortDraft }))
+          }
+          setSortOpen(false)
+        }}
+      >
+        <div className="stack">
+          <div className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
+            拖拽调整顺序
+          </div>
+
+          <Reorder.Group axis="y" values={sortDraft} onReorder={setSortDraft} as="div" className="stack">
+            {sortDraft.map((accountId) => {
+              const account = list.find((a) => a.id === accountId)
+              if (!account) return null
+
+              return (
+                <Reorder.Item
+                  key={account.id}
+                  value={account.id}
+                  as="div"
+                  whileDrag={{ scale: 1.02 }}
+                  className="assetItem"
+                  style={{ cursor: 'grab', userSelect: 'none' }}
+                >
+                  <div className="assetLeft">
+                    <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200/50">
+                      {createElement(info.opt.icon, { size: 18 })}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="assetName">{account.name}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className={hideAmounts ? `amount ${maskedClass}` : 'amount'}>
+                      {hideAmounts ? maskedText : formatCny(account.balance)}
+                    </div>
+                    <GripVertical size={18} />
+                  </div>
+                </Reorder.Item>
+              )
+            })}
+          </Reorder.Group>
+        </div>
+      </BottomSheet>
     </div>
   )
 }

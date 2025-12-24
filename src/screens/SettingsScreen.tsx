@@ -1,8 +1,11 @@
 import { Check, Download, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import { SegmentedControl } from '../components/SegmentedControl'
 import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
+import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import type { ThemeId, ThemeOption } from '../lib/themes'
+import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
@@ -10,6 +13,11 @@ export function SettingsScreen(props: {
   onThemeChange: (id: ThemeId) => void
 }) {
   const { themeOptions, theme, onThemeChange } = props
+
+  const [accountSortMode, setAccountSortMode] = useLocalStorageState<AccountSortMode>(
+    ACCOUNT_SORT_MODE_KEY,
+    'balance',
+  )
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
@@ -119,7 +127,38 @@ export function SettingsScreen(props: {
         className="card"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.2 }}
+        transition={{ delay: 0.16 }}
+      >
+        <div className="cardInner">
+          <div style={{ fontWeight: 950, fontSize: 16 }}>账户排序</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+            影响资产页二级与三级列表的显示顺序
+          </div>
+
+          <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <SegmentedControl<AccountSortMode>
+              options={[
+                { value: 'manual', label: '手动' },
+                { value: 'balance', label: '余额↓' },
+              ]}
+              value={accountSortMode}
+              onChange={setAccountSortMode}
+            />
+          </div>
+
+          {accountSortMode === 'manual' ? (
+            <div className="muted" style={{ marginTop: 10, fontSize: 12, fontWeight: 700 }}>
+              手动模式：可在列表右上角“…”菜单中调整顺序
+            </div>
+          ) : null}
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.24 }}
       >
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>备份与恢复</div>

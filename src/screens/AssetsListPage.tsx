@@ -1,9 +1,19 @@
 import { clsx } from 'clsx'
-import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronDown, ChevronUp } from 'lucide-react'
-import { type ComponentType, type Ref, useMemo } from 'react'
+import { AnimatePresence, motion, Reorder } from 'framer-motion'
+import { ChevronDown, ChevronUp, GripVertical, MoreHorizontal } from 'lucide-react'
+import { type ComponentType, type Ref, useEffect, useMemo, useState } from 'react'
+import { BottomSheet } from '../components/BottomSheet'
+import {
+  ACCOUNT_SORT_MODE_KEY,
+  ACCOUNT_TYPE_ORDER_BY_GROUP_KEY,
+  mergeOrder,
+  sortByOrder,
+  type AccountSortMode,
+  type ManualTypeOrderByGroup,
+} from '../lib/accountSort'
 import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
+import { useLocalStorageState } from '../lib/useLocalStorageState'
 import type { GroupedAccounts } from './AssetsScreen'
 
 type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
@@ -49,6 +59,20 @@ export function AssetsListPage(props: {
 }) {
   const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad, isReturning, isReturningFromDetail } = props
 
+  const [accountSortMode] = useLocalStorageState<AccountSortMode>(ACCOUNT_SORT_MODE_KEY, 'balance')
+  const [manualTypeOrderByGroup, setManualTypeOrderByGroup] = useLocalStorageState<ManualTypeOrderByGroup>(
+    ACCOUNT_TYPE_ORDER_BY_GROUP_KEY,
+    {},
+  )
+
+  const [typeMenuOpenGroup, setTypeMenuOpenGroup] = useState<GroupId | null>(null)
+  const [typeSortGroup, setTypeSortGroup] = useState<GroupId | null>(null)
+  const [typeSortDraft, setTypeSortDraft] = useState<AccountTypeId[]>([])
+
+  useEffect(() => {
+    setTypeMenuOpenGroup(null)
+  }, [expandedGroup])
+
   const groups = useMemo(() => {
     const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
     const rank = new Map(order.map((id, i) => [id, i]))
@@ -68,6 +92,29 @@ export function AssetsListPage(props: {
     return `${d.getMonth() + 1}月${d.getDate()}日 更新`
   }
 
+  const sortSheetModel = useMemo(() => {
+    if (!typeSortGroup) return null
+    const g = groups.find((x) => x.group.id === typeSortGroup)
+    if (!g) return null
+
+    const typeCards = Array.from(new Set(g.accounts.map((a) => a.type))).map((type) => {
+      const accounts = g.accounts.filter((a) => a.type === type)
+      const total = accounts.reduce((s, a) => s + a.balance, 0)
+      const opt = getAccountTypeOption(type)
+      return { type, opt, accounts, total }
+    })
+
+    const byType = new Map(typeCards.map((t) => [t.type, t]))
+    return { group: g.group, byType }
+  }, [groups, typeSortGroup])
+
+  const closeTypeSort = () => {
+    if (typeSortGroup) {
+      setManualTypeOrderByGroup((prev) => ({ ...prev, [typeSortGroup]: typeSortDraft }))
+    }
+    setTypeSortGroup(null)
+  }
+
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">     
       <div className="px-4 pt-[104px] pb-24">
@@ -83,13 +130,25 @@ export function AssetsListPage(props: {
 
             const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
               .map((type) => {
-                const accounts = g.accounts.filter((a) => a.type === type)
-                const total = accounts.reduce((s, a) => s + a.balance, 0)
+                const accounts = g.accounts.filter((a) => a.type === type)      
+                const total = accounts.reduce((s, a) => s + a.balance, 0)       
                 const updatedAt = accounts.map((a) => a.updatedAt).sort().slice(-1)[0]
                 const opt = getAccountTypeOption(type)
                 return { type, opt, accounts, total, updatedAt }
               })
               .sort((a, b) => b.total - a.total)
+
+            const typeCardsSorted =
+              accountSortMode === 'balance'
+                ? typeCards
+                : sortByOrder(
+                    typeCards,
+                    (t) => t.type,
+                    mergeOrder(
+                      typeCards.map((t) => t.type),
+                      manualTypeOrderByGroup[id],
+                    ),
+                  )
 
             // 是否需要入场动画
             const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
@@ -183,8 +242,51 @@ export function AssetsListPage(props: {
                       className="overflow-hidden"
                     >
                       <div className="px-3 pt-2 pb-3">
+                        {accountSortMode === 'manual' ? (
+                          <div className="flex justify-end px-1 pb-2">
+                            <div className="relative">
+                              <button
+                                type="button"
+                                className="w-9 h-9 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setTypeMenuOpenGroup((cur) => (cur === id ? null : id))
+                                }}
+                                aria-label="sort menu"
+                              >
+                                <MoreHorizontal size={18} strokeWidth={2.5} />
+                              </button>
+
+                              <AnimatePresence>
+                                {typeMenuOpenGroup === id ? (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                                    transition={{ duration: 0.15 }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="absolute right-0 top-full mt-2 min-w-[160px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
+                                  >
+                                    <button
+                                      type="button"
+                                      className="w-full px-4 py-3 text-left text-[13px] font-medium text-slate-800 hover:bg-black/5"
+                                      onClick={() => {
+                                        setTypeMenuOpenGroup(null)
+                                        setTypeSortDraft(typeCardsSorted.map((t) => t.type))
+                                        setTypeSortGroup(id)
+                                      }}
+                                    >
+                                      排序
+                                    </button>
+                                  </motion.div>
+                                ) : null}
+                              </AnimatePresence>
+                            </div>
+                          </div>
+                        ) : null}
+
                         <div className="flex flex-col gap-2">
-                          {typeCards.map((t) => {
+                          {typeCardsSorted.map((t) => {
                             const Icon = getIcon(t.type)
                             return (
                               <motion.button
@@ -241,6 +343,65 @@ export function AssetsListPage(props: {
           })}
         </div>
       </div>
+
+      <BottomSheet
+        open={Boolean(typeSortGroup)}
+        title={sortSheetModel ? `排序 - ${sortSheetModel.group.name}` : '排序'}
+        onClose={closeTypeSort}
+      >
+        {sortSheetModel ? (
+          <div className="stack">
+            <div className="muted" style={{ fontSize: 12, fontWeight: 700 }}>
+              拖拽调整顺序
+            </div>
+
+            <Reorder.Group
+              axis="y"
+              values={typeSortDraft}
+              onReorder={setTypeSortDraft}
+              as="div"
+              className="stack"
+            >
+              {typeSortDraft.map((type) => {
+                const item = sortSheetModel.byType.get(type)
+                if (!item) return null
+                const Icon = getIcon(item.type)
+
+                return (
+                  <Reorder.Item
+                    key={item.type}
+                    value={item.type}
+                    as="div"
+                    whileDrag={{ scale: 1.02 }}
+                    className="assetItem"
+                    style={{ cursor: 'grab', userSelect: 'none' }}
+                  >
+                    <div className="assetLeft">
+                      <div
+                        className="w-9 h-9 rounded-2xl flex items-center justify-center"
+                        style={{ color: sortSheetModel.group.tone }}
+                      >
+                        <Icon size={18} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div className="assetName">{item.opt.name}</div>
+                        <div className="assetSub">{item.accounts.length} 项</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className={clsx('amount', hideAmounts && maskedClass)}>
+                        {hideAmounts ? maskedText : formatCny(item.total)}
+                      </div>
+                      <GripVertical size={18} />
+                    </div>
+                  </Reorder.Item>
+                )
+              })}
+            </Reorder.Group>
+          </div>
+        ) : null}
+      </BottomSheet>
     </div>
   )
 }
