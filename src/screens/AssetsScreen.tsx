@@ -574,8 +574,14 @@ export function AssetsScreen(props: {
   const labelsOpacity = useTransform(ratioProgress, [0, 0.5, 1], [1, 0, 0])
   const miniBarOpacity = useTransform(ratioProgress, [0, 0.92, 1], [0, 0, 1])   
   const miniBarY = useTransform(ratioProgress, [0, 1], [16, 0])
-  const listHeaderPointerEvents = useTransform(ratioProgress, (p) => (p < 0.05 ? 'none' : 'auto'))
-  const miniBarPointerEvents = useTransform(miniBarOpacity, (o) => (o < 0.2 ? 'none' : 'auto'))
+  const listHeaderPointerEvents = useTransform([ratioProgress, overlayFade], (values) => {
+    const [p, fade] = values as [number, number]
+    return p < 0.05 || fade < 0.05 ? 'none' : 'auto'
+  })
+  const miniBarPointerEvents = useTransform([miniBarOpacity, overlayFade], (values) => {
+    const [o, fade] = values as [number, number]
+    return o < 0.2 || fade < 0.05 ? 'none' : 'auto'
+  })
 
   const chartRadius = 32
   const listRadius = 30
