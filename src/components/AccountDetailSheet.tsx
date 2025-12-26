@@ -411,7 +411,6 @@ export function AccountDetailSheet(props: {
     transitionToAction('none')
   }
 
-  const typeLabel = accountTypeInfo?.opt.name ?? account.type
   const TypeIcon = accountTypeInfo?.opt.icon
 
   return (
@@ -551,7 +550,7 @@ export function AccountDetailSheet(props: {
             <div className="w-6 h-6 rounded-md bg-white/80 border border-white/70 flex items-center justify-center text-slate-500">
               {TypeIcon ? createElement(TypeIcon, { size: 14, strokeWidth: 2.5 }) : null}
             </div>
-            <div className="text-[13px] font-semibold text-slate-700">{typeLabel}</div>
+            <div className="text-[13px] font-semibold text-slate-700">{account.name}</div>
           </div>
 
           <div className="mt-3 h-px bg-slate-200/70" />
