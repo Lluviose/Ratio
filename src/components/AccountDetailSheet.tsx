@@ -51,6 +51,7 @@ export function AccountDetailSheet(props: {
   onTransfer: (fromId: string, toId: string, amount: number) => void
   onDelete: (id: string) => void
   onAddOp: (op: AccountOpInput) => void
+  onDeleteOp: (id: string) => void
   colors: ThemeColors
 }) {
   const {
@@ -66,6 +67,7 @@ export function AccountDetailSheet(props: {
     onTransfer,
     onDelete,
     onAddOp,
+    onDeleteOp,
     colors,
   } = props
 
@@ -213,6 +215,16 @@ export function AccountDetailSheet(props: {
       .slice()
       .sort((a, b) => b.at.localeCompare(a.at))
   }, [accountId, ops])
+
+  const latestSetBalanceAtByAccountId = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const op of ops) {
+      if (op.kind !== 'set_balance') continue
+      const prev = m.get(op.accountId)
+      if (!prev || op.at.localeCompare(prev) > 0) m.set(op.accountId, op.at)
+    }
+    return m
+  }, [ops])
 
   if (!account) return <BottomSheet open={open} title="账户" onClose={onClose}><div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: 40 }}>未找到账户</div></BottomSheet>
 
@@ -665,6 +677,56 @@ export function AccountDetailSheet(props: {
                                 ? 'text-rose-600'
                                 : 'text-slate-400'
 
+                        const canDeleteOp =
+                          op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
+
+                        const canRollbackBalance = (targetAccountId: string) => {
+                          const latest = latestSetBalanceAtByAccountId.get(targetAccountId)
+                          if (!latest) return true
+                          return latest.localeCompare(op.at) <= 0
+                        }
+
+                        const handleDeleteOp = async () => {
+                          const ok = await confirm({
+                            title: '删除这条资产修改？',
+                            message: `${title}（${formatTime(op.at)}）`,
+                            confirmText: '删除',
+                            cancelText: '取消',
+                            tone: 'danger',
+                          })
+                          if (!ok) return
+
+                          let rolledBack = false
+
+                          if (op.kind === 'adjust') {
+                            if (canRollbackBalance(op.accountId)) {
+                              onAdjust(op.accountId, -op.delta)
+                              rolledBack = true
+                            }
+                          }
+
+                          if (op.kind === 'set_balance') {
+                            if (canRollbackBalance(op.accountId)) {
+                              onAdjust(op.accountId, op.before - op.after)
+                              rolledBack = true
+                            }
+                          }
+
+                          if (op.kind === 'transfer') {
+                            if (canRollbackBalance(op.fromId)) {
+                              onAdjust(op.fromId, op.fromBefore - op.fromAfter)
+                              rolledBack = true
+                            }
+                            if (canRollbackBalance(op.toId)) {
+                              onAdjust(op.toId, op.toBefore - op.toAfter)
+                              rolledBack = true
+                            }
+                          }
+
+                          onDeleteOp(op.id)
+                          toast(rolledBack ? '已删除并回滚余额' : '已删除记录（余额未变）', { tone: 'success' })
+                        }
+
                         return (
                           <motion.div
                             key={op.id}
@@ -687,13 +749,28 @@ export function AccountDetailSheet(props: {
                                 </div>
                               </div>
 
-                              <div className="text-right shrink-0">
-                                <div className={`text-[14px] font-semibold ${deltaColor}`}>
-                                  {delta == null ? '—' : formatSigned(delta)}
+                              <div className="text-right shrink-0 flex items-start gap-1">
+                                <div>
+                                  <div className={`text-[14px] font-semibold ${deltaColor}`}>
+                                    {delta == null ? '—' : formatSigned(delta)}
+                                  </div>
+                                  <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                    余额 {formatCny(after)}
+                                  </div>
                                 </div>
-                                <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                  余额 {formatCny(after)}
-                                </div>
+                                {canDeleteOp ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void handleDeleteOp()
+                                    }}
+                                    className="p-2 -mr-2 rounded-full text-slate-300 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition"
+                                    aria-label="delete op"
+                                  >
+                                    <Trash2 size={16} strokeWidth={2.6} />
+                                  </button>
+                                ) : null}
                               </div>
                             </div>
                           </motion.div>

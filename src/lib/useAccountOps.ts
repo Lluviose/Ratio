@@ -16,5 +16,12 @@ export function useAccountOps() {
     [setOps],
   )
 
-  return { ops, addOp }
+  const deleteOp = useCallback(
+    (id: string) => {
+      setOps((prev) => prev.filter((op) => op.id !== id))
+    },
+    [setOps],
+  )
+
+  return { ops, addOp, deleteOp }
 }

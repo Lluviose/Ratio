@@ -278,6 +278,7 @@ export default function App() {
                 onTransfer={accounts.transfer}
                 onDelete={accounts.deleteAccount}
                 onAddOp={accountOps.addOp}
+                onDeleteOp={accountOps.deleteOp}
                 colors={themeColors}
               />
             </motion.div>
