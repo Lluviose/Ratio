@@ -631,151 +631,202 @@ export function AccountDetailSheet(props: {
                     </div>
                   ) : (
                     <div>
-                      {relatedOps.map((op, i) => {
-                        let title = ''
-                        let delta: number | null = 0
-                        let after = account.balance
+                      {(() => {
+                        let runningAfter = account.balance
+                        return relatedOps.map((op, i) => {
+                          let title = ''
+                          let delta: number | null = 0
 
-                        if (op.kind === 'rename') {
-                          title = `重命名：${op.beforeName} → ${op.afterName}`
-                          delta = null
-                          after = account.balance
-                        }
-
-                        if (op.kind === 'set_balance') {
-                          title = '修改余额'
-                          delta = op.after - op.before
-                          after = op.after
-                        }
-
-                        if (op.kind === 'adjust') {
-                          title = op.delta >= 0 ? '期间净流入' : '期间净流出'
-                          delta = op.delta
-                          after = op.after
-                        }
-
-                        if (op.kind === 'transfer') {
-                          const from = byId.get(op.fromId)
-                          const to = byId.get(op.toId)
-                          if (account.id === op.fromId) {
-                            title = `转出到 ${to?.name ?? '账户'}`
-                            delta = op.fromAfter - op.fromBefore
-                            after = op.fromAfter
-                          } else {
-                            title = `从 ${from?.name ?? '账户'} 转入`
-                            delta = op.toAfter - op.toBefore
-                            after = op.toAfter
-                          }
-                        }
-
-                        const deltaColor =
-                          delta == null
-                            ? 'text-slate-400'
-                            : delta > 0
-                              ? 'text-slate-900'
-                              : delta < 0
-                                ? 'text-rose-600'
-                                : 'text-slate-400'
-
-                        const canDeleteOp =
-                          op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
-
-                        const canRollbackBalance = (targetAccountId: string) => {
-                          const latest = latestSetBalanceAtByAccountId.get(targetAccountId)
-                          if (!latest) return true
-                          return latest.localeCompare(op.at) <= 0
-                        }
-
-                        const handleDeleteOp = async () => {
-                          const ok = await confirm({
-                            title: '删除这条资产修改？',
-                            message: `${title}（${formatTime(op.at)}）`,
-                            confirmText: '删除',
-                            cancelText: '取消',
-                            tone: 'danger',
-                          })
-                          if (!ok) return
-
-                          let rolledBack = false
-
-                          if (op.kind === 'adjust') {
-                            if (canRollbackBalance(op.accountId)) {
-                              onAdjust(op.accountId, -op.delta)
-                              rolledBack = true
-                            }
+                          if (op.kind === 'rename') {
+                            title = `重命名：${op.beforeName} → ${op.afterName}`
+                            delta = null
                           }
 
                           if (op.kind === 'set_balance') {
-                            if (canRollbackBalance(op.accountId)) {
-                              onAdjust(op.accountId, op.before - op.after)
-                              rolledBack = true
-                            }
+                            title = '修改余额'
+                            delta = op.after - op.before
+                          }
+
+                          if (op.kind === 'adjust') {
+                            title = op.delta >= 0 ? '期间净流入' : '期间净流出'
+                            delta = op.delta
                           }
 
                           if (op.kind === 'transfer') {
-                            if (canRollbackBalance(op.fromId)) {
-                              onAdjust(op.fromId, op.fromBefore - op.fromAfter)
-                              rolledBack = true
-                            }
-                            if (canRollbackBalance(op.toId)) {
-                              onAdjust(op.toId, op.toBefore - op.toAfter)
-                              rolledBack = true
+                            const from = byId.get(op.fromId)
+                            const to = byId.get(op.toId)
+                            if (account.id === op.fromId) {
+                              title = `转出到 ${to?.name ?? '账户'}`
+                              delta = op.fromAfter - op.fromBefore
+                            } else {
+                              title = `从 ${from?.name ?? '账户'} 转入`
+                              delta = op.toAfter - op.toBefore
                             }
                           }
 
-                          onDeleteOp(op.id)
-                          toast(rolledBack ? '已删除并回滚余额' : '已删除记录（余额未变）', { tone: 'success' })
-                        }
+                          const deltaColor =
+                            delta == null
+                              ? 'text-slate-400'
+                              : delta > 0
+                                ? 'text-slate-900'
+                                : delta < 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-400'
 
-                        return (
-                          <motion.div
-                            key={op.id}
-                            initial={suppressOpsIntro ? false : { opacity: 0, y: 8 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={
-                              suppressOpsIntro
-                                ? { duration: 0 }
-                                : { duration: 0.18, delay: Math.min(0.25, i * 0.03) }
+                          const displayAfter = runningAfter
+                          runningAfter -= delta ?? 0
+
+                          const canDeleteOp = op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
+
+                          const canRollbackBalance = (targetAccountId: string) => {
+                            const latest = latestSetBalanceAtByAccountId.get(targetAccountId)
+                            if (!latest) return true
+                            return latest.localeCompare(op.at) <= 0
+                          }
+
+                          const handleDeleteOp = async () => {
+                            const getAccountName = (id: string) => byId.get(id)?.name ?? '账户'
+                            const rollbackTargets: Array<{ accountId: string; name: string; delta: number; canRollback: boolean }> = []
+
+                            if (op.kind === 'adjust') {
+                              rollbackTargets.push({
+                                accountId: op.accountId,
+                                name: getAccountName(op.accountId),
+                                delta: -op.delta,
+                                canRollback: canRollbackBalance(op.accountId),
+                              })
                             }
-                            className={i === 0 ? '' : 'border-t border-black/5'}
-                          >
-                            <div className="px-4 py-4 flex items-start justify-between gap-4">
-                              <div className="min-w-0">
-                                <div className="text-[14px] font-semibold text-slate-900 truncate">
-                                  {title}
-                                </div>
-                                <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                  {formatTime(op.at)}
-                                </div>
-                              </div>
 
-                              <div className="text-right shrink-0 flex items-start gap-1">
-                                <div>
-                                  <div className={`text-[14px] font-semibold ${deltaColor}`}>
-                                    {delta == null ? '—' : formatSigned(delta)}
+                            if (op.kind === 'set_balance') {
+                              rollbackTargets.push({
+                                accountId: op.accountId,
+                                name: getAccountName(op.accountId),
+                                delta: op.before - op.after,
+                                canRollback: canRollbackBalance(op.accountId),
+                              })
+                            }
+
+                            if (op.kind === 'transfer') {
+                              rollbackTargets.push({
+                                accountId: op.fromId,
+                                name: getAccountName(op.fromId),
+                                delta: op.fromBefore - op.fromAfter,
+                                canRollback: canRollbackBalance(op.fromId),
+                              })
+                              rollbackTargets.push({
+                                accountId: op.toId,
+                                name: getAccountName(op.toId),
+                                delta: op.toBefore - op.toAfter,
+                                canRollback: canRollbackBalance(op.toId),
+                              })
+                            }
+
+                            const affectedCount = rollbackTargets.length
+                            const willRollback = rollbackTargets.filter((t) => t.canRollback && t.delta !== 0)
+                            const willRollbackCount = willRollback.length
+
+                            const noRollbackHint =
+                              affectedCount > 1
+                                ? '；其中部分账户余额不变（已在后续校准中固定）'
+                                : '；余额不变（已在后续校准中固定）'
+
+                            const rollbackSummary =
+                              willRollbackCount > 0
+                                ? `将回滚：${willRollback.map((t) => `${t.name} ${formatSigned(t.delta)}`).join('；')}${
+                                    willRollbackCount < affectedCount ? noRollbackHint : ''
+                                  }`
+                                : '余额不会变化（已在后续校准中固定）'
+
+                            const confirmTitle =
+                              op.kind === 'transfer'
+                                ? '删除这条转账记录？'
+                                : op.kind === 'set_balance'
+                                  ? '删除这条修改余额记录？'
+                                  : op.kind === 'adjust'
+                                    ? '删除这条期间变动记录？'
+                                    : '删除这条记录？'
+
+                            const ok = await confirm({
+                              title: confirmTitle,
+                              message: `${title}（${formatTime(op.at)}）；${rollbackSummary}`,
+                              confirmText: willRollbackCount > 0 ? '删除并回滚' : '仅删除记录',
+                              cancelText: '取消',
+                              tone: 'danger',
+                            })
+                            if (!ok) return
+
+                            const rolledBackAccountIds: string[] = []
+                            for (const t of rollbackTargets) {
+                              if (!t.canRollback) continue
+                              if (t.delta === 0) continue
+                              onAdjust(t.accountId, t.delta)
+                              rolledBackAccountIds.push(t.accountId)
+                            }
+
+                            onDeleteOp(op.id)
+
+                            const rolledBackCount = rolledBackAccountIds.length
+                            const toastMessage =
+                              rolledBackCount === 0
+                                ? '已删除记录（余额未变）'
+                                : rolledBackCount === affectedCount
+                                  ? '已删除并回滚余额'
+                                  : '已删除，已回滚部分余额'
+                            const tone = rolledBackCount === 0 ? 'neutral' : 'success'
+                            toast(toastMessage, { tone })
+                          }
+
+                          return (
+                            <motion.div
+                              key={op.id}
+                              initial={suppressOpsIntro ? false : { opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={
+                                suppressOpsIntro
+                                  ? { duration: 0 }
+                                  : { duration: 0.18, delay: Math.min(0.25, i * 0.03) }
+                              }
+                              className={i === 0 ? '' : 'border-t border-black/5'}
+                            >
+                              <div className="px-4 py-4 flex items-start justify-between gap-4">
+                                <div className="min-w-0">
+                                  <div className="text-[14px] font-semibold text-slate-900 truncate">
+                                    {title}
                                   </div>
                                   <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                    余额 {formatCny(after)}
+                                    {formatTime(op.at)}
                                   </div>
                                 </div>
-                                {canDeleteOp ? (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      void handleDeleteOp()
-                                    }}
-                                    className="p-2 -mr-2 rounded-full text-slate-300 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition"
-                                    aria-label="delete op"
-                                  >
-                                    <Trash2 size={16} strokeWidth={2.6} />
-                                  </button>
-                                ) : null}
+
+                                <div className="text-right shrink-0 flex items-start gap-1">
+                                  <div>
+                                    <div className={`text-[14px] font-semibold ${deltaColor}`}>
+                                      {delta == null ? '—' : formatSigned(delta)}
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                      余额 {formatCny(displayAfter)}
+                                    </div>
+                                  </div>
+                                  {canDeleteOp ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        void handleDeleteOp()
+                                      }}
+                                      className="p-2 -mr-2 rounded-full text-slate-300 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition"
+                                      aria-label="delete op"
+                                      title="删除记录"
+                                    >
+                                      <Trash2 size={16} strokeWidth={2.6} />
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
-                          </motion.div>
-                        )
-                      })}
+                            </motion.div>
+                          )
+                        })
+                      })()}
                     </div>
                   )}
                 </div>
