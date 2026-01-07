@@ -4,7 +4,9 @@ import { motion } from 'framer-motion'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { formatCny } from '../lib/format'
+import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
 import type { Snapshot } from '../lib/snapshots'
+import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type TrendMode = 'netDebt' | 'cashInvest'
 
@@ -38,24 +40,23 @@ function formatLabel(date: string) {
   return `${m}/${day}`
 }
 
-function pickMonthlyLast(snapshots: Snapshot[], monthCount: number) {
+function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDay: number) {
   const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
   const byMonth = new Map<string, Snapshot>()
 
   for (const s of sorted) {
-    const monthKey = s.date.slice(0, 7) // YYYY-MM
-    const existing = byMonth.get(monthKey)
-    if (!existing || s.date > existing.date) byMonth.set(monthKey, s)
+    const monthKey = monthKeyForDateKey(s.date, monthStartDay)
+    byMonth.set(monthKey, s)
   }
 
   const months = Array.from(byMonth.keys()).sort((a, b) => a.localeCompare(b))
-  const picked = months.slice(Math.max(0, months.length - monthCount)).map((m) => byMonth.get(m)!)
-  return picked
+  const pickedKeys = months.slice(Math.max(0, months.length - monthCount))
+  return pickedKeys.map((key) => ({ monthKey: key, snapshot: byMonth.get(key)! }))
 }
 
-function toPoint(s: Snapshot, idx: number): TrendPoint {
+function toPoint(s: Snapshot, idx: number, label: string): TrendPoint {
   return {
-    date: formatLabel(s.date),
+    date: label,
     dateKey: s.date,
     idx,
     net: s.net,
@@ -109,6 +110,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const { snapshots, colors } = props
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
+  const [monthStartDayRaw] = useLocalStorageState<number>(MONTH_START_DAY_KEY, DEFAULT_MONTH_START_DAY)
+  const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const chartRef = useRef<HTMLDivElement | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
@@ -136,22 +139,32 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
 
     let selected: Snapshot[] = []
+    let labels: string[] = []
 
     if (range === '30d') {
       const cutoff = new Date()
       cutoff.setDate(cutoff.getDate() - 30)
       const cutoffKey = toDateKey(cutoff)
       selected = sorted.filter((s) => s.date >= cutoffKey)
+      labels = selected.map((s) => formatLabel(s.date))
     } else if (range === '6m') {
-      selected = pickMonthlyLast(sorted, 6)
+      const picked = pickMonthlyLast(sorted, 6, monthStartDay)
+      selected = picked.map((x) => x.snapshot)
+      labels = picked.map((x) => formatMonthKeyLabel(x.monthKey))
     } else if (range === 'custom') {
       selected = sorted.slice(Math.max(0, sorted.length - 90))
+      labels = selected.map((s) => formatLabel(s.date))
     } else {
-      selected = pickMonthlyLast(sorted, 12)
+      const picked = pickMonthlyLast(sorted, 12, monthStartDay)
+      selected = picked.map((x) => x.snapshot)
+      labels = picked.map((x) => formatMonthKeyLabel(x.monthKey))
     }
 
-    return { points: selected.map((s, idx) => toPoint(s, idx)), selected }
-  }, [range, snapshots])
+    return {
+      points: selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date))),
+      selected,
+    }
+  }, [monthStartDay, range, snapshots])
 
   const data = view.points
 
@@ -234,7 +247,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             minWidth: 180,
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.date}</div>
+          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>
+            {p.date.includes('/') ? p.date : `${p.date}（${formatLabel(p.dateKey)}）`}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
             <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.net)}</div>
@@ -260,7 +275,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           minWidth: 180,
         }}
       >
-        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{p.date}</div>
+        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>
+          {p.date.includes('/') ? p.date : `${p.date}（${formatLabel(p.dateKey)}）`}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
              <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
              <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatCny(p.cash)}</div>

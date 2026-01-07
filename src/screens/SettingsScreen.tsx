@@ -1,10 +1,11 @@
 import { Check, Download, Upload } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { queueToastAfterReload, useOverlay } from '../lib/overlay'
 import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
+import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
@@ -19,10 +20,19 @@ export function SettingsScreen(props: {
     ACCOUNT_SORT_MODE_KEY,
     'balance',
   )
+  const [monthStartDayRaw, setMonthStartDayRaw] = useLocalStorageState<number>(
+    MONTH_START_DAY_KEY,
+    DEFAULT_MONTH_START_DAY,
+  )
+  const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const { toast, confirm } = useOverlay()
+
+  useEffect(() => {
+    if (monthStartDayRaw !== monthStartDay) setMonthStartDayRaw(monthStartDay)
+  }, [monthStartDay, monthStartDayRaw, setMonthStartDayRaw])
 
   const randomSwatches = themeOptions.filter((t) => t.id !== 'random').map((t) => t.colors.invest)
 
@@ -167,6 +177,40 @@ export function SettingsScreen(props: {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.24 }}
+      >
+        <div className="cardInner">
+          <div style={{ fontWeight: 950, fontSize: 16 }}>月度开始日</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+            用于按月聚合的统计口径（例如趋势页的 6月/1年）
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <label className="field">
+              <div className="fieldLabel">每月从哪一天开始</div>
+              <select
+                className="select"
+                value={String(monthStartDay)}
+                onChange={(e) => setMonthStartDayRaw(Number(e.target.value))}
+              >
+                {Array.from({ length: MAX_MONTH_START_DAY - MIN_MONTH_START_DAY + 1 }, (_, idx) => {
+                  const d = MIN_MONTH_START_DAY + idx
+                  return (
+                    <option key={d} value={String(d)}>
+                      {d}号
+                    </option>
+                  )
+                })}
+              </select>
+            </label>
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.32 }}
       >
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>备份与恢复</div>
