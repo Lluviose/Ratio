@@ -166,11 +166,17 @@ export function AddAccountScreen(props: {
 
       <AnimatePresence>
         {selectedType && (
-          <motion.div 
+          <motion.div
             className="fixed inset-0 z-50 flex flex-col bg-white"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            style={{
+              paddingTop: 'env(safe-area-inset-top)',
+              paddingRight: 'env(safe-area-inset-right)',
+              paddingBottom: 'env(safe-area-inset-bottom)',
+              paddingLeft: 'env(safe-area-inset-left)',
+            }}
             onClick={() => setSelectedType(null)}
           >
             <motion.div 
