@@ -261,7 +261,7 @@ export function AccountDetailSheet(props: {
   const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === setBalanceNoopValue
   const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
 
-  const OP_DELETE_REVEAL_PX = 86
+  const OP_DELETE_REVEAL_PX = 72
 
   const pageTransition = { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const }
   const pageVariants = {
@@ -955,28 +955,34 @@ export function AccountDetailSheet(props: {
                               <div className="relative">
                                 {canDeleteOp ? (
                                   <div
-                                    className="absolute inset-y-0 right-0 z-0 flex items-center justify-end bg-rose-50/90"
+                                    className="absolute inset-y-0 right-0 z-0 flex items-center justify-center bg-rose-50/90"
                                     style={{ width: OP_DELETE_REVEAL_PX }}
                                   >
-                                    <button
+                                    <motion.button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         void handleDeleteOp()
                                       }}
-                                      className="mr-3 h-10 px-4 rounded-full bg-rose-600 text-white font-semibold shadow-sm active:scale-95 transition flex items-center gap-2"
-                                      aria-label="delete op"
+                                      className="w-11 h-11 rounded-full bg-rose-600 text-white shadow-sm flex items-center justify-center active:scale-95 transition"
+                                      aria-label="删除记录"
+                                      title="删除"
+                                      initial={false}
+                                      animate={{
+                                        scale: canDeleteOp && isSwipedOpen ? 1 : 0.94,
+                                        opacity: canDeleteOp && isSwipedOpen ? 1 : 0.75,
+                                      }}
+                                      transition={{ type: 'spring', stiffness: 520, damping: 38 }}
                                     >
                                       <Trash2 size={16} strokeWidth={2.6} />
-                                      删除
-                                    </button>
+                                    </motion.button>
                                   </div>
                                 ) : null}
 
                                 <motion.div
                                   drag={canDeleteOp ? 'x' : false}
-                                  dragConstraints={{ left: -OP_DELETE_REVEAL_PX, right: 0 }}
-                                  dragElastic={0.12}
+                                  dragConstraints={{ left: -OP_DELETE_REVEAL_PX - 16, right: 0 }}
+                                  dragElastic={0.08}
                                   dragMomentum={false}
                                   onDragStart={() => {
                                     if (swipedOpId && swipedOpId !== op.id) setSwipedOpId(null)
@@ -990,17 +996,20 @@ export function AccountDetailSheet(props: {
                                       }, 0)
                                     }
 
+                                    const threshold = OP_DELETE_REVEAL_PX * 0.33
+                                    const velocityThreshold = 420
+
                                     if (!isSwipedOpen) {
-                                      const shouldOpen = info.offset.x < -OP_DELETE_REVEAL_PX / 2 || info.velocity.x < -500
+                                      const shouldOpen = info.offset.x < -threshold || info.velocity.x < -velocityThreshold
                                       setSwipedOpId(shouldOpen ? op.id : null)
                                       return
                                     }
 
-                                    const shouldClose = info.offset.x > OP_DELETE_REVEAL_PX / 2 || info.velocity.x > 500
+                                    const shouldClose = info.offset.x > threshold || info.velocity.x > velocityThreshold
                                     setSwipedOpId(shouldClose ? null : op.id)
                                   }}
                                   animate={{ x: canDeleteOp && isSwipedOpen ? -OP_DELETE_REVEAL_PX : 0 }}
-                                  transition={{ type: 'spring', stiffness: 520, damping: 44 }}
+                                  transition={{ type: 'spring', stiffness: 560, damping: 46 }}
                                   onClick={() => {
                                     if (suppressOpClickRef.current) return
                                     if (swipedOpId && swipedOpId !== op.id) {
