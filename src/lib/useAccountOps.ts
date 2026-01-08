@@ -23,5 +23,12 @@ export function useAccountOps() {
     [setOps],
   )
 
-  return { ops, addOp, deleteOp }
+  const updateOp = useCallback(
+    (id: string, next: AccountOp) => {
+      setOps((prev) => prev.map((op) => (op.id === id ? { ...next, id } : op)))
+    },
+    [setOps],
+  )
+
+  return { ops, addOp, deleteOp, updateOp }
 }

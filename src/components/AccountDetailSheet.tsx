@@ -52,6 +52,7 @@ export function AccountDetailSheet(props: {
   onDelete: (id: string) => void
   onAddOp: (op: AccountOpInput) => void
   onDeleteOp: (id: string) => void
+  onUpdateOp: (id: string, next: AccountOp) => void
   colors: ThemeColors
 }) {
   const {
@@ -68,6 +69,7 @@ export function AccountDetailSheet(props: {
     onDelete,
     onAddOp,
     onDeleteOp,
+    onUpdateOp,
     colors,
   } = props
 
@@ -88,6 +90,7 @@ export function AccountDetailSheet(props: {
   const [pageDir, setPageDir] = useState<-1 | 0 | 1>(0)
   const [suppressOpsIntro, setSuppressOpsIntro] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [editingOpId, setEditingOpId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
   const [noteValue, setNoteValue] = useState('')
@@ -133,6 +136,7 @@ export function AccountDetailSheet(props: {
       initKeyRef.current = null
       setPageDir(0)
       setSuppressOpsIntro(false)
+      setEditingOpId(null)
       return
     }
     if (!accountId || !account) return
@@ -145,6 +149,7 @@ export function AccountDetailSheet(props: {
     setSuppressOpsIntro(false)
     setAction(nextAction)
     setMoreOpen(false)
+    setEditingOpId(null)
     setRenameValue(account.name)
     setBalanceValue(String(account.balance))
     setNoteValue('')
@@ -221,17 +226,35 @@ export function AccountDetailSheet(props: {
     for (const op of ops) {
       if (op.kind !== 'set_balance') continue
       const prev = m.get(op.accountId)
-      if (!prev || op.at.localeCompare(prev) > 0) m.set(op.accountId, op.at)
+      if (!prev || op.at.localeCompare(prev) > 0) m.set(op.accountId, op.at)    
     }
     return m
   }, [ops])
+
+  const editingOp = useMemo(() => {
+    if (!editingOpId) return null
+    return ops.find((op) => op.id === editingOpId) ?? null
+  }, [editingOpId, ops])
+
+  useEffect(() => {
+    if (editingOpId && !editingOp) setEditingOpId(null)
+  }, [editingOp, editingOpId])
+
+  const canRollbackBalance = (targetAccountId: string, at: string) => {
+    const latest = latestSetBalanceAtByAccountId.get(targetAccountId)
+    if (!latest) return true
+    return latest.localeCompare(at) <= 0
+  }
 
   if (!account) return <BottomSheet open={open} title="账户" onClose={onClose}><div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: 40 }}>未找到账户</div></BottomSheet>
 
   const setBalanceValueTrimmed = balanceValue.trim()
   const setBalanceParsed = Number(setBalanceValueTrimmed)
   const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsed)
-  const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === account.balance
+  const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
+  const setBalanceNoopValue = editingSetBalanceOp ? editingSetBalanceOp.after : account.balance
+  const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === setBalanceNoopValue
+  const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
 
   const pageTransition = { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const }
   const pageVariants = {
@@ -252,12 +275,18 @@ export function AccountDetailSheet(props: {
   const adjustParsed = Number(adjustAmountTrimmed)
   const canSubmitAdjust =
     adjustAmountTrimmed !== '' && Number.isFinite(adjustParsed) && adjustParsed > 0
-  const previewAdjustDelta = canSubmitAdjust
+  const newAdjustDelta = canSubmitAdjust
     ? adjustDirection === 'plus'
       ? adjustParsed
       : -adjustParsed
     : 0
-  const previewAdjustAfter = account.balance + previewAdjustDelta
+  const editingAdjustOp = editingOp?.kind === 'adjust' ? editingOp : null
+  const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
+  const previewAdjustDiff = editingAdjustOp ? newAdjustDelta - editingAdjustOp.delta : newAdjustDelta
+  const canApplyAdjustDiff = editingAdjustOp ? canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at) : true
+  const previewAdjustApplied = canApplyAdjustDiff ? previewAdjustDiff : 0
+  const previewAdjustAfter = account.balance + previewAdjustApplied
+  const isAdjustNoop = Boolean(editingAdjustOp && canSubmitAdjust && newAdjustDelta === editingAdjustOp.delta)
 
   const refocusActiveInput = () => {
     const el =
@@ -275,6 +304,7 @@ export function AccountDetailSheet(props: {
     setMoreOpen(false)
     balanceInputRef.current?.blur()
     adjustInputRef.current?.blur()
+    setEditingOpId(null)
     setRenameValue(account.name)
     setBalanceValue(String(account.balance))
     setNoteValue('')
@@ -334,6 +364,28 @@ export function AccountDetailSheet(props: {
       return
     }
 
+    if (editingSetBalanceOp) {
+      if (num === editingSetBalanceOp.after) {
+        balanceInputRef.current?.blur()
+        setEditingOpId(null)
+        transitionToAction('none')
+        return
+      }
+
+      const canApply = canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at)
+      const diff = num - editingSetBalanceOp.after
+      if (canApply && diff !== 0) onAdjust(editingSetBalanceOp.accountId, diff)
+
+      onUpdateOp(editingSetBalanceOp.id, { ...editingSetBalanceOp, after: num })
+      toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
+
+      balanceInputRef.current?.blur()
+      setNoteValue('')
+      setEditingOpId(null)
+      transitionToAction('none')
+      return
+    }
+
     if (num === account.balance) {
       balanceInputRef.current?.blur()
       transitionToAction('none')
@@ -364,6 +416,30 @@ export function AccountDetailSheet(props: {
     }
 
     const delta = adjustDirection === 'plus' ? num : -num
+
+    if (editingAdjustOp) {
+      if (delta === editingAdjustOp.delta) {
+        adjustInputRef.current?.blur()
+        setEditingOpId(null)
+        transitionToAction('none')
+        return
+      }
+
+      const canApply = canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at)
+      const diff = delta - editingAdjustOp.delta
+      if (canApply && diff !== 0) onAdjust(editingAdjustOp.accountId, diff)
+
+      onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: editingAdjustOp.before + delta })
+      toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
+
+      setAdjustAmount('')
+      setNoteValue('')
+      adjustInputRef.current?.blur()
+      setEditingOpId(null)
+      transitionToAction('none')
+      return
+    }
+
     const after = account.balance + delta
 
     onAddOp({
@@ -383,6 +459,55 @@ export function AccountDetailSheet(props: {
   }
 
   const submitTransfer = () => {
+    if (editingTransferOp) {
+      const num = Number(transferAmount)
+      if (!Number.isFinite(num) || num <= 0) {
+        toast('请输入正确金额', { tone: 'danger' })
+        return
+      }
+      if (num === editingTransferOp.amount) {
+        setTransferAmount('')
+        setTransferPeerId('')
+        setEditingOpId(null)
+        transitionToAction('none')
+        return
+      }
+
+      const from = byId.get(editingTransferOp.fromId)
+      const to = byId.get(editingTransferOp.toId)
+      if (!from || !to) {
+        toast('账户不存在', { tone: 'danger' })
+        return
+      }
+
+      const fromBefore = editingTransferOp.fromBefore
+      const toBefore = editingTransferOp.toBefore
+      const nextFromAfter = applyFlow({ ...from, balance: fromBefore }, -num)
+      const nextToAfter = applyFlow({ ...to, balance: toBefore }, num)
+
+      const diffFrom = (nextFromAfter - fromBefore) - (editingTransferOp.fromAfter - fromBefore)
+      const diffTo = (nextToAfter - toBefore) - (editingTransferOp.toAfter - toBefore)
+
+      const canApplyFrom = canRollbackBalance(editingTransferOp.fromId, editingTransferOp.at)
+      const canApplyTo = canRollbackBalance(editingTransferOp.toId, editingTransferOp.at)
+      if (canApplyFrom && diffFrom !== 0) onAdjust(editingTransferOp.fromId, diffFrom)
+      if (canApplyTo && diffTo !== 0) onAdjust(editingTransferOp.toId, diffTo)
+
+      onUpdateOp(editingTransferOp.id, {
+        ...editingTransferOp,
+        amount: num,
+        fromAfter: nextFromAfter,
+        toAfter: nextToAfter,
+      })
+      toast(canApplyFrom && canApplyTo ? '已保存' : '已保存（部分余额未变）', { tone: canApplyFrom && canApplyTo ? 'success' : 'neutral' })
+
+      setTransferAmount('')
+      setTransferPeerId('')
+      setEditingOpId(null)
+      transitionToAction('none')
+      return
+    }
+
     if (!transferPeerId) {
       toast('请选择账户', { tone: 'danger' })
       return
@@ -677,11 +802,36 @@ export function AccountDetailSheet(props: {
                           runningAfter -= delta ?? 0
 
                           const canDeleteOp = op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
+                          const canEditOp = canDeleteOp
 
-                          const canRollbackBalance = (targetAccountId: string) => {
-                            const latest = latestSetBalanceAtByAccountId.get(targetAccountId)
-                            if (!latest) return true
-                            return latest.localeCompare(op.at) <= 0
+                          const handleEditOp = () => {
+                            if (op.kind === 'set_balance') {
+                              setEditingOpId(op.id)
+                              setNoteValue('')
+                              setBalanceValue(String(op.after))
+                              transitionToAction('set_balance')
+                              return
+                            }
+
+                            if (op.kind === 'adjust') {
+                              setEditingOpId(op.id)
+                              setNoteValue('')
+                              setAdjustDirection(op.delta >= 0 ? 'plus' : 'minus')
+                              setAdjustAmount(String(Math.abs(op.delta)))
+                              transitionToAction('adjust')
+                              return
+                            }
+
+                            if (op.kind === 'transfer') {
+                              const direction = account.id === op.fromId ? 'out' : 'in'
+                              const peerId = direction === 'out' ? op.toId : op.fromId
+                              setEditingOpId(op.id)
+                              setNoteValue('')
+                              setTransferDirection(direction)
+                              setTransferPeerId(peerId)
+                              setTransferAmount(String(op.amount))
+                              transitionToAction('transfer')
+                            }
                           }
 
                           const handleDeleteOp = async () => {
@@ -693,7 +843,7 @@ export function AccountDetailSheet(props: {
                                 accountId: op.accountId,
                                 name: getAccountName(op.accountId),
                                 delta: -op.delta,
-                                canRollback: canRollbackBalance(op.accountId),
+                                canRollback: canRollbackBalance(op.accountId, op.at),
                               })
                             }
 
@@ -702,7 +852,7 @@ export function AccountDetailSheet(props: {
                                 accountId: op.accountId,
                                 name: getAccountName(op.accountId),
                                 delta: op.before - op.after,
-                                canRollback: canRollbackBalance(op.accountId),
+                                canRollback: canRollbackBalance(op.accountId, op.at),
                               })
                             }
 
@@ -711,13 +861,13 @@ export function AccountDetailSheet(props: {
                                 accountId: op.fromId,
                                 name: getAccountName(op.fromId),
                                 delta: op.fromBefore - op.fromAfter,
-                                canRollback: canRollbackBalance(op.fromId),
+                                canRollback: canRollbackBalance(op.fromId, op.at),
                               })
                               rollbackTargets.push({
                                 accountId: op.toId,
                                 name: getAccountName(op.toId),
                                 delta: op.toBefore - op.toAfter,
-                                canRollback: canRollbackBalance(op.toId),
+                                canRollback: canRollbackBalance(op.toId, op.at),
                               })
                             }
 
@@ -803,10 +953,24 @@ export function AccountDetailSheet(props: {
                                     <div className={`text-[14px] font-semibold ${deltaColor}`}>
                                       {delta == null ? '—' : formatSigned(delta)}
                                     </div>
-                                    <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                      余额 {formatCny(displayAfter)}
-                                    </div>
+                                  <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                    余额 {formatCny(displayAfter)}
                                   </div>
+                                  </div>
+                                  {canEditOp ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleEditOp()
+                                      }}
+                                      className="p-2 rounded-full text-slate-300 hover:text-slate-900 hover:bg-white/60 active:scale-95 transition"
+                                      aria-label="edit op"
+                                      title="编辑金额"
+                                    >
+                                      <Pencil size={16} strokeWidth={2.6} />
+                                    </button>
+                                  ) : null}
                                   {canDeleteOp ? (
                                     <button
                                       type="button"
@@ -853,7 +1017,7 @@ export function AccountDetailSheet(props: {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault()
-                        if (canSubmitAdjust) submitAdjust()
+                        if (canSubmitAdjust && !isAdjustNoop) submitAdjust()
                       }
                       if (e.key === 'Escape') {
                         e.preventDefault()
@@ -910,21 +1074,26 @@ export function AccountDetailSheet(props: {
 
                 <div className="mt-3">
                   <div className="text-[13px] font-semibold" style={{ color: 'var(--primary)' }}>
-                    {formatSigned(previewAdjustDelta)}
+                    {formatSigned(previewAdjustApplied)}
                   </div>
                   <div className="mt-1 text-[12px] font-medium text-slate-500">
                     余额 {formatCny(previewAdjustAfter)}
                   </div>
+                  {editingAdjustOp && !canApplyAdjustDiff ? (
+                    <div className="mt-1 text-[11px] font-semibold text-slate-400">
+                      余额不会变（已在后续校准中固定）
+                    </div>
+                  ) : null}
                 </div>
 
                 <motion.button
                   type="button"
                   onClick={submitAdjust}
-                  disabled={!canSubmitAdjust}
-                  whileTap={{ scale: canSubmitAdjust ? 0.99 : 1 }}
-                  className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitAdjust ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
+                  disabled={!canSubmitAdjust || isAdjustNoop}
+                  whileTap={{ scale: canSubmitAdjust && !isAdjustNoop ? 0.99 : 1 }}
+                  className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitAdjust && !isAdjustNoop ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
                 >
-                  完成
+                  {editingAdjustOp ? '保存修改' : '完成'}
                 </motion.button>
               </motion.div>
             ) : action === 'set_balance' ? (
@@ -986,6 +1155,11 @@ export function AccountDetailSheet(props: {
                   <div>当前余额</div>
                   <div className="text-slate-500">{formatCny(account.balance)}</div>
                 </div>
+                {editingSetBalanceOp && !canApplySetBalanceDiff ? (
+                  <div className="mt-1 text-[11px] font-semibold text-slate-400">
+                    余额不会变（已在后续校准中固定）
+                  </div>
+                ) : null}
 
                 <motion.button
                   type="button"
@@ -994,7 +1168,7 @@ export function AccountDetailSheet(props: {
                   whileTap={{ scale: canSubmitSetBalance && !isSetBalanceNoop ? 0.99 : 1 }}
                   className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitSetBalance && !isSetBalanceNoop ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
                 >
-                  完成
+                  {editingSetBalanceOp ? '保存修改' : '完成'}
                 </motion.button>
               </motion.div>
             ) : action === 'rename' ? (
@@ -1062,14 +1236,27 @@ export function AccountDetailSheet(props: {
                         { value: 'in', label: '转入' },
                       ]}
                       value={transferDirection}
-                      onChange={(v) => setTransferDirection(v as TransferDirection)}
+                      onChange={(v) => {
+                        if (editingTransferOp) return
+                        setTransferDirection(v as TransferDirection)
+                      }}
                     />
                   </div>
+                  {editingTransferOp ? (
+                    <div className="mt-2 text-center text-[11px] font-semibold text-slate-400">
+                      仅支持修改金额
+                    </div>
+                  ) : null}
 
                   <div className="mt-4 stack" style={{ gap: 12 }}>
                     <label className="field">
                       <div className="fieldLabel">对方账户</div>
-                      <select className="select" value={transferPeerId} onChange={(e) => setTransferPeerId(e.target.value)}>
+                      <select
+                        className="select"
+                        value={transferPeerId}
+                        disabled={Boolean(editingTransferOp)}
+                        onChange={(e) => setTransferPeerId(e.target.value)}
+                      >
                         <option value="">请选择</option>
                         {selectablePeers.map((a) => (
                           <option key={a.id} value={a.id}>
@@ -1101,7 +1288,7 @@ export function AccountDetailSheet(props: {
                     whileTap={{ scale: 0.99 }}
                     className="mt-6 w-full h-14 rounded-[22px] bg-slate-900 text-white font-semibold text-[16px] shadow-sm"
                   >
-                    完成
+                    {editingTransferOp ? '保存修改' : '完成'}
                   </motion.button>
                 </div>
               </motion.div>
