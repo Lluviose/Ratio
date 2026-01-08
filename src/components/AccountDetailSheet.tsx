@@ -91,11 +91,13 @@ export function AccountDetailSheet(props: {
   const [suppressOpsIntro, setSuppressOpsIntro] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [editingOpId, setEditingOpId] = useState<string | null>(null)
+  const [swipedOpId, setSwipedOpId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
   const [noteValue, setNoteValue] = useState('')
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
+  const suppressOpClickRef = useRef(false)
   const openedAtRef = useRef<number | null>(null)
   const initKeyRef = useRef<string | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
@@ -113,6 +115,7 @@ export function AccountDetailSheet(props: {
   const transitionToAction = (nextAction: ActionId) => {
     if (nextAction === action) return
     setMoreOpen(false)
+    setSwipedOpId(null)
 
     if (action !== 'none' && nextAction === 'none') {
       setPageDir(-1)
@@ -137,6 +140,7 @@ export function AccountDetailSheet(props: {
       setPageDir(0)
       setSuppressOpsIntro(false)
       setEditingOpId(null)
+      setSwipedOpId(null)
       return
     }
     if (!accountId || !account) return
@@ -150,6 +154,7 @@ export function AccountDetailSheet(props: {
     setAction(nextAction)
     setMoreOpen(false)
     setEditingOpId(null)
+    setSwipedOpId(null)
     setRenameValue(account.name)
     setBalanceValue(String(account.balance))
     setNoteValue('')
@@ -256,6 +261,8 @@ export function AccountDetailSheet(props: {
   const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === setBalanceNoopValue
   const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
 
+  const OP_DELETE_REVEAL_PX = 86
+
   const pageTransition = { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const }
   const pageVariants = {
     initial: (dir: number) => ({
@@ -305,6 +312,7 @@ export function AccountDetailSheet(props: {
     balanceInputRef.current?.blur()
     adjustInputRef.current?.blur()
     setEditingOpId(null)
+    setSwipedOpId(null)
     setRenameValue(account.name)
     setBalanceValue(String(account.balance))
     setNoteValue('')
@@ -755,7 +763,7 @@ export function AccountDetailSheet(props: {
                       暂无操作
                     </div>
                   ) : (
-                    <div>
+                    <AnimatePresence initial={false}>
                       {(() => {
                         let runningAfter = account.balance
                         return relatedOps.map((op, i) => {
@@ -914,6 +922,7 @@ export function AccountDetailSheet(props: {
                             }
 
                             onDeleteOp(op.id)
+                            setSwipedOpId(null)
 
                             const rolledBackCount = rolledBackAccountIds.length
                             const toastMessage =
@@ -926,72 +935,111 @@ export function AccountDetailSheet(props: {
                             toast(toastMessage, { tone })
                           }
 
+                          const isSwipedOpen = swipedOpId === op.id
+
                           return (
                             <motion.div
                               key={op.id}
+                              layout
                               initial={suppressOpsIntro ? false : { opacity: 0, y: 8 }}
                               animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, height: 0 }}
                               transition={
                                 suppressOpsIntro
                                   ? { duration: 0 }
                                   : { duration: 0.18, delay: Math.min(0.25, i * 0.03) }
                               }
                               className={i === 0 ? '' : 'border-t border-black/5'}
+                              style={{ overflow: 'hidden' }}
                             >
-                              <div className="px-4 py-4 flex items-start justify-between gap-4">
-                                <div className="min-w-0">
-                                  <div className="text-[14px] font-semibold text-slate-900 truncate">
-                                    {title}
-                                  </div>
-                                  <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                    {formatTime(op.at)}
-                                  </div>
-                                </div>
-
-                                <div className="text-right shrink-0 flex items-start gap-1">
-                                  <div>
-                                    <div className={`text-[14px] font-semibold ${deltaColor}`}>
-                                      {delta == null ? '—' : formatSigned(delta)}
-                                    </div>
-                                  <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                    余额 {formatCny(displayAfter)}
-                                  </div>
-                                  </div>
-                                  {canEditOp ? (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        handleEditOp()
-                                      }}
-                                      className="p-2 rounded-full text-slate-300 hover:text-slate-900 hover:bg-white/60 active:scale-95 transition"
-                                      aria-label="edit op"
-                                      title="编辑金额"
-                                    >
-                                      <Pencil size={16} strokeWidth={2.6} />
-                                    </button>
-                                  ) : null}
-                                  {canDeleteOp ? (
+                              <div className="relative">
+                                {canDeleteOp ? (
+                                  <div
+                                    className="absolute inset-y-0 right-0 flex items-center justify-end bg-rose-50/90"
+                                    style={{ width: OP_DELETE_REVEAL_PX }}
+                                  >
                                     <button
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation()
                                         void handleDeleteOp()
                                       }}
-                                      className="p-2 -mr-2 rounded-full text-slate-300 hover:text-rose-600 hover:bg-rose-50 active:scale-95 transition"
+                                      className="mr-3 h-10 px-4 rounded-full bg-rose-600 text-white font-semibold shadow-sm active:scale-95 transition flex items-center gap-2"
                                       aria-label="delete op"
-                                      title="删除记录"
                                     >
                                       <Trash2 size={16} strokeWidth={2.6} />
+                                      删除
                                     </button>
-                                  ) : null}
-                                </div>
+                                  </div>
+                                ) : null}
+
+                                <motion.div
+                                  drag={canDeleteOp ? 'x' : false}
+                                  dragConstraints={{ left: -OP_DELETE_REVEAL_PX, right: 0 }}
+                                  dragElastic={0.12}
+                                  dragMomentum={false}
+                                  onDragStart={() => {
+                                    if (swipedOpId && swipedOpId !== op.id) setSwipedOpId(null)
+                                  }}
+                                  onDragEnd={(_, info) => {
+                                    const didDrag = Math.abs(info.offset.x) > 6 || Math.abs(info.velocity.x) > 60
+                                    if (didDrag) {
+                                      suppressOpClickRef.current = true
+                                      window.setTimeout(() => {
+                                        suppressOpClickRef.current = false
+                                      }, 0)
+                                    }
+
+                                    if (!isSwipedOpen) {
+                                      const shouldOpen = info.offset.x < -OP_DELETE_REVEAL_PX / 2 || info.velocity.x < -500
+                                      setSwipedOpId(shouldOpen ? op.id : null)
+                                      return
+                                    }
+
+                                    const shouldClose = info.offset.x > OP_DELETE_REVEAL_PX / 2 || info.velocity.x > 500
+                                    setSwipedOpId(shouldClose ? null : op.id)
+                                  }}
+                                  animate={{ x: canDeleteOp && isSwipedOpen ? -OP_DELETE_REVEAL_PX : 0 }}
+                                  transition={{ type: 'spring', stiffness: 520, damping: 44 }}
+                                  onClick={() => {
+                                    if (suppressOpClickRef.current) return
+                                    if (swipedOpId && swipedOpId !== op.id) {
+                                      setSwipedOpId(null)
+                                      return
+                                    }
+                                    if (isSwipedOpen) {
+                                      setSwipedOpId(null)
+                                      return
+                                    }
+                                    if (canEditOp) handleEditOp()
+                                  }}
+                                  style={{ touchAction: canDeleteOp ? 'pan-y' : 'auto' }}
+                                  className={`px-4 py-4 flex items-start justify-between gap-4 bg-white/70 ${canEditOp ? 'cursor-pointer active:bg-white/90' : ''}`}
+                                >
+                                  <div className="min-w-0">
+                                    <div className="text-[14px] font-semibold text-slate-900 truncate">
+                                      {title}
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                      {formatTime(op.at)}
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right shrink-0">
+                                    <div className={`text-[14px] font-semibold ${deltaColor}`}>
+                                      {delta == null ? '—' : formatSigned(delta)}
+                                    </div>
+                                    <div className="mt-1 text-[11px] font-medium text-slate-400">
+                                      余额 {formatCny(displayAfter)}
+                                    </div>
+                                  </div>
+                                </motion.div>
                               </div>
                             </motion.div>
                           )
                         })
                       })()}
-                    </div>
+                    </AnimatePresence>
                   )}
                 </div>
               </motion.div>
