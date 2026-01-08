@@ -1014,7 +1014,7 @@ export function AccountDetailSheet(props: {
                                     if (canEditOp) handleEditOp()
                                   }}
                                   style={{ touchAction: canDeleteOp ? 'pan-y' : 'auto' }}
-                                  className={`px-4 py-4 flex items-start justify-between gap-4 bg-white/70 ${canEditOp ? 'cursor-pointer active:bg-white/90' : ''}`}
+                                  className={`px-4 py-4 flex items-start justify-between gap-4 bg-white ${canEditOp ? 'cursor-pointer active:bg-slate-50' : ''}`}
                                 >
                                   <div className="min-w-0">
                                     <div className="text-[14px] font-semibold text-slate-900 truncate">
