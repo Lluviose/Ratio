@@ -602,7 +602,7 @@ export function AccountDetailSheet(props: {
             opacity: 1,
             transition: { duration: 0.18, delay: isMorph ? 0.06 : 0, ease: [0.16, 1, 0.3, 1] },
           }}
-          exit={{ opacity: 0, transition: { duration: 0.14, ease: [0.16, 1, 0.3, 1] } }}
+          exit={{ opacity: 0, transition: { duration: isMorph ? 0.1 : 0.14, ease: [0.16, 1, 0.3, 1] } }}
         >
           <button
             type="button"
@@ -727,7 +727,7 @@ export function AccountDetailSheet(props: {
           y: 0,
           transition: { duration: isMorph ? 0.18 : 0.22, delay: isMorph ? 0.12 : 0.06, ease: [0.16, 1, 0.3, 1] },
         }}
-        exit={{ opacity: 0, y: isMorph ? 0 : 10, transition: { duration: 0.14, ease: [0.16, 1, 0.3, 1] } }}
+        exit={{ opacity: 0, y: isMorph ? 0 : 10, transition: { duration: isMorph ? 0.12 : 0.14, ease: [0.16, 1, 0.3, 1] } }}
         onClick={() => setMoreOpen(false)}
       >
         <div className="px-4 pb-6">

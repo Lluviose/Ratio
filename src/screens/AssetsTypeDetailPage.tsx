@@ -178,23 +178,33 @@ export function AssetsTypeDetailPage(props: {
                   key={account.id}
                   layoutId={accountDetailSheetLayoutId(account.id)}
                   layout="position"
-                  className="flex items-center justify-between p-3 rounded-[22px] bg-[var(--bg)] border border-[var(--hairline)] cursor-pointer shadow-[0_10px_26px_-22px_rgba(0,0,0,0.28)]"
-                  onClick={() => onEditAccount(account)}
+                  className="p-3 rounded-[22px] bg-[var(--bg)] border border-[var(--hairline)] shadow-[0_10px_26px_-22px_rgba(0,0,0,0.28)] cursor-pointer"
+                  onClick={() => {
+                    if (isActive) return
+                    onEditAccount(account)
+                  }}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.1 + i * 0.03 }}
                   whileTap={{ scale: 0.985 }}
-                  style={{ visibility: isActive ? 'hidden' : 'visible' }}
+                  style={{ pointerEvents: isActive ? 'none' : 'auto' }}
                 >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-2xl bg-white/80 flex items-center justify-center text-slate-700 shadow-sm border border-white/70">
-                      {createElement(info.opt.icon, { size: 18 })}
+                  <motion.div
+                    className="flex items-center justify-between gap-3"
+                    initial={false}
+                    animate={{ opacity: isActive ? 0 : 1 }}
+                    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-2xl bg-white/80 flex items-center justify-center text-slate-700 shadow-sm border border-white/70">
+                        {createElement(info.opt.icon, { size: 18 })}
+                      </div>
+                      <div className="font-bold text-sm text-slate-800 truncate">{account.name}</div>
                     </div>
-                    <div className="font-bold text-sm text-slate-800 truncate">{account.name}</div>
-                  </div>
-                  <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
-                    {hideAmounts ? maskedText : formatCny(account.balance)}
-                  </div>
+                    <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
+                      {hideAmounts ? maskedText : formatCny(account.balance)}
+                    </div>
+                  </motion.div>
                 </motion.div>
               )
             })}

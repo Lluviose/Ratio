@@ -126,6 +126,19 @@ export function BottomSheet(props: {
   } = props
 
   const resolvedSheetMotion = sheetMotion === 'morph' && sheetLayoutId ? 'morph' : 'slide'
+  const resolvedSheetStyle: CSSProperties =
+    resolvedSheetMotion === 'morph'
+      ? {
+          borderRadius: 22,
+          border: '1px solid var(--hairline)',
+          borderBottom: '1px solid var(--hairline)',
+          boxShadow: 'var(--shadow-soft)',
+          ...sheetStyle,
+        }
+      : { ...sheetStyle }
+
+  const overlayFadeInDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.18
+  const overlayFadeOutDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.2
 
   const sheetIdRef = useRef<string>(makeSheetId())
   const scrollLockCountRef = useRef(0)
@@ -177,24 +190,29 @@ export function BottomSheet(props: {
           role="dialog"
           aria-modal="true"
           onClick={onClose}
-          initial={{ backgroundColor: 'rgba(11, 15, 26, 0)' }}
+          initial={{
+            backgroundColor: 'rgba(11, 15, 26, 0)',
+            backdropFilter: 'blur(0px)',
+          }}
           animate={{
             backgroundColor: 'rgba(11, 15, 26, 0.4)',
+            backdropFilter: 'blur(2px)',
             transition: {
-              duration: resolvedSheetMotion === 'morph' ? 0.24 : 0.18,
+              duration: overlayFadeInDuration,
               ease: [0.16, 1, 0.3, 1],
             },
           }}
           exit={{
             backgroundColor: 'rgba(11, 15, 26, 0)',
+            backdropFilter: 'blur(0px)',
             transition: {
-              duration: resolvedSheetMotion === 'morph' ? 0.32 : 0.26,
+              duration: overlayFadeOutDuration,
               ease: [0.16, 1, 0.3, 1],
             },
           }}
         >
           <motion.div
-            className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}
+            className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}    
             onClick={(e) => e.stopPropagation()}
             layoutId={resolvedSheetMotion === 'morph' ? sheetLayoutId : undefined}
             initial={resolvedSheetMotion === 'slide' ? { y: '100%', opacity: 0.98 } : false}
@@ -207,10 +225,10 @@ export function BottomSheet(props: {
                     opacity: { type: 'tween', duration: 0.18, ease: [0.16, 1, 0.3, 1] },
                   }
                 : {
-                    layout: { type: 'spring', stiffness: 620, damping: 52, mass: 0.9 },
+                    layout: { type: 'spring', stiffness: 520, damping: 52, mass: 1 },
                   }
             }
-            style={{ ...sheetStyle, willChange: 'transform' }}
+            style={{ ...resolvedSheetStyle, willChange: 'transform' }}
           >
             {!hideHandle ? <div className="handle" /> : null}
             {header ? (
