@@ -187,7 +187,7 @@ export function AssetsTypeDetailPage(props: {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.1 + i * 0.03 }}
                   whileTap={{ scale: 0.985 }}
-                  style={{ pointerEvents: isActive ? 'none' : 'auto' }}
+                  style={{ borderRadius: 22, pointerEvents: isActive ? 'none' : 'auto' }}
                 >
                   <motion.div
                     className="flex items-center justify-between gap-3"
