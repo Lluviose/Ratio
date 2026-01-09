@@ -18,6 +18,22 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function coerceAccountTypeId(value: unknown): AccountTypeId {
+  if (typeof value === 'string') {
+    try {
+      getAccountTypeOption(value as AccountTypeId)
+      return value as AccountTypeId
+    } catch {
+      // ignore
+    }
+  }
+  return 'other_liquid'
+}
+
 function isDebtAccount(type: AccountTypeId) {
   return type === 'credit_card' || type === 'loan' || type === 'payable' || type === 'other_debt'
 }
@@ -29,8 +45,31 @@ function applyFlow(type: AccountTypeId, balance: number, flow: number) {
 
 const initialAccounts: Account[] = []
 
+function coerceAccounts(value: unknown): Account[] {
+  if (!Array.isArray(value)) return initialAccounts
+
+  const now = nowIso()
+  const result: Account[] = []
+  for (const item of value) {
+    if (!isRecord(item)) continue
+
+    const type = coerceAccountTypeId(item.type)
+    const id = typeof item.id === 'string' && item.id.trim() ? item.id : createId()
+    const name =
+      typeof item.name === 'string' && item.name.trim() ? item.name.trim() : defaultAccountName(type)
+    const balance = typeof item.balance === 'number' && Number.isFinite(item.balance) ? item.balance : 0
+    const updatedAt = typeof item.updatedAt === 'string' && item.updatedAt ? item.updatedAt : now
+
+    result.push({ id, type, name, balance, updatedAt })
+  }
+
+  return result
+}
+
 export function useAccounts() {
-  const [accounts, setAccounts] = useLocalStorageState<Account[]>('ratio.accounts', initialAccounts)
+  const [accounts, setAccounts] = useLocalStorageState<Account[]>('ratio.accounts', initialAccounts, {
+    coerce: coerceAccounts,
+  })
 
   const addAccount = useCallback(
     (type: AccountTypeId, customName?: string) => {

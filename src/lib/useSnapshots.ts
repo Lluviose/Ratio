@@ -3,8 +3,14 @@ import type { Account } from './accounts'
 import { useLocalStorageState } from './useLocalStorageState'
 import { buildSnapshot, normalizeSnapshot, todayDateKey, type Snapshot } from './snapshots'
 
+function coerceSnapshots(value: unknown): Snapshot[] {
+  return Array.isArray(value) ? (value as Snapshot[]) : []
+}
+
 export function useSnapshots() {
-  const [snapshots, setSnapshots] = useLocalStorageState<Snapshot[]>('ratio.snapshots', [])
+  const [snapshots, setSnapshots] = useLocalStorageState<Snapshot[]>('ratio.snapshots', [], {
+    coerce: coerceSnapshots,
+  })
 
   const normalized = useMemo(() => snapshots.map((s) => normalizeSnapshot(s)), [snapshots])
 

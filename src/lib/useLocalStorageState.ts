@@ -7,21 +7,36 @@ type StorageWriteDetail = {
   raw?: string
 }
 
-function readStoredValue<T>(key: string, initialValue: T): { value: T; raw: string | null } {
+export type UseLocalStorageStateOptions<T> = {
+  coerce?: (value: unknown) => T
+}
+
+function readStoredValue<T>(
+  key: string,
+  initialValue: T,
+  coerce?: (value: unknown) => T,
+): { value: T; raw: string | null } {
   let raw: string | null = null
   try {
     raw = localStorage.getItem(key)
     if (!raw) return { value: initialValue, raw: null }
-    return { value: JSON.parse(raw) as T, raw }
+    const parsed = JSON.parse(raw) as unknown
+    const value = coerce ? coerce(parsed) : (parsed as T)
+    return { value, raw }
   } catch {
     return { value: initialValue, raw }
   }
 }
 
-function parseStoredValue<T>(raw: string | null, initialValue: T): T {
+function parseStoredValue<T>(
+  raw: string | null,
+  initialValue: T,
+  coerce?: (value: unknown) => T,
+): T {
   if (!raw) return initialValue
   try {
-    return JSON.parse(raw) as T
+    const parsed = JSON.parse(raw) as unknown
+    return coerce ? coerce(parsed) : (parsed as T)
   } catch {
     return initialValue
   }
@@ -42,14 +57,16 @@ function syncFromRaw<T>(
   initialValue: T,
   setValue: (v: T) => void,
   lastRawRef: { current: string | null },
+  coerce?: (value: unknown) => T,
 ) {
   if (raw === lastRawRef.current) return
   lastRawRef.current = raw
-  setValue(parseStoredValue(raw, initialValue))
+  setValue(parseStoredValue(raw, initialValue, coerce))
 }
 
-export function useLocalStorageState<T>(key: string, initialValue: T) {
-  const initial = useMemo(() => readStoredValue(key, initialValue), [initialValue, key])
+export function useLocalStorageState<T>(key: string, initialValue: T, options?: UseLocalStorageStateOptions<T>) {
+  const coerce = options?.coerce
+  const initial = useMemo(() => readStoredValue(key, initialValue, coerce), [coerce, initialValue, key])
   const lastRawRef = useRef<string | null>(initial.raw)
 
   const [value, setValue] = useState<T>(initial.value)
@@ -58,13 +75,13 @@ export function useLocalStorageState<T>(key: string, initialValue: T) {
     const onWrite = (event: Event) => {
       const detail = getEventDetail(event)
       if (!detail || detail.key !== key) return
-      syncFromRaw(detail.raw ?? localStorage.getItem(key), initialValue, setValue, lastRawRef)
+      syncFromRaw(detail.raw ?? localStorage.getItem(key), initialValue, setValue, lastRawRef, coerce)
     }
 
     const onStorage = (event: StorageEvent) => {
       if (event.storageArea !== localStorage) return
       if (event.key !== key) return
-      syncFromRaw(event.newValue, initialValue, setValue, lastRawRef)
+      syncFromRaw(event.newValue, initialValue, setValue, lastRawRef, coerce)
     }
 
     window.addEventListener(STORAGE_WRITE_EVENT, onWrite)
@@ -73,7 +90,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T) {
       window.removeEventListener(STORAGE_WRITE_EVENT, onWrite)
       window.removeEventListener('storage', onStorage)
     }
-  }, [initialValue, key])
+  }, [coerce, initialValue, key])
 
   useEffect(() => {
     try {
