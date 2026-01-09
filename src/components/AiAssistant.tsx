@@ -155,7 +155,7 @@ export function AiAssistant() {
     }
 
     container.scrollTop = container.scrollHeight
-  }, [messages.length, sending])
+  }, [messages, sending])
 
   function getFinancialContextMessage(): AiChatMessage {
     const ctx = buildAiFinancialContext()
