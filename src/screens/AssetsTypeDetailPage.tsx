@@ -13,6 +13,7 @@ import {
 } from '../lib/accountSort'
 import { formatCny } from '../lib/format'
 import { accountGroups, getAccountTypeOption, type Account, type AccountTypeId } from '../lib/accounts'
+import { accountDetailSheetLayoutId } from '../lib/layoutIds'
 import { pickForegroundColor } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
@@ -24,8 +25,9 @@ export function AssetsTypeDetailPage(props: {
   onEditAccount: (account: Account) => void
   hideAmounts: boolean
   themeColor: string
+  activeAccountId?: string | null
 }) {
-  const { type, accounts, onBack, onEditAccount, hideAmounts, themeColor } = props
+  const { type, accounts, onBack, onEditAccount, hideAmounts, themeColor, activeAccountId } = props
 
   const [accountSortMode] = useLocalStorageState<AccountSortMode>(ACCOUNT_SORT_MODE_KEY, 'balance')
   const [manualAccountOrderByType, setManualAccountOrderByType] = useLocalStorageState<ManualAccountOrderByType>(
@@ -168,27 +170,34 @@ export function AssetsTypeDetailPage(props: {
           <div className="h-[1px] bg-[var(--hairline)]" />
 
           <div className="flex flex-col p-3 gap-2">
-            {list.map((account, i) => (
-              <motion.div
-                key={account.id}
-                className="flex items-center justify-between p-3 rounded-2xl cursor-pointer transition-colors duration-150 active:bg-[var(--hairline)]"
-                onClick={() => onEditAccount(account)}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 + i * 0.03 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200/50">
-                    {createElement(info.opt.icon, { size: 18 })}
+            {list.map((account, i) => {
+              const isActive = Boolean(activeAccountId && activeAccountId === account.id)
+
+              return (
+                <motion.div
+                  key={account.id}
+                  layoutId={accountDetailSheetLayoutId(account.id)}
+                  layout="position"
+                  className="flex items-center justify-between p-3 rounded-[22px] bg-[var(--bg)] border border-[var(--hairline)] cursor-pointer shadow-[0_10px_26px_-22px_rgba(0,0,0,0.28)]"
+                  onClick={() => onEditAccount(account)}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.1 + i * 0.03 }}
+                  whileTap={{ scale: 0.985 }}
+                  style={{ visibility: isActive ? 'hidden' : 'visible' }}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-2xl bg-white/80 flex items-center justify-center text-slate-700 shadow-sm border border-white/70">
+                      {createElement(info.opt.icon, { size: 18 })}
+                    </div>
+                    <div className="font-bold text-sm text-slate-800 truncate">{account.name}</div>
                   </div>
-                  <div className="font-bold text-sm text-slate-700 truncate">{account.name}</div>
-                </div>
-                <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
-                  {hideAmounts ? maskedText : formatCny(account.balance)}
-                </div>
-              </motion.div>
-            ))}
+                  <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
+                    {hideAmounts ? maskedText : formatCny(account.balance)}
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         </motion.div>
       </div>

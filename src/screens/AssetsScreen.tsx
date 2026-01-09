@@ -482,10 +482,11 @@ export function AssetsScreen(props: {
   onEditAccount: (account: Account) => void
   onAddAccount: () => void
   onNavigate: (tab: 'trend' | 'stats' | 'settings') => void
+  activeAccountId?: string | null
   skipInitialAnimation?: boolean
   addButtonTone?: string
 }) {
-  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate, skipInitialAnimation = false, addButtonTone } = props
+  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate, activeAccountId, skipInitialAnimation = false, addButtonTone } = props
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -1548,6 +1549,7 @@ export function AssetsScreen(props: {
             getIcon={getIcon}
             hideAmounts={hideAmounts}
             themeColor={selectedThemeColor}
+            activeAccountId={activeAccountId}
             onBack={() => {
               setIsReturningFromDetail(true)
               setAnimationKey(k => k + 1)

@@ -44,6 +44,9 @@ export function AccountDetailSheet(props: {
   accounts: Account[]
   ops: AccountOp[]
   initialAction?: ActionId
+  sheetMotion?: 'slide' | 'morph'
+  sheetLayoutId?: string
+  onExitComplete?: () => void
   onClose: () => void
   onRename: (id: string, name: string) => void
   onSetBalance: (id: string, balance: number) => void
@@ -61,6 +64,9 @@ export function AccountDetailSheet(props: {
     accounts,
     ops,
     initialAction,
+    sheetMotion,
+    sheetLayoutId,
+    onExitComplete,
     onClose,
     onRename,
     onSetBalance,
@@ -72,6 +78,8 @@ export function AccountDetailSheet(props: {
     onUpdateOp,
     colors,
   } = props
+
+  const isMorph = sheetMotion === 'morph' && Boolean(sheetLayoutId)
 
   const { toast, confirm } = useOverlay()
 
@@ -226,6 +234,8 @@ export function AccountDetailSheet(props: {
       .sort((a, b) => b.at.localeCompare(a.at))
   }, [accountId, ops])
 
+  const shouldStaggerOpsIntro = !suppressOpsIntro && relatedOps.length <= 12
+
   const latestSetBalanceAtByAccountId = useMemo(() => {
     const m = new Map<string, string>()
     for (const op of ops) {
@@ -251,7 +261,21 @@ export function AccountDetailSheet(props: {
     return latest.localeCompare(at) <= 0
   }
 
-  if (!account) return <BottomSheet open={open} title="账户" onClose={onClose}><div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: 40 }}>未找到账户</div></BottomSheet>
+  if (!account)
+    return (
+      <BottomSheet
+        open={open}
+        title="账户"
+        onClose={onClose}
+        sheetMotion={sheetMotion}
+        sheetLayoutId={sheetLayoutId}
+        onExitComplete={onExitComplete}
+      >
+        <div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: 40 }}>
+          未找到账户
+        </div>
+      </BottomSheet>
+    )
 
   const setBalanceValueTrimmed = balanceValue.trim()
   const setBalanceParsed = Number(setBalanceValueTrimmed)
@@ -564,10 +588,22 @@ export function AccountDetailSheet(props: {
       title={account.name}
       onClose={onClose}
       hideHandle
+      sheetMotion={sheetMotion}
+      sheetLayoutId={sheetLayoutId}
+      onExitComplete={onExitComplete}
       sheetStyle={{ maxHeight: '92vh', background: 'var(--bg)' }}
       bodyStyle={{ padding: 0 }}
       header={
-        <div className="px-4 pt-5 pb-3 flex items-center justify-between" style={{ background: 'var(--bg)' }}>
+        <motion.div
+          className="px-4 pt-5 pb-3 flex items-center justify-between"
+          style={{ background: 'var(--bg)' }}
+          initial={isMorph ? { opacity: 0 } : false}
+          animate={{
+            opacity: 1,
+            transition: { duration: 0.18, delay: isMorph ? 0.06 : 0, ease: [0.16, 1, 0.3, 1] },
+          }}
+          exit={{ opacity: 0, transition: { duration: 0.14, ease: [0.16, 1, 0.3, 1] } }}
+        >
           <button
             type="button"
             onPointerDown={handleClosePointerDown}
@@ -679,15 +715,19 @@ export function AccountDetailSheet(props: {
               </>
             )}
           </div>
-        </div>
+        </motion.div>
       }
     >
       <motion.div
         className="flex flex-col"
         style={{ minHeight: '72vh' }}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+        initial={isMorph ? { opacity: 0 } : { opacity: 0, y: 10 }}
+        animate={{
+          opacity: 1,
+          y: 0,
+          transition: { duration: isMorph ? 0.18 : 0.22, delay: isMorph ? 0.12 : 0.06, ease: [0.16, 1, 0.3, 1] },
+        }}
+        exit={{ opacity: 0, y: isMorph ? 0 : 10, transition: { duration: 0.14, ease: [0.16, 1, 0.3, 1] } }}
         onClick={() => setMoreOpen(false)}
       >
         <div className="px-4 pb-6">
@@ -941,14 +981,16 @@ export function AccountDetailSheet(props: {
                             <motion.div
                               key={op.id}
                               layout
-                              initial={suppressOpsIntro ? false : { opacity: 0, y: 8 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              exit={{ opacity: 0, height: 0 }}
-                              transition={
-                                suppressOpsIntro
-                                  ? { duration: 0 }
-                                  : { duration: 0.18, delay: Math.min(0.25, i * 0.03) }
-                              }
+                              initial={shouldStaggerOpsIntro ? { opacity: 0, y: 8 } : false}
+                              animate={{
+                                opacity: 1,
+                                y: 0,
+                                transition: {
+                                  duration: 0.18,
+                                  delay: shouldStaggerOpsIntro ? Math.min(0.25, i * 0.03) : 0,
+                                },
+                              }}
+                              exit={{ opacity: 0, height: 0, transition: { duration: 0.18 } }}
                               className={i === 0 ? '' : 'border-t border-black/5'}
                               style={{ overflow: 'hidden' }}
                             >

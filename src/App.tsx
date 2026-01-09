@@ -13,6 +13,7 @@ import { type Account } from './lib/accounts'
 import { useAccounts } from './lib/useAccounts'
 import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
+import { accountDetailSheetLayoutId } from './lib/layoutIds'
 import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import { OverlayProvider } from './components/OverlayProvider'
@@ -46,6 +47,7 @@ export default function App() {
   const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [detailTransitionAccountId, setDetailTransitionAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
 
@@ -146,6 +148,7 @@ export default function App() {
                   const next = accounts.addAccount(type, customName)
                   setView('main')
                   setSelectedAccountId(next.id)
+                  setDetailTransitionAccountId(null)
                   setDetailAction('set_balance')
                 }}
               />
@@ -208,9 +211,11 @@ export default function App() {
                         onNavigate={(next) => setTab(next)}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
+                          setDetailTransitionAccountId(a.id)
                           setDetailAction('none')
                         }}
                         skipInitialAnimation={hasVisitedAssets}
+                        activeAccountId={detailTransitionAccountId}
                       />
                     </motion.div>
                   )}
@@ -268,6 +273,9 @@ export default function App() {
                 accounts={accounts.accounts}
                 ops={accountOps.ops}
                 initialAction={detailAction}
+                sheetMotion={detailTransitionAccountId ? 'morph' : 'slide'}
+                sheetLayoutId={detailTransitionAccountId ? accountDetailSheetLayoutId(detailTransitionAccountId) : undefined}
+                onExitComplete={() => setDetailTransitionAccountId(null)}
                 onClose={() => {
                   setSelectedAccountId(null)
                   setDetailAction('none')

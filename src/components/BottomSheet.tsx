@@ -105,6 +105,9 @@ export function BottomSheet(props: {
   sheetStyle?: CSSProperties
   bodyClassName?: string
   bodyStyle?: CSSProperties
+  sheetMotion?: 'slide' | 'morph'
+  sheetLayoutId?: string
+  onExitComplete?: () => void
 }) {
   const {
     open,
@@ -117,19 +120,37 @@ export function BottomSheet(props: {
     sheetStyle,
     bodyClassName,
     bodyStyle,
+    sheetMotion = 'slide',
+    sheetLayoutId,
+    onExitComplete,
   } = props
 
+  const resolvedSheetMotion = sheetMotion === 'morph' && sheetLayoutId ? 'morph' : 'slide'
+
   const sheetIdRef = useRef<string>(makeSheetId())
+  const scrollLockCountRef = useRef(0)
   const onCloseRef = useRef(onClose)
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
 
   useEffect(() => {
+    const sheetId = sheetIdRef.current
+    return () => {
+      removeOpenSheet(sheetId)
+      while (scrollLockCountRef.current > 0) {
+        unlockBodyScroll()
+        scrollLockCountRef.current -= 1
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!open) return
     const sheetId = sheetIdRef.current
     pushOpenSheet(sheetId)
     lockBodyScroll()
+    scrollLockCountRef.current += 1
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isTopSheet(sheetId)) onCloseRef.current()       
     }
@@ -137,33 +158,58 @@ export function BottomSheet(props: {
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       removeOpenSheet(sheetId)
-      unlockBodyScroll()
     }
   }, [open])
 
+  const handleExitComplete = () => {
+    if (scrollLockCountRef.current > 0) {
+      unlockBodyScroll()
+      scrollLockCountRef.current -= 1
+    }
+    onExitComplete?.()
+  }
+
   return (
-    <AnimatePresence>
+    <AnimatePresence onExitComplete={handleExitComplete}>
       {open && (
         <motion.div
           className="sheetOverlay"
           role="dialog"
           aria-modal="true"
           onClick={onClose}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ backgroundColor: 'rgba(11, 15, 26, 0)' }}
+          animate={{
+            backgroundColor: 'rgba(11, 15, 26, 0.4)',
+            transition: {
+              duration: resolvedSheetMotion === 'morph' ? 0.24 : 0.18,
+              ease: [0.16, 1, 0.3, 1],
+            },
+          }}
+          exit={{
+            backgroundColor: 'rgba(11, 15, 26, 0)',
+            transition: {
+              duration: resolvedSheetMotion === 'morph' ? 0.32 : 0.26,
+              ease: [0.16, 1, 0.3, 1],
+            },
+          }}
         >
           <motion.div
             className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}
             onClick={(e) => e.stopPropagation()}
-            initial={{ y: '100%', opacity: 0.98 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0.98 }}
-            transition={{
-              y: { type: 'tween', duration: 0.26, ease: [0.16, 1, 0.3, 1] },
-              opacity: { type: 'tween', duration: 0.18, ease: [0.16, 1, 0.3, 1] },
-            }}
+            layoutId={resolvedSheetMotion === 'morph' ? sheetLayoutId : undefined}
+            initial={resolvedSheetMotion === 'slide' ? { y: '100%', opacity: 0.98 } : false}
+            animate={resolvedSheetMotion === 'slide' ? { y: 0, opacity: 1 } : { opacity: 1 }}
+            exit={resolvedSheetMotion === 'slide' ? { y: '100%', opacity: 0.98 } : { opacity: 1 }}
+            transition={
+              resolvedSheetMotion === 'slide'
+                ? {
+                    y: { type: 'tween', duration: 0.26, ease: [0.16, 1, 0.3, 1] },
+                    opacity: { type: 'tween', duration: 0.18, ease: [0.16, 1, 0.3, 1] },
+                  }
+                : {
+                    layout: { type: 'spring', stiffness: 620, damping: 52, mass: 0.9 },
+                  }
+            }
             style={{ ...sheetStyle, willChange: 'transform' }}
           >
             {!hideHandle ? <div className="handle" /> : null}
