@@ -4,6 +4,78 @@ import { AnimatePresence, motion } from 'framer-motion'
 
 const openSheetStack: string[] = []
 
+type ScrollLockState = {
+  scrollY: number
+  htmlOverflow: string
+  bodyOverflow: string
+  bodyPosition: string
+  bodyTop: string
+  bodyLeft: string
+  bodyRight: string
+  bodyWidth: string
+}
+
+let scrollLockCount = 0
+let scrollLockState: ScrollLockState | null = null
+
+function lockBodyScroll() {
+  if (typeof window === 'undefined') return
+  if (typeof document === 'undefined') return
+
+  if (scrollLockCount === 0) {
+    const scrollY = window.scrollY
+    const html = document.documentElement
+    const body = document.body
+
+    scrollLockState = {
+      scrollY,
+      htmlOverflow: html.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+    }
+
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    body.style.position = 'fixed'
+    body.style.top = `-${scrollY}px`
+    body.style.left = '0'
+    body.style.right = '0'
+    body.style.width = '100%'
+  }
+
+  scrollLockCount += 1
+}
+
+function unlockBodyScroll() {
+  if (typeof window === 'undefined') return
+  if (typeof document === 'undefined') return
+
+  if (scrollLockCount <= 0) return
+  scrollLockCount -= 1
+  if (scrollLockCount > 0) return
+
+  const state = scrollLockState
+  scrollLockState = null
+  if (!state) return
+
+  const html = document.documentElement
+  const body = document.body
+
+  html.style.overflow = state.htmlOverflow
+  body.style.overflow = state.bodyOverflow
+  body.style.position = state.bodyPosition
+  body.style.top = state.bodyTop
+  body.style.left = state.bodyLeft
+  body.style.right = state.bodyRight
+  body.style.width = state.bodyWidth
+
+  window.scrollTo(0, state.scrollY)
+}
+
 function makeSheetId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
@@ -57,13 +129,15 @@ export function BottomSheet(props: {
     if (!open) return
     const sheetId = sheetIdRef.current
     pushOpenSheet(sheetId)
+    lockBodyScroll()
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isTopSheet(sheetId)) onCloseRef.current()
+      if (e.key === 'Escape' && isTopSheet(sheetId)) onCloseRef.current()       
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
       window.removeEventListener('keydown', onKeyDown)
       removeOpenSheet(sheetId)
+      unlockBodyScroll()
     }
   }, [open])
 
