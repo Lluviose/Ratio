@@ -1,5 +1,6 @@
 import { useCallback } from 'react'
 import { useLocalStorageState } from './useLocalStorageState'
+import { normalizeMoney } from './money'
 import type { AccountOp, AccountOpInput } from './accountOps'
 
 function createId() {
@@ -18,6 +19,66 @@ function toNonEmptyString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const s = value.trim()
   return s ? s : null
+}
+
+function normalizeAccountOp(op: AccountOp): AccountOp {
+  if (op.kind === 'rename') return op
+
+  if (op.kind === 'set_balance') {
+    return {
+      ...op,
+      before: normalizeMoney(op.before),
+      after: normalizeMoney(op.after),
+    }
+  }
+
+  if (op.kind === 'adjust') {
+    return {
+      ...op,
+      delta: normalizeMoney(op.delta),
+      before: normalizeMoney(op.before),
+      after: normalizeMoney(op.after),
+    }
+  }
+
+  return {
+    ...op,
+    amount: normalizeMoney(op.amount),
+    fromBefore: normalizeMoney(op.fromBefore),
+    fromAfter: normalizeMoney(op.fromAfter),
+    toBefore: normalizeMoney(op.toBefore),
+    toAfter: normalizeMoney(op.toAfter),
+  }
+}
+
+function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
+  if (op.kind === 'rename') return op
+
+  if (op.kind === 'set_balance') {
+    return {
+      ...op,
+      before: normalizeMoney(op.before),
+      after: normalizeMoney(op.after),
+    }
+  }
+
+  if (op.kind === 'adjust') {
+    return {
+      ...op,
+      delta: normalizeMoney(op.delta),
+      before: normalizeMoney(op.before),
+      after: normalizeMoney(op.after),
+    }
+  }
+
+  return {
+    ...op,
+    amount: normalizeMoney(op.amount),
+    fromBefore: normalizeMoney(op.fromBefore),
+    fromAfter: normalizeMoney(op.fromAfter),
+    toBefore: normalizeMoney(op.toBefore),
+    toAfter: normalizeMoney(op.toAfter),
+  }
 }
 
 function coerceOps(value: unknown): AccountOp[] {
@@ -39,7 +100,7 @@ function coerceOps(value: unknown): AccountOp[] {
       const beforeName = typeof item.beforeName === 'string' ? item.beforeName : ''
       const afterName = typeof item.afterName === 'string' ? item.afterName : ''
       if (!accountId) continue
-      result.push({
+      const next: AccountOp = {
         id,
         kind,
         at,
@@ -47,7 +108,8 @@ function coerceOps(value: unknown): AccountOp[] {
         accountId,
         beforeName,
         afterName,
-      })
+      }
+      result.push(next)
       continue
     }
 
@@ -56,7 +118,7 @@ function coerceOps(value: unknown): AccountOp[] {
       const before = toFiniteNumber(item.before)
       const after = toFiniteNumber(item.after)
       if (!accountId || before == null || after == null) continue
-      result.push({
+      const next: AccountOp = {
         id,
         kind,
         at,
@@ -64,7 +126,8 @@ function coerceOps(value: unknown): AccountOp[] {
         accountId,
         before,
         after,
-      })
+      }
+      result.push(normalizeAccountOp(next))
       continue
     }
 
@@ -74,7 +137,7 @@ function coerceOps(value: unknown): AccountOp[] {
       const before = toFiniteNumber(item.before)
       const after = toFiniteNumber(item.after)
       if (!accountId || delta == null || before == null || after == null) continue
-      result.push({
+      const next: AccountOp = {
         id,
         kind,
         at,
@@ -83,7 +146,8 @@ function coerceOps(value: unknown): AccountOp[] {
         delta,
         before,
         after,
-      })
+      }
+      result.push(normalizeAccountOp(next))
       continue
     }
 
@@ -96,20 +160,21 @@ function coerceOps(value: unknown): AccountOp[] {
       const toBefore = toFiniteNumber(item.toBefore)
       const toAfter = toFiniteNumber(item.toAfter)
       if (!fromId || !toId) continue
-      if ([amount, fromBefore, fromAfter, toBefore, toAfter].some((v) => v == null)) continue
-      result.push({
+      if (amount == null || fromBefore == null || fromAfter == null || toBefore == null || toAfter == null) continue
+      const next: AccountOp = {
         id,
         kind,
         at,
         accountType: accountType as AccountOp['accountType'],
         fromId,
         toId,
-        amount: amount!,
-        fromBefore: fromBefore!,
-        fromAfter: fromAfter!,
-        toBefore: toBefore!,
-        toAfter: toAfter!,
-      })
+        amount,
+        fromBefore,
+        fromAfter,
+        toBefore,
+        toAfter,
+      }
+      result.push(normalizeAccountOp(next))
     }
   }
 
@@ -123,7 +188,8 @@ export function useAccountOps() {
 
   const addOp = useCallback(
     (op: AccountOpInput) => {
-      setOps((prev) => [{ ...op, id: createId() } as AccountOp, ...prev])
+      const normalized = normalizeAccountOpInput(op)
+      setOps((prev) => [{ ...normalized, id: createId() } as AccountOp, ...prev])
     },
     [setOps],
   )
@@ -137,7 +203,8 @@ export function useAccountOps() {
 
   const updateOp = useCallback(
     (id: string, next: AccountOp) => {
-      setOps((prev) => prev.map((op) => (op.id === id ? { ...next, id } : op)))
+      const normalized = normalizeAccountOp(next)
+      setOps((prev) => prev.map((op) => (op.id === id ? { ...normalized, id } : op)))
     },
     [setOps],
   )

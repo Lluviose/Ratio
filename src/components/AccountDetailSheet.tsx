@@ -5,6 +5,7 @@ import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import { useOverlay } from '../lib/overlay'
 import { formatCny } from '../lib/format'
+import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from '../lib/money'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
 import { type ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
@@ -34,8 +35,14 @@ function isDebtAccount(account: Account) {
 }
 
 function applyFlow(account: Account, flow: number) {
-  if (isDebtAccount(account)) return account.balance - flow
-  return account.balance + flow
+  if (isDebtAccount(account)) return addMoney(account.balance, -flow)
+  return addMoney(account.balance, flow)
+}
+
+function toMoneyInputValue(value: number) {
+  const normalized = normalizeMoney(value)
+  if (Number.isInteger(normalized)) return String(normalized)
+  return normalized.toFixed(2).replace(/\.?0+$/, '')
 }
 
 export function AccountDetailSheet(props: {
@@ -164,7 +171,7 @@ export function AccountDetailSheet(props: {
     setEditingOpId(null)
     setSwipedOpId(null)
     setRenameValue(account.name)
-    setBalanceValue(String(account.balance))
+    setBalanceValue(toMoneyInputValue(account.balance))
     setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
@@ -278,11 +285,12 @@ export function AccountDetailSheet(props: {
     )
 
   const setBalanceValueTrimmed = balanceValue.trim()
-  const setBalanceParsed = Number(setBalanceValueTrimmed)
-  const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsed)
+  const setBalanceParsedRaw = Number(setBalanceValueTrimmed)
+  const setBalanceParsed = normalizeMoney(setBalanceParsedRaw)
+  const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsedRaw)
   const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
-  const setBalanceNoopValue = editingSetBalanceOp ? editingSetBalanceOp.after : account.balance
-  const isSetBalanceNoop = canSubmitSetBalance && setBalanceParsed === setBalanceNoopValue
+  const setBalanceNoopValue = normalizeMoney(editingSetBalanceOp ? editingSetBalanceOp.after : account.balance)
+  const isSetBalanceNoop = canSubmitSetBalance && moneyEquals(setBalanceParsed, setBalanceNoopValue)
   const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
 
   const OP_DELETE_REVEAL_PX = 72
@@ -303,9 +311,10 @@ export function AccountDetailSheet(props: {
   }
 
   const adjustAmountTrimmed = adjustAmount.trim()
-  const adjustParsed = Number(adjustAmountTrimmed)
+  const adjustParsedRaw = Number(adjustAmountTrimmed)
+  const adjustParsed = normalizeMoney(adjustParsedRaw)
   const canSubmitAdjust =
-    adjustAmountTrimmed !== '' && Number.isFinite(adjustParsed) && adjustParsed > 0
+    adjustAmountTrimmed !== '' && Number.isFinite(adjustParsedRaw) && adjustParsed > 0
   const newAdjustDelta = canSubmitAdjust
     ? adjustDirection === 'plus'
       ? adjustParsed
@@ -313,11 +322,11 @@ export function AccountDetailSheet(props: {
     : 0
   const editingAdjustOp = editingOp?.kind === 'adjust' ? editingOp : null
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
-  const previewAdjustDiff = editingAdjustOp ? newAdjustDelta - editingAdjustOp.delta : newAdjustDelta
+  const previewAdjustDiff = editingAdjustOp ? subtractMoney(newAdjustDelta, editingAdjustOp.delta) : newAdjustDelta
   const canApplyAdjustDiff = editingAdjustOp ? canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at) : true
   const previewAdjustApplied = canApplyAdjustDiff ? previewAdjustDiff : 0
-  const previewAdjustAfter = account.balance + previewAdjustApplied
-  const isAdjustNoop = Boolean(editingAdjustOp && canSubmitAdjust && newAdjustDelta === editingAdjustOp.delta)
+  const previewAdjustAfter = addMoney(account.balance, previewAdjustApplied)
+  const isAdjustNoop = Boolean(editingAdjustOp && canSubmitAdjust && moneyEquals(newAdjustDelta, editingAdjustOp.delta))
 
   const refocusActiveInput = () => {
     const el =
@@ -338,7 +347,7 @@ export function AccountDetailSheet(props: {
     setEditingOpId(null)
     setSwipedOpId(null)
     setRenameValue(account.name)
-    setBalanceValue(String(account.balance))
+    setBalanceValue(toMoneyInputValue(account.balance))
     setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
@@ -389,15 +398,18 @@ export function AccountDetailSheet(props: {
       refocusActiveInput()
       return
     }
-    const num = Number(raw)
-    if (!Number.isFinite(num)) {
+
+    const parsed = Number(raw)
+    if (!Number.isFinite(parsed)) {
       toast('请输入正确余额', { tone: 'danger' })
       refocusActiveInput()
       return
     }
 
+    const num = normalizeMoney(parsed)
+
     if (editingSetBalanceOp) {
-      if (num === editingSetBalanceOp.after) {
+      if (moneyEquals(num, editingSetBalanceOp.after)) {
         balanceInputRef.current?.blur()
         setEditingOpId(null)
         transitionToAction('none')
@@ -405,7 +417,7 @@ export function AccountDetailSheet(props: {
       }
 
       const canApply = canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at)
-      const diff = num - editingSetBalanceOp.after
+      const diff = subtractMoney(num, editingSetBalanceOp.after)
       if (canApply && diff !== 0) onAdjust(editingSetBalanceOp.accountId, diff)
 
       onUpdateOp(editingSetBalanceOp.id, { ...editingSetBalanceOp, after: num })
@@ -418,7 +430,7 @@ export function AccountDetailSheet(props: {
       return
     }
 
-    if (num === account.balance) {
+    if (moneyEquals(num, account.balance)) {
       balanceInputRef.current?.blur()
       transitionToAction('none')
       return
@@ -429,7 +441,7 @@ export function AccountDetailSheet(props: {
       at: new Date().toISOString(),
       accountType: account.type,
       accountId: account.id,
-      before: account.balance,
+      before: normalizeMoney(account.balance),
       after: num,
     })
     onSetBalance(account.id, num)
@@ -440,8 +452,9 @@ export function AccountDetailSheet(props: {
 
   const submitAdjust = () => {
     const raw = adjustAmount.trim()
-    const num = Number(raw)
-    if (!raw || !Number.isFinite(num) || num <= 0) {
+    const parsed = Number(raw)
+    const num = normalizeMoney(parsed)
+    if (!raw || !Number.isFinite(parsed) || num <= 0) {
       toast('请输入正确金额', { tone: 'danger' })
       refocusActiveInput()
       return
@@ -450,7 +463,7 @@ export function AccountDetailSheet(props: {
     const delta = adjustDirection === 'plus' ? num : -num
 
     if (editingAdjustOp) {
-      if (delta === editingAdjustOp.delta) {
+      if (moneyEquals(delta, editingAdjustOp.delta)) {
         adjustInputRef.current?.blur()
         setEditingOpId(null)
         transitionToAction('none')
@@ -458,10 +471,10 @@ export function AccountDetailSheet(props: {
       }
 
       const canApply = canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at)
-      const diff = delta - editingAdjustOp.delta
+      const diff = subtractMoney(delta, editingAdjustOp.delta)
       if (canApply && diff !== 0) onAdjust(editingAdjustOp.accountId, diff)
 
-      onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: editingAdjustOp.before + delta })
+      onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: addMoney(editingAdjustOp.before, delta) })
       toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
 
       setAdjustAmount('')
@@ -472,7 +485,7 @@ export function AccountDetailSheet(props: {
       return
     }
 
-    const after = account.balance + delta
+    const after = addMoney(account.balance, delta)
 
     onAddOp({
       kind: 'adjust',
@@ -480,7 +493,7 @@ export function AccountDetailSheet(props: {
       accountType: account.type,
       accountId: account.id,
       delta,
-      before: account.balance,
+      before: normalizeMoney(account.balance),
       after,
     })
     onAdjust(account.id, delta)
@@ -492,12 +505,13 @@ export function AccountDetailSheet(props: {
 
   const submitTransfer = () => {
     if (editingTransferOp) {
-      const num = Number(transferAmount)
-      if (!Number.isFinite(num) || num <= 0) {
+      const parsed = Number(transferAmount)
+      const num = normalizeMoney(parsed)
+      if (!Number.isFinite(parsed) || num <= 0) {
         toast('请输入正确金额', { tone: 'danger' })
         return
       }
-      if (num === editingTransferOp.amount) {
+      if (moneyEquals(num, editingTransferOp.amount)) {
         setTransferAmount('')
         setTransferPeerId('')
         setEditingOpId(null)
@@ -512,13 +526,13 @@ export function AccountDetailSheet(props: {
         return
       }
 
-      const fromBefore = editingTransferOp.fromBefore
-      const toBefore = editingTransferOp.toBefore
+      const fromBefore = normalizeMoney(editingTransferOp.fromBefore)
+      const toBefore = normalizeMoney(editingTransferOp.toBefore)
       const nextFromAfter = applyFlow({ ...from, balance: fromBefore }, -num)
       const nextToAfter = applyFlow({ ...to, balance: toBefore }, num)
 
-      const diffFrom = (nextFromAfter - fromBefore) - (editingTransferOp.fromAfter - fromBefore)
-      const diffTo = (nextToAfter - toBefore) - (editingTransferOp.toAfter - toBefore)
+      const diffFrom = subtractMoney(nextFromAfter, normalizeMoney(editingTransferOp.fromAfter))
+      const diffTo = subtractMoney(nextToAfter, normalizeMoney(editingTransferOp.toAfter))
 
       const canApplyFrom = canRollbackBalance(editingTransferOp.fromId, editingTransferOp.at)
       const canApplyTo = canRollbackBalance(editingTransferOp.toId, editingTransferOp.at)
@@ -550,8 +564,9 @@ export function AccountDetailSheet(props: {
       return
     }
 
-    const num = Number(transferAmount)
-    if (!Number.isFinite(num) || num <= 0) {
+    const parsed = Number(transferAmount)
+    const num = normalizeMoney(parsed)
+    if (!Number.isFinite(parsed) || num <= 0) {
       toast('请输入正确金额', { tone: 'danger' })
       return
     }
@@ -559,8 +574,10 @@ export function AccountDetailSheet(props: {
     const from = transferDirection === 'out' ? account : peer
     const to = transferDirection === 'out' ? peer : account
 
-    const fromAfter = applyFlow(from, -num)
-    const toAfter = applyFlow(to, num)
+    const fromBefore = normalizeMoney(from.balance)
+    const toBefore = normalizeMoney(to.balance)
+    const fromAfter = applyFlow({ ...from, balance: fromBefore }, -num)
+    const toAfter = applyFlow({ ...to, balance: toBefore }, num)
 
     onAddOp({
       kind: 'transfer',
@@ -569,9 +586,9 @@ export function AccountDetailSheet(props: {
       fromId: from.id,
       toId: to.id,
       amount: num,
-      fromBefore: from.balance,
+      fromBefore,
       fromAfter,
-      toBefore: to.balance,
+      toBefore,
       toAfter,
     })
     onTransfer(from.id, to.id, num)
@@ -775,7 +792,7 @@ export function AccountDetailSheet(props: {
                     onClick={() => {
                       setMoreOpen(false)
                       setNoteValue('')
-                      setBalanceValue(String(account.balance))
+                      setBalanceValue(toMoneyInputValue(account.balance))
                       transitionToAction('set_balance')
                     }}
                     whileTap={{ scale: 0.99 }}
@@ -856,7 +873,7 @@ export function AccountDetailSheet(props: {
                             if (op.kind === 'set_balance') {
                               setEditingOpId(op.id)
                               setNoteValue('')
-                              setBalanceValue(String(op.after))
+                              setBalanceValue(toMoneyInputValue(op.after))
                               transitionToAction('set_balance')
                               return
                             }
@@ -865,7 +882,7 @@ export function AccountDetailSheet(props: {
                               setEditingOpId(op.id)
                               setNoteValue('')
                               setAdjustDirection(op.delta >= 0 ? 'plus' : 'minus')
-                              setAdjustAmount(String(Math.abs(op.delta)))
+                              setAdjustAmount(toMoneyInputValue(Math.abs(op.delta)))
                               transitionToAction('adjust')
                               return
                             }
@@ -877,7 +894,7 @@ export function AccountDetailSheet(props: {
                               setNoteValue('')
                               setTransferDirection(direction)
                               setTransferPeerId(peerId)
-                              setTransferAmount(String(op.amount))
+                              setTransferAmount(toMoneyInputValue(op.amount))
                               transitionToAction('transfer')
                             }
                           }

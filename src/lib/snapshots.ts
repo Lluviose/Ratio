@@ -1,5 +1,6 @@
 import type { Account, AccountGroupId, AccountTypeId } from './accounts'
 import { getGroupIdByAccountType } from './accounts'
+import { addMoney, normalizeMoney } from './money'
 
 export type SnapshotAccount = {
   id: string
@@ -19,8 +20,8 @@ export type Snapshot = {
   accounts?: SnapshotAccount[]
 }
 
-function toFiniteNumber(v: unknown): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : 0
+function toFiniteMoney(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? normalizeMoney(value) : 0
 }
 
 export function normalizeSnapshot(s: Snapshot): Snapshot {
@@ -35,18 +36,18 @@ export function normalizeSnapshot(s: Snapshot): Snapshot {
           id: a.id as string,
           type: a.type as AccountTypeId,
           name: a.name as string,
-          balance: toFiniteNumber(a.balance),
+          balance: toFiniteMoney(a.balance),
         }))
     : undefined
 
   return {
     date,
-    net: toFiniteNumber(anySnap.net),
-    debt: toFiniteNumber(anySnap.debt),
-    cash: toFiniteNumber(anySnap.cash ?? anySnap.liquid),
-    invest: toFiniteNumber(anySnap.invest),
-    fixed: toFiniteNumber(anySnap.fixed),
-    receivable: toFiniteNumber(anySnap.receivable),
+    net: toFiniteMoney(anySnap.net),
+    debt: toFiniteMoney(anySnap.debt),
+    cash: toFiniteMoney(anySnap.cash ?? anySnap.liquid),
+    invest: toFiniteMoney(anySnap.invest),
+    fixed: toFiniteMoney(anySnap.fixed),
+    receivable: toFiniteMoney(anySnap.receivable),
     accounts,
   }
 }
@@ -69,17 +70,20 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
   }
 
   for (const a of accounts) {
-    const balance = Number.isFinite(a.balance) ? a.balance : 0
+    const balance = toFiniteMoney(a.balance)
     const gid = getGroupIdByAccountType(a.type)
-    byGroup[gid] += balance
+    byGroup[gid] = addMoney(byGroup[gid], balance)
   }
 
-  const assetsTotal = byGroup.liquid + byGroup.invest + byGroup.fixed + byGroup.receivable
+  let assetsTotal = 0
+  for (const gid of ['liquid', 'invest', 'fixed', 'receivable'] as const) {
+    assetsTotal = addMoney(assetsTotal, byGroup[gid])
+  }
   const debtTotal = byGroup.debt
 
   return {
     date,
-    net: assetsTotal - debtTotal,
+    net: addMoney(assetsTotal, -debtTotal),
     debt: debtTotal,
     cash: byGroup.liquid,
     invest: byGroup.invest,
@@ -89,7 +93,7 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
       id: a.id,
       type: a.type,
       name: a.name,
-      balance: a.balance,
+      balance: toFiniteMoney(a.balance),
     })),
   }
 }

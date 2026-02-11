@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { useLocalStorageState } from './useLocalStorageState'
+import { addMoney, normalizeMoney } from './money'
 import {
   accountGroups,
   defaultAccountName,
@@ -39,8 +40,8 @@ function isDebtAccount(type: AccountTypeId) {
 }
 
 function applyFlow(type: AccountTypeId, balance: number, flow: number) {
-  if (isDebtAccount(type)) return balance - flow
-  return balance + flow
+  if (isDebtAccount(type)) return addMoney(balance, -flow)
+  return addMoney(balance, flow)
 }
 
 const initialAccounts: Account[] = []
@@ -57,7 +58,8 @@ function coerceAccounts(value: unknown): Account[] {
     const id = typeof item.id === 'string' && item.id.trim() ? item.id : createId()
     const name =
       typeof item.name === 'string' && item.name.trim() ? item.name.trim() : defaultAccountName(type)
-    const balance = typeof item.balance === 'number' && Number.isFinite(item.balance) ? item.balance : 0
+    const balance =
+      typeof item.balance === 'number' && Number.isFinite(item.balance) ? normalizeMoney(item.balance) : 0
     const updatedAt = typeof item.updatedAt === 'string' && item.updatedAt ? item.updatedAt : now
 
     result.push({ id, type, name, balance, updatedAt })
@@ -88,8 +90,10 @@ export function useAccounts() {
 
   const updateBalance = useCallback(
     (id: string, balance: number) => {
+      if (!Number.isFinite(balance)) return
+      const nextBalance = normalizeMoney(balance)
       setAccounts((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, balance, updatedAt: nowIso() } : a)),
+        prev.map((a) => (a.id === id ? { ...a, balance: nextBalance, updatedAt: nowIso() } : a)),
       )
     },
     [setAccounts],
@@ -106,9 +110,13 @@ export function useAccounts() {
 
   const adjustBalance = useCallback(
     (id: string, delta: number) => {
-      if (!Number.isFinite(delta) || delta === 0) return
+      if (!Number.isFinite(delta)) return
+      const normalizedDelta = normalizeMoney(delta)
+      if (normalizedDelta === 0) return
       setAccounts((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, balance: a.balance + delta, updatedAt: nowIso() } : a)),
+        prev.map((a) =>
+          a.id === id ? { ...a, balance: addMoney(a.balance, normalizedDelta), updatedAt: nowIso() } : a,
+        ),
       )
     },
     [setAccounts],
@@ -117,15 +125,18 @@ export function useAccounts() {
   const transfer = useCallback(
     (fromId: string, toId: string, amount: number) => {
       if (fromId === toId) return
-      if (!Number.isFinite(amount) || amount <= 0) return
+      if (!Number.isFinite(amount)) return
+
+      const normalizedAmount = normalizeMoney(amount)
+      if (normalizedAmount <= 0) return
 
       setAccounts((prev) => {
         const from = prev.find((a) => a.id === fromId)
         const to = prev.find((a) => a.id === toId)
         if (!from || !to) return prev
 
-        const fromAfter = applyFlow(from.type, from.balance, -amount)
-        const toAfter = applyFlow(to.type, to.balance, amount)
+        const fromAfter = applyFlow(from.type, from.balance, -normalizedAmount)
+        const toAfter = applyFlow(to.type, to.balance, normalizedAmount)
         const ts = nowIso()
 
         return prev.map((a) => {
@@ -166,7 +177,7 @@ export function useAccounts() {
 
     const groupCards = (Object.keys(byGroup) as AccountGroupId[]).map((gid) => {
       const list = byGroup[gid]
-      const total = list.reduce((s, a) => s + a.balance, 0)
+      const total = list.reduce((sum, a) => addMoney(sum, a.balance), 0)
       return {
         group: accountGroups[gid],
         accounts: list,
@@ -176,17 +187,17 @@ export function useAccounts() {
 
     const assetsTotal = groupCards
       .filter((g) => g.group.id !== 'debt')
-      .reduce((s, g) => s + g.total, 0)
+      .reduce((sum, g) => addMoney(sum, g.total), 0)
 
     const debtTotal = groupCards
       .filter((g) => g.group.id === 'debt')
-      .reduce((s, g) => s + g.total, 0)
+      .reduce((sum, g) => addMoney(sum, g.total), 0)
 
     return {
       groupCards,
       assetsTotal,
       debtTotal,
-      netWorth: assetsTotal - debtTotal,
+      netWorth: addMoney(assetsTotal, -debtTotal),
     }
   }, [accounts])
 

@@ -4,7 +4,8 @@ import { useLocalStorageState } from './useLocalStorageState'
 import { buildSnapshot, normalizeSnapshot, todayDateKey, type Snapshot } from './snapshots'
 
 function coerceSnapshots(value: unknown): Snapshot[] {
-  return Array.isArray(value) ? (value as Snapshot[]) : []
+  if (!Array.isArray(value)) return []
+  return value.map((item) => normalizeSnapshot(item as Snapshot))
 }
 
 export function useSnapshots() {
