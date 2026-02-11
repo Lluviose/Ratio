@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
 import { useOverlay } from '../lib/overlay'
-import { formatCny } from '../lib/format'
+import { formatCny as formatCnyBase } from '../lib/format'
 import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from '../lib/money'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
 import { type ThemeColors } from '../lib/themes'
@@ -22,6 +22,10 @@ function formatTime(iso: string) {
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
   return `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`
+}
+
+function formatCny(value: number) {
+  return formatCnyBase(value, { keepCents: true })
 }
 
 function formatSigned(amount: number) {
