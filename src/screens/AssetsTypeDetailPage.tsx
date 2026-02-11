@@ -12,6 +12,7 @@ import {
   type ManualAccountOrderByType,
 } from '../lib/accountSort'
 import { formatCny } from '../lib/format'
+import { addMoney } from '../lib/money'
 import { accountGroups, getAccountTypeOption, type Account, type AccountTypeId } from '../lib/accounts'
 import { accountDetailSheetLayoutId } from '../lib/layoutIds'
 import { pickForegroundColor } from '../lib/themes'
@@ -60,7 +61,7 @@ export function AssetsTypeDetailPage(props: {
     )
   }, [accountSortMode, accounts, manualAccountOrderByType, type])
 
-  const total = useMemo(() => list.reduce((s, a) => s + a.balance, 0), [list])  
+  const total = useMemo(() => list.reduce((sum, a) => addMoney(sum, a.balance), 0), [list])  
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
 

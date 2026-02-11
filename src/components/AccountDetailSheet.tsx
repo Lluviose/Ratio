@@ -834,7 +834,7 @@ export function AccountDetailSheet(props: {
 
                           if (op.kind === 'set_balance') {
                             title = '修改余额'
-                            delta = op.after - op.before
+                            delta = subtractMoney(op.after, op.before)
                           }
 
                           if (op.kind === 'adjust') {
@@ -847,10 +847,10 @@ export function AccountDetailSheet(props: {
                             const to = byId.get(op.toId)
                             if (account.id === op.fromId) {
                               title = `转出到 ${to?.name ?? '账户'}`
-                              delta = op.fromAfter - op.fromBefore
+                              delta = subtractMoney(op.fromAfter, op.fromBefore)
                             } else {
                               title = `从 ${from?.name ?? '账户'} 转入`
-                              delta = op.toAfter - op.toBefore
+                              delta = subtractMoney(op.toAfter, op.toBefore)
                             }
                           }
 
@@ -864,7 +864,7 @@ export function AccountDetailSheet(props: {
                                   : 'text-slate-400'
 
                           const displayAfter = runningAfter
-                          runningAfter -= delta ?? 0
+                          runningAfter = addMoney(runningAfter, -(delta ?? 0))
 
                           const canDeleteOp = op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
                           const canEditOp = canDeleteOp
@@ -907,7 +907,7 @@ export function AccountDetailSheet(props: {
                               rollbackTargets.push({
                                 accountId: op.accountId,
                                 name: getAccountName(op.accountId),
-                                delta: -op.delta,
+                                delta: subtractMoney(0, op.delta),
                                 canRollback: canRollbackBalance(op.accountId, op.at),
                               })
                             }
@@ -916,7 +916,7 @@ export function AccountDetailSheet(props: {
                               rollbackTargets.push({
                                 accountId: op.accountId,
                                 name: getAccountName(op.accountId),
-                                delta: op.before - op.after,
+                                delta: subtractMoney(op.before, op.after),
                                 canRollback: canRollbackBalance(op.accountId, op.at),
                               })
                             }
@@ -925,13 +925,13 @@ export function AccountDetailSheet(props: {
                               rollbackTargets.push({
                                 accountId: op.fromId,
                                 name: getAccountName(op.fromId),
-                                delta: op.fromBefore - op.fromAfter,
+                                delta: subtractMoney(op.fromBefore, op.fromAfter),
                                 canRollback: canRollbackBalance(op.fromId, op.at),
                               })
                               rollbackTargets.push({
                                 accountId: op.toId,
                                 name: getAccountName(op.toId),
-                                delta: op.toBefore - op.toAfter,
+                                delta: subtractMoney(op.toBefore, op.toAfter),
                                 canRollback: canRollbackBalance(op.toId, op.at),
                               })
                             }
@@ -1813,7 +1813,7 @@ export function AccountDetailSheet(props: {
 
                   if (op.kind === 'set_balance') {
                     title = '修改余额'
-                    delta = op.after - op.before
+                    delta = subtractMoney(op.after, op.before)
                     after = op.after
                   }
 
@@ -1828,11 +1828,11 @@ export function AccountDetailSheet(props: {
                     const to = byId.get(op.toId)
                     if (account.id === op.fromId) {
                       title = `转出到 ${to?.name ?? '账户'}`
-                      delta = op.fromAfter - op.fromBefore
+                      delta = subtractMoney(op.fromAfter, op.fromBefore)
                       after = op.fromAfter
                     } else {
                       title = `从 ${from?.name ?? '账户'} 转入`
-                      delta = op.toAfter - op.toBefore
+                      delta = subtractMoney(op.toAfter, op.toBefore)
                       after = op.toAfter
                     }
                   }

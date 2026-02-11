@@ -5,6 +5,7 @@ import { getAccountTypeOption, type Account, type AccountGroup, type AccountType
 import { formatCny } from '../lib/format'
 import { pickForegroundColor } from '../lib/themes'
 import { allocateIntegerPercents } from '../lib/percent'
+import { addMoney } from '../lib/money'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
@@ -599,7 +600,7 @@ export function AssetsScreen(props: {
       const total = Number.isFinite(g?.total) ? Math.max(0, g?.total ?? 0) : 0
       return { id, amount: total }
     })
-    const assetTotal = assetAmounts.reduce((s, a) => s + a.amount, 0)
+    const assetTotal = assetAmounts.reduce((sum, a) => addMoney(sum, a.amount), 0)
     const assetPercents = allocateIntegerPercents(assetAmounts)
     const assets: Block[] = assetOrder
       .map((id) => {
@@ -725,7 +726,7 @@ export function AssetsScreen(props: {
     }
 
     const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
-    const total = ratioAssets.reduce((s, b) => s + b.amount, 0)
+    const total = ratioAssets.reduce((sum, b) => addMoney(sum, b.amount), 0)
 
     // 最小高度阈值（允许字体缩放到最小时仍可显示）
     // 最小字体 = 34/3 ≈ 11px，加上 padding 和一些余量
