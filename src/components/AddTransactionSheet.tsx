@@ -4,6 +4,7 @@ import { SegmentedControl } from './SegmentedControl'
 import { useOverlay } from '../lib/overlay'
 import type { Transaction, TxType } from '../lib/ledger'
 import { normalizeAmount } from '../lib/ledger'
+import { normalizeMoney } from '../lib/money'
 
 const categories = ['餐饮', '交通', '购物', '房租', '工资', '其他']
 const defaultAccounts = ['现金', '银行卡', '支付宝', '微信']
@@ -40,8 +41,9 @@ export function AddTransactionSheet(props: {
   }
 
   const submit = () => {
-    const num = Number(amount)
-    if (!Number.isFinite(num) || num <= 0) {
+    const parsed = Number(amount)
+    const num = normalizeMoney(parsed)
+    if (!Number.isFinite(parsed) || num <= 0) {
       toast('请输入正确金额', { tone: 'danger' })
       amountInputRef.current?.focus()
       amountInputRef.current?.select()

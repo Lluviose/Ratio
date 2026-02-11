@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { formatCny } from '../lib/format'
+import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
 import type { Snapshot } from '../lib/snapshots'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -89,13 +90,13 @@ function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: n
 
   for (const a of curr.accounts) {
     const before = prevById.get(a.id) ?? 0
-    const delta = a.balance - before
+    const delta = subtractMoney(a.balance, before)
     if (delta !== 0) changes.push({ id: a.id, name: a.name, delta })
   }
 
   for (const a of prev.accounts) {
     if (!currById.has(a.id)) {
-      const delta = -a.balance
+      const delta = subtractMoney(0, a.balance)
       if (delta !== 0) changes.push({ id: a.id, name: a.name, delta })
     }
   }

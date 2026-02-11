@@ -1,3 +1,5 @@
+import { normalizeMoney } from './money'
+
 export function formatMoney(value: number) {
   const abs = Math.abs(value)
   const sign = value < 0 ? '-' : ''
@@ -7,5 +9,7 @@ export function formatMoney(value: number) {
 }
 
 export function formatCny(value: number) {
-  return `¥${Math.round(value).toLocaleString('zh-CN')}`
+  const normalized = Number.isFinite(value) ? normalizeMoney(value) : 0
+  const safeValue = Object.is(normalized, -0) ? 0 : normalized
+  return `\u00A5${safeValue.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }

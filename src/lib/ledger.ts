@@ -1,3 +1,5 @@
+import { normalizeMoney } from './money'
+
 export type TxType = 'expense' | 'income'
 
 export type Transaction = {
@@ -15,6 +17,7 @@ export function createId() {
 }
 
 export function normalizeAmount(type: TxType, amount: number) {
-  const abs = Math.abs(amount)
+  const abs = Number.isFinite(amount) ? normalizeMoney(Math.abs(amount)) : 0
+  if (abs === 0) return 0
   return type === 'expense' ? -abs : abs
 }

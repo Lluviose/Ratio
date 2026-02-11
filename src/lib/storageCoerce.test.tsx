@@ -77,6 +77,31 @@ describe('localStorage coercion', () => {
     expect(screen.getByTestId('amount')).toHaveTextContent('-10')
   })
 
+  it('normalizes ledger amounts to cents when loading old data', () => {
+    localStorage.setItem(
+      'ratio.ledger',
+      JSON.stringify([
+        {
+          id: 't1',
+          type: 'expense',
+          amount: 0.30000000000000004,
+          category: 'food',
+          account: 'cash',
+          date: '2025-01-01',
+          note: '',
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { transactions } = useLedger()
+      return <div data-testid="amount">{transactions[0]?.amount ?? ''}</div>
+    }
+
+    render(<Reader />)
+    expect(screen.getByTestId('amount')).toHaveTextContent('-0.3')
+  })
+
   it('normalizes account balances to cents when loading old data', async () => {
     localStorage.setItem(
       'ratio.accounts',

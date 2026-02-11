@@ -58,7 +58,11 @@ export function useLedger() {
 
   const addTransaction = useCallback(
     (tx: Omit<Transaction, 'id'>) => {
-      setTransactions((prev) => [{ ...tx, id: createId() }, ...prev])
+      const normalized = {
+        ...tx,
+        amount: normalizeAmount(tx.type, tx.amount),
+      }
+      setTransactions((prev) => [{ ...normalized, id: createId() }, ...prev])
     },
     [setTransactions],
   )

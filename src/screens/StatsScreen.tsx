@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
+import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import type { ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
 
@@ -32,7 +33,7 @@ function diffDays(startDateKey: string, endDateKey: string): number | null {
 }
 
 function sumAssets(s: Snapshot) {
-  return s.cash + s.invest + s.fixed + s.receivable
+  return addMoney(addMoney(s.cash, s.invest), addMoney(s.fixed, s.receivable))
 }
 
 function safeDiv(numerator: number, denominator: number): number | null {
@@ -108,20 +109,20 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     const assetsEnd = sumAssets(end)
 
     const delta = {
-      net: end.net - start.net,
-      assets: assetsEnd - assetsStart,
-      debt: end.debt - start.debt,
-      cash: end.cash - start.cash,
-      invest: end.invest - start.invest,
-      fixed: end.fixed - start.fixed,
-      receivable: end.receivable - start.receivable,
+      net: subtractMoney(end.net, start.net),
+      assets: subtractMoney(assetsEnd, assetsStart),
+      debt: subtractMoney(end.debt, start.debt),
+      cash: subtractMoney(end.cash, start.cash),
+      invest: subtractMoney(end.invest, start.invest),
+      fixed: subtractMoney(end.fixed, start.fixed),
+      receivable: subtractMoney(end.receivable, start.receivable),
     }
 
     const days = diffDays(start.date, end.date)
 
-    const currentAssets = end.cash + end.invest + end.receivable
-    const quickAssets = end.cash + end.invest
-    const netLiquid = end.cash - end.debt
+    const currentAssets = addMoney(addMoney(end.cash, end.invest), end.receivable)
+    const quickAssets = addMoney(end.cash, end.invest)
+    const netLiquid = subtractMoney(end.cash, end.debt)
 
     const ratios = {
       debtToAssets: safeDiv(end.debt, assetsEnd),
@@ -140,7 +141,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       net: safeGrowth(delta.net, start.net),
       assets: safeGrowth(delta.assets, assetsStart),
       debt: safeGrowth(delta.debt, start.debt),
-      avgDailyNet: days && days > 0 ? delta.net / days : null,
+      avgDailyNet: days && days > 0 ? normalizeMoney(delta.net / days) : null,
     }
 
     return {
