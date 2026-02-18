@@ -124,6 +124,10 @@ export function AccountDetailSheet(props: {
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
   const [transferPeerId, setTransferPeerId] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
+  const isIPhone = typeof navigator !== 'undefined' && /iPhone/i.test(navigator.userAgent)
+  const amountInputProps = isIPhone
+    ? ({ type: 'number', inputMode: 'decimal', step: 'any' } as const)
+    : ({ inputMode: 'decimal' } as const)
 
   const handleClosePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault()
@@ -364,7 +368,7 @@ export function AccountDetailSheet(props: {
   const toggleBalanceSign = () => {
     const raw = balanceValue.trim()
     if (!raw) {
-      setBalanceValue('-')
+      setBalanceValue(isIPhone ? '-0' : '-')
       refocusActiveInput()
       return
     }
@@ -1130,7 +1134,7 @@ export function AccountDetailSheet(props: {
                   <input
                     ref={adjustInputRef}
                     className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
-                    inputMode="decimal"
+                    {...amountInputProps}
                     placeholder="0"
                     value={adjustAmount}
                     onChange={(e) => setAdjustAmount(e.target.value)}
@@ -1232,7 +1236,7 @@ export function AccountDetailSheet(props: {
                     <input
                       ref={balanceInputRef}
                       className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
-                      inputMode="decimal"
+                      {...amountInputProps}
                       placeholder="0"
                       value={balanceValue}
                       onChange={(e) => setBalanceValue(e.target.value)}
@@ -1391,7 +1395,7 @@ export function AccountDetailSheet(props: {
                       <div className="relative">
                         <input
                           className="input"
-                          inputMode="decimal"
+                          {...amountInputProps}
                           placeholder="0.00"
                           value={transferAmount}
                           onChange={(e) => setTransferAmount(e.target.value)}
