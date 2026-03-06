@@ -49,6 +49,11 @@ function toMoneyInputValue(value: number) {
   return normalized.toFixed(2).replace(/\.?0+$/, '')
 }
 
+function normalizeNoteValue(value: string) {
+  const note = value.trim()
+  return note ? note : undefined
+}
+
 export function AccountDetailSheet(props: {
   open: boolean
   accountId: string | null
@@ -297,8 +302,14 @@ export function AccountDetailSheet(props: {
   const setBalanceParsed = normalizeMoney(setBalanceParsedRaw)
   const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsedRaw)
   const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
+  const nextNote = normalizeNoteValue(noteValue)
   const setBalanceNoopValue = normalizeMoney(editingSetBalanceOp ? editingSetBalanceOp.after : account.balance)
-  const isSetBalanceNoop = canSubmitSetBalance && moneyEquals(setBalanceParsed, setBalanceNoopValue)
+  const isSetBalanceNoop = Boolean(
+    editingSetBalanceOp &&
+      canSubmitSetBalance &&
+      moneyEquals(setBalanceParsed, setBalanceNoopValue) &&
+      nextNote === editingSetBalanceOp.note,
+  )
   const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
 
   const OP_DELETE_REVEAL_PX = 72
@@ -334,7 +345,9 @@ export function AccountDetailSheet(props: {
   const canApplyAdjustDiff = editingAdjustOp ? canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at) : true
   const previewAdjustApplied = canApplyAdjustDiff ? previewAdjustDiff : 0
   const previewAdjustAfter = addMoney(account.balance, previewAdjustApplied)
-  const isAdjustNoop = Boolean(editingAdjustOp && canSubmitAdjust && moneyEquals(newAdjustDelta, editingAdjustOp.delta))
+  const isAdjustNoop = Boolean(
+    editingAdjustOp && canSubmitAdjust && moneyEquals(newAdjustDelta, editingAdjustOp.delta) && nextNote === editingAdjustOp.note,
+  )
 
   const refocusActiveInput = () => {
     const el =
@@ -417,7 +430,7 @@ export function AccountDetailSheet(props: {
     const num = normalizeMoney(parsed)
 
     if (editingSetBalanceOp) {
-      if (moneyEquals(num, editingSetBalanceOp.after)) {
+      if (moneyEquals(num, editingSetBalanceOp.after) && nextNote === editingSetBalanceOp.note) {
         balanceInputRef.current?.blur()
         setEditingOpId(null)
         transitionToAction('none')
@@ -428,7 +441,7 @@ export function AccountDetailSheet(props: {
       const diff = subtractMoney(num, editingSetBalanceOp.after)
       if (canApply && diff !== 0) onAdjust(editingSetBalanceOp.accountId, diff)
 
-      onUpdateOp(editingSetBalanceOp.id, { ...editingSetBalanceOp, after: num })
+      onUpdateOp(editingSetBalanceOp.id, { ...editingSetBalanceOp, after: num, note: nextNote })
       toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
 
       balanceInputRef.current?.blur()
@@ -451,6 +464,7 @@ export function AccountDetailSheet(props: {
       accountId: account.id,
       before: normalizeMoney(account.balance),
       after: num,
+      note: nextNote,
     })
     onSetBalance(account.id, num)
     balanceInputRef.current?.blur()
@@ -471,7 +485,7 @@ export function AccountDetailSheet(props: {
     const delta = adjustDirection === 'plus' ? num : -num
 
     if (editingAdjustOp) {
-      if (moneyEquals(delta, editingAdjustOp.delta)) {
+      if (moneyEquals(delta, editingAdjustOp.delta) && nextNote === editingAdjustOp.note) {
         adjustInputRef.current?.blur()
         setEditingOpId(null)
         transitionToAction('none')
@@ -482,7 +496,7 @@ export function AccountDetailSheet(props: {
       const diff = subtractMoney(delta, editingAdjustOp.delta)
       if (canApply && diff !== 0) onAdjust(editingAdjustOp.accountId, diff)
 
-      onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: addMoney(editingAdjustOp.before, delta) })
+      onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: addMoney(editingAdjustOp.before, delta), note: nextNote })
       toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
 
       setAdjustAmount('')
@@ -503,6 +517,7 @@ export function AccountDetailSheet(props: {
       delta,
       before: normalizeMoney(account.balance),
       after,
+      note: nextNote,
     })
     onAdjust(account.id, delta)
     setAdjustAmount('')
@@ -872,6 +887,7 @@ export function AccountDetailSheet(props: {
                                   : 'text-slate-400'
 
                           const displayAfter = runningAfter
+                          const noteText = op.note?.trim()
                           runningAfter = addMoney(runningAfter, -(delta ?? 0))
 
                           const canDeleteOp = op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
@@ -880,7 +896,7 @@ export function AccountDetailSheet(props: {
                           const handleEditOp = () => {
                             if (op.kind === 'set_balance') {
                               setEditingOpId(op.id)
-                              setNoteValue('')
+                              setNoteValue(op.note ?? '')
                               setBalanceValue(toMoneyInputValue(op.after))
                               transitionToAction('set_balance')
                               return
@@ -888,7 +904,7 @@ export function AccountDetailSheet(props: {
 
                             if (op.kind === 'adjust') {
                               setEditingOpId(op.id)
-                              setNoteValue('')
+                              setNoteValue(op.note ?? '')
                               setAdjustDirection(op.delta >= 0 ? 'plus' : 'minus')
                               setAdjustAmount(toMoneyInputValue(Math.abs(op.delta)))
                               transitionToAction('adjust')
@@ -1099,6 +1115,11 @@ export function AccountDetailSheet(props: {
                                     <div className="mt-1 text-[11px] font-medium text-slate-400">
                                       {formatTime(op.at)}
                                     </div>
+                                    {noteText ? (
+                                      <div className="mt-1 text-[12px] font-medium text-slate-500 break-words">
+                                        {noteText}
+                                      </div>
+                                    ) : null}
                                   </div>
 
                                   <div className="text-right shrink-0">

@@ -163,6 +163,46 @@ describe('localStorage coercion', () => {
     expect(screen.getByTestId('after')).toHaveTextContent('1.11')
   })
 
+  it('keeps loading legacy account ops without note fields', async () => {
+    localStorage.setItem(
+      'ratio.accountOps',
+      JSON.stringify([
+        {
+          id: 'op1',
+          kind: 'set_balance',
+          at: '2025-01-01T00:00:00.000Z',
+          accountType: 'cash',
+          accountId: 'a1',
+          before: 10,
+          after: 12,
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { ops } = useAccountOps()
+      const op = ops[0]
+      return (
+        <div>
+          <div data-testid="len">{ops.length}</div>
+          <div data-testid="kind">{op?.kind ?? ''}</div>
+          <div data-testid="note">{op?.note ?? 'missing'}</div>
+        </div>
+      )
+    }
+
+    render(<Reader />)
+    expect(screen.getByTestId('len')).toHaveTextContent('1')
+    expect(screen.getByTestId('kind')).toHaveTextContent('set_balance')
+    expect(screen.getByTestId('note')).toHaveTextContent('missing')
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('ratio.accountOps') ?? '[]') as Array<Record<string, unknown>>
+      expect(stored).toHaveLength(1)
+      expect(stored[0]).not.toHaveProperty('note')
+    })
+  })
+
   it('normalizes snapshots to cents when loading old data', () => {
     localStorage.setItem(
       'ratio.snapshots',

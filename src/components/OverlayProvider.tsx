@@ -36,14 +36,19 @@ export function OverlayProvider(props: { children: ReactNode }) {
   const { children } = props
 
   const toastTimersRef = useRef<Map<string, number>>(new Map())
+  const confirmQueueTimerRef = useRef<number | null>(null)
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
-  const dismissToast = useCallback((id: string) => {
+  const clearToastTimer = useCallback((id: string) => {
     const timer = toastTimersRef.current.get(id)
     if (timer != null) window.clearTimeout(timer)
     toastTimersRef.current.delete(id)
-    setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
+
+  const dismissToast = useCallback((id: string) => {
+    clearToastTimer(id)
+    setToasts((prev) => prev.filter((t) => t.id !== id))
+  }, [clearToastTimer])
 
   const toast = useCallback(
     (message: string, options?: ToastOptions) => {
@@ -54,7 +59,10 @@ export function OverlayProvider(props: { children: ReactNode }) {
       const id = makeId()
       setToasts((prev) => {
         const next = [...prev, { id, message, tone }]
-        while (next.length > 3) next.shift()
+        while (next.length > 3) {
+          const removed = next.shift()
+          if (removed) clearToastTimer(removed.id)
+        }
         return next
       })
 
@@ -63,7 +71,7 @@ export function OverlayProvider(props: { children: ReactNode }) {
         toastTimersRef.current.set(id, timer)
       }
     },
-    [dismissToast],
+    [clearToastTimer, dismissToast],
   )
 
   useEffect(() => {
@@ -75,6 +83,10 @@ export function OverlayProvider(props: { children: ReactNode }) {
   useEffect(() => {
     const timers = toastTimersRef.current
     return () => {
+      if (confirmQueueTimerRef.current != null) {
+        window.clearTimeout(confirmQueueTimerRef.current)
+        confirmQueueTimerRef.current = null
+      }
       for (const timer of timers.values()) window.clearTimeout(timer)
       timers.clear()
     }
@@ -98,7 +110,12 @@ export function OverlayProvider(props: { children: ReactNode }) {
       activeConfirmRef.current = null
       setActiveConfirm(null)
       current.resolve(ok)
-      window.setTimeout(showNextConfirm, 220)
+
+      if (confirmQueueTimerRef.current != null) window.clearTimeout(confirmQueueTimerRef.current)
+      confirmQueueTimerRef.current = window.setTimeout(() => {
+        confirmQueueTimerRef.current = null
+        showNextConfirm()
+      }, 220)
     },
     [showNextConfirm],
   )
@@ -124,6 +141,10 @@ export function OverlayProvider(props: { children: ReactNode }) {
 
   useEffect(() => {
     return () => {
+      if (confirmQueueTimerRef.current != null) {
+        window.clearTimeout(confirmQueueTimerRef.current)
+        confirmQueueTimerRef.current = null
+      }
       const current = activeConfirmRef.current
       activeConfirmRef.current = null
       if (current) current.resolve(false)

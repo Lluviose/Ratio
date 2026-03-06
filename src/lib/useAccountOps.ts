@@ -21,12 +21,24 @@ function toNonEmptyString(value: unknown): string | null {
   return s ? s : null
 }
 
+function normalizeOptionalNote(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const note = value.trim()
+  return note ? note : undefined
+}
+
 function normalizeAccountOp(op: AccountOp): AccountOp {
-  if (op.kind === 'rename') return op
+  if (op.kind === 'rename') {
+    return {
+      ...op,
+      note: normalizeOptionalNote(op.note),
+    }
+  }
 
   if (op.kind === 'set_balance') {
     return {
       ...op,
+      note: normalizeOptionalNote(op.note),
       before: normalizeMoney(op.before),
       after: normalizeMoney(op.after),
     }
@@ -35,6 +47,7 @@ function normalizeAccountOp(op: AccountOp): AccountOp {
   if (op.kind === 'adjust') {
     return {
       ...op,
+      note: normalizeOptionalNote(op.note),
       delta: normalizeMoney(op.delta),
       before: normalizeMoney(op.before),
       after: normalizeMoney(op.after),
@@ -43,6 +56,7 @@ function normalizeAccountOp(op: AccountOp): AccountOp {
 
   return {
     ...op,
+    note: normalizeOptionalNote(op.note),
     amount: normalizeMoney(op.amount),
     fromBefore: normalizeMoney(op.fromBefore),
     fromAfter: normalizeMoney(op.fromAfter),
@@ -52,11 +66,17 @@ function normalizeAccountOp(op: AccountOp): AccountOp {
 }
 
 function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
-  if (op.kind === 'rename') return op
+  if (op.kind === 'rename') {
+    return {
+      ...op,
+      note: normalizeOptionalNote(op.note),
+    }
+  }
 
   if (op.kind === 'set_balance') {
     return {
       ...op,
+      note: normalizeOptionalNote(op.note),
       before: normalizeMoney(op.before),
       after: normalizeMoney(op.after),
     }
@@ -65,6 +85,7 @@ function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
   if (op.kind === 'adjust') {
     return {
       ...op,
+      note: normalizeOptionalNote(op.note),
       delta: normalizeMoney(op.delta),
       before: normalizeMoney(op.before),
       after: normalizeMoney(op.after),
@@ -73,6 +94,7 @@ function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
 
   return {
     ...op,
+    note: normalizeOptionalNote(op.note),
     amount: normalizeMoney(op.amount),
     fromBefore: normalizeMoney(op.fromBefore),
     fromAfter: normalizeMoney(op.fromAfter),
@@ -93,6 +115,7 @@ function coerceOps(value: unknown): AccountOp[] {
     const accountType = toNonEmptyString(item.accountType)
     if (!at || !accountType) continue
 
+    const note = normalizeOptionalNote(item.note)
     const id = typeof item.id === 'string' && item.id.trim() ? item.id : createId()
 
     if (kind === 'rename') {
@@ -105,11 +128,12 @@ function coerceOps(value: unknown): AccountOp[] {
         kind,
         at,
         accountType: accountType as AccountOp['accountType'],
+        note,
         accountId,
         beforeName,
         afterName,
       }
-      result.push(next)
+      result.push(normalizeAccountOp(next))
       continue
     }
 
@@ -123,6 +147,7 @@ function coerceOps(value: unknown): AccountOp[] {
         kind,
         at,
         accountType: accountType as AccountOp['accountType'],
+        note,
         accountId,
         before,
         after,
@@ -142,6 +167,7 @@ function coerceOps(value: unknown): AccountOp[] {
         kind,
         at,
         accountType: accountType as AccountOp['accountType'],
+        note,
         accountId,
         delta,
         before,
@@ -166,6 +192,7 @@ function coerceOps(value: unknown): AccountOp[] {
         kind,
         at,
         accountType: accountType as AccountOp['accountType'],
+        note,
         fromId,
         toId,
         amount,

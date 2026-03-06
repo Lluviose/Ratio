@@ -13,6 +13,8 @@ type TrendMode = 'netDebt' | 'cashInvest'
 
 type RangeId = '30d' | '6m' | '1y' | 'custom'
 
+const RECENT_SNAPSHOT_LIMIT = 90
+
 type TrendPoint = {
   date: string
   dateKey: string
@@ -153,7 +155,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       selected = picked.map((x) => x.snapshot)
       labels = picked.map((x) => formatMonthKeyLabel(x.monthKey))
     } else if (range === 'custom') {
-      selected = sorted.slice(Math.max(0, sorted.length - 90))
+      selected = sorted.slice(Math.max(0, sorted.length - RECENT_SNAPSHOT_LIMIT))
       labels = selected.map((s) => formatLabel(s.date))
     } else {
       const picked = pickMonthlyLast(sorted, 12, monthStartDay)
@@ -401,7 +403,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               { value: '30d', label: '30天' },
               { value: '6m', label: '6月' },
               { value: '1y', label: '1年' },
-              { value: 'custom', label: '自定义' },
+              { value: 'custom', label: `近${RECENT_SNAPSHOT_LIMIT}条` },
             ]}
             value={range}
             onChange={setRange}
@@ -409,7 +411,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         </div>
         {range === 'custom' ? (
           <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
-            这里可以接入自定义日期范围选择
+            按最近 {RECENT_SNAPSHOT_LIMIT} 条快照展示
           </div>
         ) : null}
       </motion.div>

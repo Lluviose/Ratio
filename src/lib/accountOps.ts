@@ -4,6 +4,7 @@ export type AccountOpBase = {
   id: string
   at: string
   accountType: AccountTypeId
+  note?: string
 }
 
 export type RenameAccountOp = AccountOpBase & {

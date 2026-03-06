@@ -9,6 +9,14 @@ import { normalizeMoney } from '../lib/money'
 const categories = ['餐饮', '交通', '购物', '房租', '工资', '其他']
 const defaultAccounts = ['现金', '银行卡', '支付宝', '微信']
 
+function todayDateKey() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export function AddTransactionSheet(props: {
   open: boolean
   onClose: () => void
@@ -18,13 +26,13 @@ export function AddTransactionSheet(props: {
   const { open, onClose, onSubmit, accounts } = props
   const { toast } = useOverlay()
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useMemo(() => todayDateKey(), [])
 
   const [type, setType] = useState<TxType>('expense')
   const [amount, setAmount] = useState('')
   const amountInputRef = useRef<HTMLInputElement | null>(null)
   const [category, setCategory] = useState(categories[0] ?? '其他')
-  const accountOptions = (accounts && accounts.length > 0 ? accounts : defaultAccounts)
+  const accountOptions = accounts && accounts.length > 0 ? accounts : defaultAccounts
   const [account, setAccount] = useState(accountOptions[0] ?? '现金')
   const [date, setDate] = useState(today)
   const [note, setNote] = useState('')
@@ -87,7 +95,7 @@ export function AddTransactionSheet(props: {
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 ref={amountInputRef}
-                style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}      
+                style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
                 autoFocus
               />
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
