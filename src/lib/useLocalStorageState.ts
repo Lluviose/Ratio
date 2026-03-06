@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-
-const STORAGE_WRITE_EVENT = 'ratio:storage-write'
-
-type StorageWriteDetail = {
-  key: string
-  raw?: string
-}
+import { dispatchStorageWrite, STORAGE_WRITE_EVENT, type StorageWriteDetail } from './storageEvents'
 
 export type UseLocalStorageStateOptions<T> = {
   coerce?: (value: unknown) => T
@@ -103,11 +97,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
 
       localStorage.setItem(key, nextRaw)
       lastRawRef.current = nextRaw
-      window.dispatchEvent(
-        new CustomEvent<StorageWriteDetail>(STORAGE_WRITE_EVENT, {
-          detail: { key, raw: nextRaw },
-        }),
-      )
+      dispatchStorageWrite(key, nextRaw)
     } catch {
       return
     }

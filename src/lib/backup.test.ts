@@ -57,7 +57,7 @@ describe('backup', () => {
         createdAt: '2025-01-01T00:00:00.000Z',
         items: {
           'ratio.new': '2',
-          'unrelated': 'skip',
+          unrelated: 'skip',
         },
       }),
     )
@@ -70,5 +70,84 @@ describe('backup', () => {
     expect(localStorage.getItem('ratio.old')).toBeNull()
     expect(localStorage.getItem('ratio.new')).toBe('2')
     expect(localStorage.getItem('unrelated')).toBe('keep')
+  })
+
+  it('restoreRatioBackup rolls back if writing new state fails', () => {
+    const store = new Map<string, string>([
+      ['ratio.accounts', '["old"]'],
+      ['ratio.snapshots', '["old-snap"]'],
+      ['ratio.theme', '"old-theme"'],
+    ])
+
+    const storage: Storage = {
+      get length() {
+        return store.size
+      },
+      clear() {
+        store.clear()
+      },
+      key(index: number) {
+        return Array.from(store.keys())[index] ?? null
+      },
+      getItem(key: string) {
+        return store.has(key) ? store.get(key)! : null
+      },
+      removeItem(key: string) {
+        store.delete(key)
+      },
+      setItem(key: string, value: string) {
+        if (value === '["new-snap"]') throw new Error('boom')
+        store.set(key, value)
+      },
+    }
+
+    const backup = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: {
+          'ratio.accounts': '["new"]',
+          'ratio.snapshots': '["new-snap"]',
+          'ratio.theme': '"new-theme"',
+        },
+      }),
+    )
+
+    expect(() => restoreRatioBackup(backup, storage)).toThrow('Restore failed: boom')
+    expect(store.get('ratio.accounts')).toBe('["old"]')
+    expect(store.get('ratio.snapshots')).toBe('["old-snap"]')
+    expect(store.get('ratio.theme')).toBe('"old-theme"')
+  })
+
+  it('restoreRatioBackup dispatches storage write events after success', () => {
+    localStorage.setItem('ratio.old', '1')
+
+    const events: Array<{ key: string; raw?: string }> = []
+    const onWrite = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; raw?: string }>).detail
+      events.push(detail)
+    }
+
+    window.addEventListener('ratio:storage-write', onWrite)
+    try {
+      const backup = parseRatioBackup(
+        JSON.stringify({
+          schema: RATIO_BACKUP_SCHEMA_V1,
+          createdAt: '2025-01-01T00:00:00.000Z',
+          items: {
+            'ratio.new': '2',
+          },
+        }),
+      )
+
+      restoreRatioBackup(backup, localStorage)
+    } finally {
+      window.removeEventListener('ratio:storage-write', onWrite)
+    }
+
+    expect(events).toEqual([
+      { key: 'ratio.new', raw: '2' },
+      { key: 'ratio.old' },
+    ])
   })
 })

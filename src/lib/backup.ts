@@ -1,3 +1,5 @@
+import { dispatchStorageWrite } from './storageEvents'
+
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
 export const RATIO_BACKUP_EXCLUDE_PREFIXES: readonly string[] = []
@@ -107,15 +109,12 @@ export function clearRatioStorage(
   return keysToRemove
 }
 
-export function restoreRatioBackup(
+function buildRestorableItems(
   backup: RatioBackupFile,
-  storage: Storage = localStorage,
-  prefix: string = RATIO_STORAGE_PREFIX,
-  excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
-): RestoreResult {
-  const clearedKeys = clearRatioStorage(storage, prefix, excludeKeyPrefixes)
-
-  const restoredKeys: string[] = []
+  prefix: string,
+  excludeKeyPrefixes: readonly string[],
+): { nextItems: Record<string, string>; skippedKeys: string[] } {
+  const nextItems: Record<string, string> = {}
   const skippedKeys: string[] = []
   const entries = Object.entries(backup.items)
   entries.sort(([left], [right]) => left.localeCompare(right))
@@ -125,9 +124,80 @@ export function restoreRatioBackup(
       skippedKeys.push(key)
       continue
     }
-    storage.setItem(key, raw)
-    restoredKeys.push(key)
+    nextItems[key] = raw
   }
+
+  return { nextItems, skippedKeys }
+}
+
+function applyRatioStorageItems(
+  nextItems: Record<string, string>,
+  storage: Storage,
+  prefix: string,
+  excludeKeyPrefixes: readonly string[],
+) {
+  const currentItems = readRatioStorage(storage, prefix, excludeKeyPrefixes)
+  const nextKeys = Object.keys(nextItems).sort((left, right) => left.localeCompare(right))
+  const nextKeySet = new Set(nextKeys)
+
+  for (const key of Object.keys(currentItems)) {
+    if (!nextKeySet.has(key)) storage.removeItem(key)
+  }
+
+  for (const key of nextKeys) {
+    const raw = nextItems[key]
+    if (currentItems[key] === raw) continue
+    storage.setItem(key, raw)
+  }
+}
+
+function isBrowserLocalStorage(storage: Storage) {
+  return typeof window !== 'undefined' && storage === localStorage
+}
+
+function notifyRatioStorageDiff(storage: Storage, previousItems: Record<string, string>, nextItems: Record<string, string>) {
+  if (!isBrowserLocalStorage(storage)) return
+
+  const changedKeys = Array.from(new Set([...Object.keys(previousItems), ...Object.keys(nextItems)])).sort(
+    (left, right) => left.localeCompare(right),
+  )
+
+  for (const key of changedKeys) {
+    const prevRaw = previousItems[key]
+    const nextRaw = nextItems[key]
+    if (prevRaw === nextRaw) continue
+    dispatchStorageWrite(key, nextRaw)
+  }
+}
+
+export function restoreRatioBackup(
+  backup: RatioBackupFile,
+  storage: Storage = localStorage,
+  prefix: string = RATIO_STORAGE_PREFIX,
+  excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
+): RestoreResult {
+  const previousItems = readRatioStorage(storage, prefix, excludeKeyPrefixes)
+  const clearedKeys = Object.keys(previousItems).sort((left, right) => left.localeCompare(right))
+  const { nextItems, skippedKeys } = buildRestorableItems(backup, prefix, excludeKeyPrefixes)
+  const restoredKeys = Object.keys(nextItems).sort((left, right) => left.localeCompare(right))
+
+  try {
+    applyRatioStorageItems(nextItems, storage, prefix, excludeKeyPrefixes)
+  } catch (error) {
+    try {
+      applyRatioStorageItems(previousItems, storage, prefix, excludeKeyPrefixes)
+    } catch {
+      throw new Error('Restore failed and rollback did not complete')
+    }
+
+    if (error instanceof Error) {
+      throw new Error(`Restore failed: ${error.message}`)
+    }
+
+    throw new Error('Restore failed')
+  }
+
+  notifyRatioStorageDiff(storage, previousItems, nextItems)
 
   return { restoredKeys, clearedKeys, skippedKeys }
 }

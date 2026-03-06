@@ -16,6 +16,7 @@ import { useAccountOps } from './lib/useAccountOps'
 import { accountDetailSheetLayoutId } from './lib/layoutIds'
 import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
+import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
@@ -85,10 +86,7 @@ export default function App() {
     if (rgb) document.documentElement.style.setProperty('--primary-rgb', rgb)
   }, [resolvedTheme, themeColors])
 
-  useEffect(() => {
-    if (accounts.accounts.length === 0) return
-    upsertFromAccounts(accounts.accounts)
-  }, [accounts.accounts, upsertFromAccounts])
+  useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts)
 
   const title = useMemo(() => {
     switch (tab) {
