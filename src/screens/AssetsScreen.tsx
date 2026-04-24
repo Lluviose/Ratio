@@ -50,26 +50,63 @@ type OverlayBlockModel = Block
 
 type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly' | 'assetTopNoDebt' | 'assetMiddleNoDebt' | 'assetBottomNoDebt' | 'assetOnlyNoDebt'
 
-function OverlayBlock(props: {
+type CornerRadii = { tl: number; tr: number; bl: number; br: number }
+
+type HomeBlockGeometry = {
   block: OverlayBlockModel
   kind: CornerKind
   ratioRect?: Rect
   listRect?: Rect
   displayHeight?: number
   bubblePos?: { x: MotionValue<number>; y: MotionValue<number> }
-  bubbleRadius?: number
+  bubbleRadius: number
   burstProgress?: MotionValue<number>
+  ratioCorner: CornerRadii
+  listCorner: CornerRadii
+  bubbleCorner: CornerRadii
+}
+
+function getRatioCorner(kind: CornerKind, chartRadius: number): CornerRadii {
+  if (kind === 'debt') return { tl: 0, tr: chartRadius, bl: chartRadius, br: 0 }
+  if (kind === 'assetOnly') return { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
+  if (kind === 'assetTop') return { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+  if (kind === 'assetBottom') return { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
+  if (kind === 'assetMiddle') return { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+  if (kind === 'assetOnlyNoDebt') return { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
+  if (kind === 'assetTopNoDebt') return { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
+  if (kind === 'assetBottomNoDebt') return { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
+  if (kind === 'assetMiddleNoDebt') return { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
+  return { tl: 0, tr: 0, bl: 0, br: 0 }
+}
+
+function getListCorner(kind: CornerKind, listRadius: number): CornerRadii {
+  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
+  return { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
+}
+
+function OverlayBlock(props: {
+  geometry: HomeBlockGeometry
   scrollIdx: MotionValue<number>
   overlayFade: MotionValue<number>
   labelsOpacity: MotionValue<number>
-  chartRadius: number
-  listRadius: number
   isReturning?: boolean
   isInitialLoad?: boolean
   isReturningFromDetail?: boolean
   blockIndex?: number
   viewportWidth?: number
 }) {
+  const {
+    geometry,
+    scrollIdx,
+    overlayFade,
+    labelsOpacity,
+    isReturning = false,
+    isInitialLoad = false,
+    isReturningFromDetail = false,
+    blockIndex = 0,
+    viewportWidth = 400,
+  } = props
+
   const {
     block,
     kind,
@@ -79,21 +116,13 @@ function OverlayBlock(props: {
     bubblePos,
     bubbleRadius,
     burstProgress,
-    scrollIdx,
-    overlayFade,
-    labelsOpacity,
-    chartRadius,
-    listRadius,
-    isReturning = false,
-    isInitialLoad = false,
-    isReturningFromDetail = false,
-    blockIndex = 0,
-    viewportWidth = 400,
-  } = props
-
+    ratioCorner,
+    listCorner,
+    bubbleCorner,
+  } = geometry
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
   const list = listRect ?? ratioRect ?? ratio
-  const bRadius = bubbleRadius ?? 60
+  const bRadius = bubbleRadius
   
   // Fallback for bubble pos if missing (shouldn't happen if initialized)
   const defaultBX = useMotionValue(ratio.x + ratio.w / 2)
@@ -174,42 +203,6 @@ function OverlayBlock(props: {
     const [o, m] = values as [number, number]
     return o * m
   })
-
-  // 圆角逻辑：
-  // - 有负债时：负债左上角无圆角（与资产区对齐），资产左边无圆角
-  // - 无负债时：资产左右上角有圆角，右下角无圆角
-  // - 每个色块（除最后一个）都向下延伸，延伸部分垫在下方色块的圆角处
-  // - 最底部色块右下角有圆角
-  const ratioCorner =
-    kind === 'debt'
-      ? { tl: 0, tr: chartRadius, bl: chartRadius, br: 0 }
-      : kind === 'assetOnly'
-        ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-      : kind === 'assetTop'
-        ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
-        : kind === 'assetBottom'
-          ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-          : kind === 'assetMiddle'
-            ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
-            : kind === 'assetOnlyNoDebt'
-              ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
-              : kind === 'assetTopNoDebt'
-                ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
-                : kind === 'assetBottomNoDebt'
-                  ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
-                  : kind === 'assetMiddleNoDebt'
-                    ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
-                    : { tl: 0, tr: 0, bl: 0, br: 0 }
-
-  // List 视图下的圆角逻辑：
-  // - 左侧与屏幕齐平，不做圆角
-  // - 右上始终圆角
-  // - 只有列表最后一个条目的右下才做圆角
-  //   （有负债时：负债永远最后；最后一个资产不做底部圆角，避免和负债形成“双圆角”）
-  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
-  // List 模式的彩色色块：左侧与屏幕齐平，不做圆角；右侧做圆角（末尾块底部也圆角）
-  const listCorner = { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
-  const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
     if (idx < 1) return lerp(bubbleCorner.tl, ratioCorner.tl, Math.max(0, idx))
@@ -370,7 +363,7 @@ function OverlayBlock(props: {
 
   return (
     <motion.div
-      className="absolute pointer-events-none"
+      className="absolute inset-0 pointer-events-none"
       initial={needsEnterAnimation ? { translateX: enterTranslateX, opacity: 0 } : false}
       animate={{ translateX: 0, opacity: 1 }}
       transition={needsEnterAnimation ? {
@@ -378,117 +371,125 @@ function OverlayBlock(props: {
         delay: blockIndex * 0.04,
         ease: [0.2, 0, 0, 1]
       } : undefined}
-      style={{
-        left: x,
-        top: y,
-        width: w,
-        height: h,
-        background: block.tone,
-        borderTopLeftRadius: tl,
-        borderTopRightRadius: tr,
-        borderBottomLeftRadius: bl,
-        borderBottomRightRadius: br,
-        opacity: finalOpacity,
-        scale: burstScale,
-        originX: 0.5,
-        originY: 0.5,
-        overflow: 'hidden',
-      }}
     >
-      {/* Sphere 3D Effects Overlay */}
-      <motion.div 
-        className="absolute inset-0 z-0"
-        style={{ opacity: sphereEffectOpacity }}
+      <motion.div
+        className="absolute left-0 top-0 pointer-events-none"
+        style={{
+          x,
+          y,
+          width: w,
+          height: h,
+          background: block.tone,
+          borderTopLeftRadius: tl,
+          borderTopRightRadius: tr,
+          borderBottomLeftRadius: bl,
+          borderBottomRightRadius: br,
+          opacity: finalOpacity,
+          scale: burstScale,
+          originX: 0.5,
+          originY: 0.5,
+          overflow: 'hidden',
+          willChange: 'transform, opacity',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+          contain: 'layout paint style',
+        }}
       >
-        {/* Inner Highlight/Shadow using CSS gradients/shadows */}
-        <div className="absolute inset-0" style={{ 
-            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
-        }} />
-        <div className="absolute inset-0" style={{ 
-            boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
-        }} />
-      </motion.div>
-
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-          opacity: surfaceHighlightOpacity,
-          background: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0) 36%)',
-        }}
-      />
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-          opacity: surfaceHighlightOpacity,
-          boxShadow: 'inset 0 -14px 20px rgba(15,23,42,0.04)',
-        }}
-      />
-
-      <motion.div
-        style={{
-          opacity: labelsOpacity,
-          color: textColor,
-          paddingLeft: paddingX,
-          paddingRight: paddingX,
-          paddingTop: paddingY,
-          paddingBottom: paddingY,
-        }}
-        className="w-full h-full flex flex-col relative z-10"
-      >
-        <motion.div 
-            className="w-full h-full flex flex-col relative"
-            style={{ 
-                justifyContent: kind === 'debt' ? 'center' : flexJustify,
-                alignItems: flexAlign,
-                scale: contentScale
-            }}
+        {/* Sphere 3D Effects Overlay */}
+        <motion.div
+          className="absolute inset-0 z-0"
+          style={{ opacity: sphereEffectOpacity }}
         >
-            {/* Amount View (Bubble) */}
-            <motion.div 
-                className="absolute inset-0 flex flex-col justify-center"
-                style={{ opacity: amountOpacity, alignItems: flexAlign }}
-            >
-                <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
-                <div className="text-[20px] font-bold tracking-tight leading-none">
-                    {formatCny(block.amount)}
-                </div>
-            </motion.div>
+          {/* Inner Highlight/Shadow using CSS gradients/shadows */}
+          <div className="absolute inset-0" style={{
+              background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)'
+          }} />
+          <div className="absolute inset-0" style={{
+              boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)'
+          }} />
+        </motion.div>
 
-            {/* Percent View (Ratio) */}
-            <motion.div
-                 className="absolute inset-0 flex"
-                 style={{
-                     paddingBottom: ratioContentPaddingBottom,
-                     opacity: percentOpacity,
-                     justifyContent: isDebt ? 'center' : 'flex-start',
-                     alignItems: isDebt ? 'flex-start' : ratioAlignItems,
-                     flexDirection: ratioFlexDirection,
-                 }}
-            >
-                 <motion.div
-                   className="font-semibold tracking-tight leading-none"
-                   style={{ fontSize: ratioPercentSize }}
-                 >
-                    {block.percent}
-                    <motion.span
-                      className="ml-0.5"
-                      style={{ fontSize: ratioPercentSymbolSize }}
-                    >%</motion.span>
-                </motion.div>
-                <motion.div
-                  className="font-medium opacity-85"
-                  style={{
-                    fontSize: ratioLabelSize,
-                    marginTop: ratioLabelMarginTop,
-                    marginLeft: ratioLabelMarginLeft,
-                  }}
-                >
-                  {block.name}
-                </motion.div>
-            </motion.div>
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            zIndex: 1,
+            opacity: surfaceHighlightOpacity,
+            background: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0) 36%)',
+          }}
+        />
+        <motion.div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            zIndex: 1,
+            opacity: surfaceHighlightOpacity,
+            boxShadow: 'inset 0 -14px 20px rgba(15,23,42,0.04)',
+          }}
+        />
 
+        <motion.div
+          style={{
+            opacity: labelsOpacity,
+            color: textColor,
+            paddingLeft: paddingX,
+            paddingRight: paddingX,
+            paddingTop: paddingY,
+            paddingBottom: paddingY,
+          }}
+          className="w-full h-full flex flex-col relative z-10"
+        >
+          <motion.div
+              className="w-full h-full flex flex-col relative"
+              style={{
+                  justifyContent: kind === 'debt' ? 'center' : flexJustify,
+                  alignItems: flexAlign,
+                  scale: contentScale
+              }}
+          >
+              {/* Amount View (Bubble) */}
+              <motion.div
+                  className="absolute inset-0 flex flex-col justify-center"
+                  style={{ opacity: amountOpacity, alignItems: flexAlign }}
+              >
+                  <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
+                  <div className="text-[20px] font-bold tracking-tight leading-none">
+                      {formatCny(block.amount)}
+                  </div>
+              </motion.div>
+
+              {/* Percent View (Ratio) */}
+              <motion.div
+                   className="absolute inset-0 flex"
+                   style={{
+                       paddingBottom: ratioContentPaddingBottom,
+                       opacity: percentOpacity,
+                       justifyContent: isDebt ? 'center' : 'flex-start',
+                       alignItems: isDebt ? 'flex-start' : ratioAlignItems,
+                       flexDirection: ratioFlexDirection,
+                   }}
+              >
+                   <motion.div
+                     className="font-semibold tracking-tight leading-none"
+                     style={{ fontSize: ratioPercentSize }}
+                   >
+                      {block.percent}
+                      <motion.span
+                        className="ml-0.5"
+                        style={{ fontSize: ratioPercentSymbolSize }}
+                      >%</motion.span>
+                  </motion.div>
+                  <motion.div
+                    className="font-medium opacity-85"
+                    style={{
+                      fontSize: ratioLabelSize,
+                      marginTop: ratioLabelMarginTop,
+                      marginLeft: ratioLabelMarginLeft,
+                    }}
+                  >
+                    {block.name}
+                  </motion.div>
+              </motion.div>
+
+          </motion.div>
         </motion.div>
       </motion.div>
     </motion.div>
@@ -694,6 +695,12 @@ export function AssetsScreen(props: {
     return m
   }, [bubbleNodes])
 
+  const bubbleNodeById = useMemo(() => {
+    const m = new Map<string, BubbleNode>()
+    bubbleNodes.forEach((n) => m.set(n.id, n))
+    return m
+  }, [bubbleNodes])
+
   const bubblePhysics = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
 
   const ratioLayout = useMemo(() => {
@@ -842,6 +849,39 @@ export function AssetsScreen(props: {
 
     return LIST_GROUP_ORDER.map((id) => byId.get(id)).filter((b): b is Block => Boolean(b))
   }, [blocks.assets, blocks.debt])
+
+  const homeBlockGeometries = useMemo<HomeBlockGeometry[]>(
+    () =>
+      overlayBlocksInListOrder.map((block) => {
+        const kind = blockKinds[block.id] ?? 'assetMiddle'
+        const bubbleRadius = bubbleNodeById.get(block.id)?.radius ?? 60
+        return {
+          block,
+          kind,
+          ratioRect: ratioLayout.rects[block.id],
+          listRect: listRects[block.id],
+          displayHeight: block.id === 'debt' ? undefined : ratioLayout.displayHeights[block.id],
+          bubblePos: bubblePhysics.positions.get(block.id),
+          bubbleRadius,
+          burstProgress: bubblePhysics.burstProgress.get(block.id),
+          ratioCorner: getRatioCorner(kind, chartRadius),
+          listCorner: getListCorner(kind, listRadius),
+          bubbleCorner: { tl: bubbleRadius, tr: bubbleRadius, bl: bubbleRadius, br: bubbleRadius },
+        }
+      }),
+    [
+      blockKinds,
+      bubbleNodeById,
+      bubblePhysics.burstProgress,
+      bubblePhysics.positions,
+      chartRadius,
+      listRadius,
+      listRects,
+      overlayBlocksInListOrder,
+      ratioLayout.displayHeights,
+      ratioLayout.rects,
+    ],
+  )
 
   const measureListRects = useCallback(() => {
     const root = viewportRef.current
@@ -1265,16 +1305,20 @@ export function AssetsScreen(props: {
           {/* 负债上方的白色填充块（负债比例低于100%时） */}
           {debtFillerRect ? (
           <motion.div
-            className="absolute pointer-events-none"
+            className="absolute left-0 top-0 pointer-events-none"
             style={{
-              left: debtFillerLeft,
-              top: debtFillerTop,
+              x: debtFillerLeft,
+              y: debtFillerTop,
               width: debtFillerWidth,
               height: debtFillerHeight,
               background: 'white',
               borderTopLeftRadius: chartRadius,
               borderTopRightRadius: chartRadius,
               opacity: debtFillerOpacity,
+              willChange: 'transform, opacity',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              contain: 'layout paint style',
             }}
           />
         ) : null}
@@ -1282,16 +1326,20 @@ export function AssetsScreen(props: {
         {/* 资产底部的白色填充块（负债比例超过100%时） */}
         {assetFillerRect ? (
           <motion.div
-            className="absolute pointer-events-none"
+            className="absolute left-0 top-0 pointer-events-none"
             style={{
-              left: assetFillerLeft,
-              top: assetFillerTop,
+              x: assetFillerLeft,
+              y: assetFillerTop,
               width: assetFillerWidth,
               height: assetFillerHeight,
               background: 'white',
               borderTopRightRadius: chartRadius,
               borderBottomRightRadius: chartRadius,
               opacity: assetFillerOpacity,
+              willChange: 'transform, opacity',
+              backfaceVisibility: 'hidden',
+              WebkitBackfaceVisibility: 'hidden',
+              contain: 'layout paint style',
             }}
           />
         ) : null}
@@ -1348,22 +1396,13 @@ export function AssetsScreen(props: {
 
             我们只需要确保 OverlayBlock 在 List 模式下也向下延伸即可。
          */}
-        {overlayBlocksInListOrder.map((b, i) => (
+        {homeBlockGeometries.map((geometry, i) => (
           <OverlayBlock
-            key={`${b.id}-${animationKey}`}
-            block={b}
-            kind={blockKinds[b.id] ?? 'assetMiddle'}
-            ratioRect={ratioLayout.rects[b.id]}
-            listRect={listRects[b.id]}
-            displayHeight={b.id === 'debt' ? undefined : ratioLayout.displayHeights[b.id]}
-            bubblePos={bubblePhysics.positions.get(b.id)}
-            bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
-            burstProgress={bubblePhysics.burstProgress.get(b.id)}
+            key={`${geometry.block.id}-${animationKey}`}
+            geometry={geometry}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
-            chartRadius={chartRadius}
-            listRadius={listRadius}
             isReturning={isReturning}
             isInitialLoad={isInitialLoad}
             isReturningFromDetail={isReturningFromDetail}
