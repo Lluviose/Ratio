@@ -101,6 +101,7 @@ html,
 body {
   height: 100%;
   touch-action: pan-x pan-y;
+  overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -140,6 +141,7 @@ a {
   justify-content: center;
   align-items: stretch;
   padding: 16px;
+  overscroll-behavior: none;
 }
 
 .appFrame {
@@ -153,6 +155,7 @@ a {
   display: flex;
   flex-direction: column;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.02), 0 20px 60px rgba(0,0,0,0.1);
+  overscroll-behavior: none;
 }
 
 @media (pointer: coarse) and (max-width: 520px), (pointer: coarse) and (max-height: 520px) {
@@ -222,6 +225,8 @@ a {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 .contentWithNav {
@@ -279,7 +284,11 @@ a {
   background: rgba(245, 246, 248, 0.85);
   backdrop-filter: blur(12px);
   border-top: 1px solid rgba(11, 15, 26, 0.06);
-  z-index: 3;
+  z-index: 20;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .navBarGrid {

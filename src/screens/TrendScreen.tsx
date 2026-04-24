@@ -296,7 +296,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }
 
   return (
-    <div className="stack" style={{ padding: '0 16px' }}>
+    <div className="stack" style={{ padding: '0 16px', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -315,7 +315,16 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
         <motion.div
           ref={chartRef}
-          style={{ height: 240, marginTop: 24, position: 'relative', zIndex: 10 }}
+          style={{
+            height: 240,
+            marginTop: 24,
+            position: 'relative',
+            zIndex: 1,
+            overscrollBehavior: 'contain',
+            touchAction: 'pan-y',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
@@ -338,7 +347,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               />
               <Tooltip
                 content={tooltip}
-                wrapperStyle={{ zIndex: 9999 }}
+                wrapperStyle={{ zIndex: 2, pointerEvents: 'none' }}
                 cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
               />
               {mode === 'netDebt' ? (
