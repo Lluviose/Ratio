@@ -74,8 +74,9 @@ function prettyError(err: unknown) {
   return raw
 }
 
-export function AiAssistant() {
-  const [open, setOpen] = useState(false)
+export function AiAssistant(props: { initialOpen?: boolean } = {}) {
+  const { initialOpen = false } = props
+  const [open, setOpen] = useState(() => initialOpen)
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [privacyAccepted, setPrivacyAccepted] = useLocalStorageState<boolean>('ratio.aiPrivacyAccepted', false)
   const [privacyOpen, setPrivacyOpen] = useState(false)

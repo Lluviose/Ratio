@@ -290,6 +290,7 @@ function OverlayBlock(props: {
 
   // Sphere visual effects (fade out as we scroll to ratio)
   const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.5], [1, 0])
+  const surfaceHighlightOpacity = useTransform(scrollIdx, [0, 0.7, 1.6, 2], [0.18, 0.13, 0.1, 0.06])
 
   // Text Crossfade
   // 0 -> 0.5: Show Amount (Bubble)
@@ -407,6 +408,23 @@ function OverlayBlock(props: {
             boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
         }} />
       </motion.div>
+
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: 1,
+          opacity: surfaceHighlightOpacity,
+          background: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0) 36%)',
+        }}
+      />
+      <motion.div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          zIndex: 1,
+          opacity: surfaceHighlightOpacity,
+          boxShadow: 'inset 0 -14px 20px rgba(15,23,42,0.04)',
+        }}
+      />
 
       <motion.div
         style={{

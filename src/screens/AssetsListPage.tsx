@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
-import { ChevronDown, ChevronUp, GripVertical, MoreHorizontal } from 'lucide-react'
+import { ChevronDown, GripVertical, MoreHorizontal } from 'lucide-react'
 import { type ComponentType, type Ref, useEffect, useMemo, useState } from 'react'
 import { BottomSheet } from '../components/BottomSheet'
 import {
@@ -15,6 +15,7 @@ import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { addMoney } from '../lib/money'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
+import { expressiveEase, standardEase } from '../lib/motionPresets'
 import type { GroupedAccounts } from './AssetsScreen'
 
 type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
@@ -187,11 +188,12 @@ export function AssetsListPage(props: {
                   } as const
                 }
               >
-                <div
+                <motion.div
                   className={clsx(
                     'relative overflow-hidden rounded-[22px] border border-black/5 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.35)]',
                   )}
-                  style={{ background: cardBg }}
+                  animate={{ backgroundColor: cardBg }}
+                  transition={{ backgroundColor: { duration: 0.2, ease: standardEase } }}
                 >
                   {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
                   <div className="absolute inset-0 z-0 opacity-0"></div>
@@ -207,9 +209,13 @@ export function AssetsListPage(props: {
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <div className="text-[15px] font-semibold tracking-tight text-slate-900">{g.group.name}</div>
-                            <div className="text-slate-400">
-                              {isExpanded ? <ChevronUp size={14} strokeWidth={2.5} /> : <ChevronDown size={14} strokeWidth={2.5} />}
-                            </div>
+                            <motion.div
+                              className="text-slate-400"
+                              animate={{ rotate: isExpanded ? 180 : 0 }}
+                              transition={{ duration: 0.2, ease: standardEase }}
+                            >
+                              <ChevronDown size={14} strokeWidth={2.5} />
+                            </motion.div>
                           </div>
                           {!isExpanded ? (
                             <div className="mt-1 text-[11px] font-medium text-slate-500 truncate max-w-[220px]">
@@ -230,7 +236,7 @@ export function AssetsListPage(props: {
                       {!isExpanded ? <div className="mt-2 text-[12px] text-slate-300 leading-none">...</div> : null}
                     </div>
                   </button>
-                </div>
+                </motion.div>
 
                 <AnimatePresence initial={false}>
                   {isExpanded ? (
@@ -239,7 +245,7 @@ export function AssetsListPage(props: {
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.25, ease: 'easeInOut' }}
+                      transition={{ duration: 0.24, ease: standardEase }}
                       className="overflow-hidden"
                     >
                       <div className="px-3 pt-2 pb-3">
@@ -287,7 +293,7 @@ export function AssetsListPage(props: {
                         ) : null}
 
                         <div className="flex flex-col gap-2">
-                          {typeCardsSorted.map((t) => {
+                          {typeCardsSorted.map((t, typeIndex) => {
                             const Icon = getIcon(t.type)
                             return (
                               <motion.button
@@ -299,6 +305,10 @@ export function AssetsListPage(props: {
                                   'transition-colors duration-200',
                                 )}
                                 onClick={() => onPickType(t.type)}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: 4 }}
+                                transition={{ duration: 0.18, delay: typeIndex * 0.02, ease: expressiveEase }}
                                 whileTap={{ scale: 0.99 }}
                                 whileHover={{
                                   backgroundColor: 'rgba(255,255,255,0.92)',

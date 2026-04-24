@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useAccountOps } from './useAccountOps'
 import { useAccounts } from './useAccounts'
@@ -130,6 +130,120 @@ describe('localStorage coercion', () => {
     })
   })
 
+  it('migrates legacy negative account balances to the non-negative model', async () => {
+    localStorage.setItem(
+      'ratio.accounts',
+      JSON.stringify([
+        {
+          id: 'cash1',
+          type: 'cash',
+          name: 'Cash',
+          balance: -12.34,
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'debt1',
+          type: 'credit_card',
+          name: 'Credit Card',
+          balance: -56.78,
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { accounts } = useAccounts()
+      return (
+        <div>
+          <div data-testid="cash">{accounts.find((a) => a.id === 'cash1')?.balance ?? ''}</div>
+          <div data-testid="debt">{accounts.find((a) => a.id === 'debt1')?.balance ?? ''}</div>
+        </div>
+      )
+    }
+
+    render(<Reader />)
+
+    expect(screen.getByTestId('cash')).toHaveTextContent('0')
+    expect(screen.getByTestId('debt')).toHaveTextContent('56.78')
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('ratio.accounts') ?? '[]') as Array<{ id: string; balance: number }>
+      expect(stored.find((a) => a.id === 'cash1')?.balance).toBe(0)
+      expect(stored.find((a) => a.id === 'debt1')?.balance).toBe(56.78)
+    })
+  })
+
+  it('prevents account operations from producing negative balances', async () => {
+    localStorage.setItem(
+      'ratio.accounts',
+      JSON.stringify([
+        {
+          id: 'cash1',
+          type: 'cash',
+          name: 'Cash',
+          balance: 50,
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'cash2',
+          type: 'bank_card',
+          name: 'Bank',
+          balance: 200,
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'debt1',
+          type: 'credit_card',
+          name: 'Credit Card',
+          balance: 100,
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+
+    function Harness() {
+      const { accounts, updateBalance, adjustBalance, transfer } = useAccounts()
+      const cash = accounts.find((a) => a.id === 'cash1')?.balance ?? ''
+      const bank = accounts.find((a) => a.id === 'cash2')?.balance ?? ''
+      const debt = accounts.find((a) => a.id === 'debt1')?.balance ?? ''
+
+      return (
+        <div>
+          <div data-testid="balances">{JSON.stringify({ cash, bank, debt })}</div>
+          <button type="button" onClick={() => updateBalance('cash1', -1)}>
+            negative set
+          </button>
+          <button type="button" onClick={() => adjustBalance('cash1', -60)}>
+            negative adjust
+          </button>
+          <button type="button" onClick={() => transfer('cash1', 'cash2', 60)}>
+            overdraft asset transfer
+          </button>
+          <button type="button" onClick={() => transfer('cash2', 'debt1', 150)}>
+            overpay debt transfer
+          </button>
+        </div>
+      )
+    }
+
+    render(<Harness />)
+
+    const readBalances = () => JSON.parse(screen.getByTestId('balances').textContent ?? '{}') as Record<string, number>
+    expect(readBalances()).toEqual({ cash: 50, bank: 200, debt: 100 })
+
+    fireEvent.click(screen.getByRole('button', { name: 'negative set' }))
+    await waitFor(() => expect(readBalances()).toEqual({ cash: 50, bank: 200, debt: 100 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'negative adjust' }))
+    await waitFor(() => expect(readBalances()).toEqual({ cash: 50, bank: 200, debt: 100 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'overdraft asset transfer' }))
+    await waitFor(() => expect(readBalances()).toEqual({ cash: 50, bank: 200, debt: 100 }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'overpay debt transfer' }))
+    await waitFor(() => expect(readBalances()).toEqual({ cash: 50, bank: 200, debt: 100 }))
+  })
+
   it('normalizes account ops amounts to cents when loading old data', () => {
     localStorage.setItem(
       'ratio.accountOps',
@@ -200,6 +314,82 @@ describe('localStorage coercion', () => {
       const stored = JSON.parse(localStorage.getItem('ratio.accountOps') ?? '[]') as Array<Record<string, unknown>>
       expect(stored).toHaveLength(1)
       expect(stored[0]).not.toHaveProperty('note')
+    })
+  })
+
+  it('migrates negative account op balance fields', async () => {
+    localStorage.setItem(
+      'ratio.accountOps',
+      JSON.stringify([
+        {
+          id: 'op1',
+          kind: 'set_balance',
+          at: '2025-01-01T00:00:00.000Z',
+          accountType: 'credit_card',
+          accountId: 'debt1',
+          before: -10,
+          after: -20,
+        },
+        {
+          id: 'op2',
+          kind: 'transfer',
+          at: '2025-01-02T00:00:00.000Z',
+          accountType: 'cash',
+          fromId: 'cash1',
+          toId: 'debt1',
+          amount: -30,
+          fromBefore: 100,
+          fromAfter: -20,
+          toBefore: 50,
+          toAfter: -10,
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { ops } = useAccountOps()
+      const setBalance = ops.find((op) => op.id === 'op1')
+      const transfer = ops.find((op) => op.id === 'op2')
+      return (
+        <div>
+          <div data-testid="setBalance">
+            {setBalance?.kind === 'set_balance' ? JSON.stringify({ before: setBalance.before, after: setBalance.after }) : ''}
+          </div>
+          <div data-testid="transfer">
+            {transfer?.kind === 'transfer'
+              ? JSON.stringify({
+                  amount: transfer.amount,
+                  fromBefore: transfer.fromBefore,
+                  fromAfter: transfer.fromAfter,
+                  toBefore: transfer.toBefore,
+                  toAfter: transfer.toAfter,
+                })
+              : ''}
+          </div>
+        </div>
+      )
+    }
+
+    render(<Reader />)
+
+    expect(JSON.parse(screen.getByTestId('setBalance').textContent ?? '{}')).toEqual({ before: 10, after: 20 })
+    expect(JSON.parse(screen.getByTestId('transfer').textContent ?? '{}')).toEqual({
+      amount: 30,
+      fromBefore: 100,
+      fromAfter: 0,
+      toBefore: 50,
+      toAfter: 0,
+    })
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('ratio.accountOps') ?? '[]') as Array<Record<string, unknown>>
+      const setBalance = stored.find((op) => op.id === 'op1') as Record<string, unknown> | undefined
+      const transfer = stored.find((op) => op.id === 'op2') as Record<string, unknown> | undefined
+      expect(setBalance?.before).toBe(10)
+      expect(setBalance?.after).toBe(20)
+      expect(transfer?.amount).toBe(30)
+      expect(transfer?.fromAfter).toBe(0)
+      expect(transfer?.toAfter).toBe(0)
     })
   })
 

@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { useLocalStorageState } from './useLocalStorageState'
 import { normalizeMoney } from './money'
+import { normalizeStoredAccountBalance } from './accountBalance'
 import type { AccountOp, AccountOpInput } from './accountOps'
 
 function createId() {
@@ -27,6 +28,20 @@ function normalizeOptionalNote(value: unknown): string | undefined {
   return note ? note : undefined
 }
 
+function normalizeStoredOpBalance(accountType: AccountOp['accountType'], value: number): number {
+  return normalizeStoredAccountBalance(accountType, value)
+}
+
+function normalizeUnknownOpBalance(value: number): number {
+  const normalized = normalizeMoney(value)
+  return normalized < 0 ? 0 : normalized
+}
+
+function normalizeTransferAmount(value: number): number {
+  const normalized = normalizeMoney(value)
+  return normalized < 0 ? normalizeMoney(Math.abs(normalized)) : normalized
+}
+
 function normalizeAccountOp(op: AccountOp): AccountOp {
   if (op.kind === 'rename') {
     return {
@@ -39,8 +54,8 @@ function normalizeAccountOp(op: AccountOp): AccountOp {
     return {
       ...op,
       note: normalizeOptionalNote(op.note),
-      before: normalizeMoney(op.before),
-      after: normalizeMoney(op.after),
+      before: normalizeStoredOpBalance(op.accountType, op.before),
+      after: normalizeStoredOpBalance(op.accountType, op.after),
     }
   }
 
@@ -49,19 +64,19 @@ function normalizeAccountOp(op: AccountOp): AccountOp {
       ...op,
       note: normalizeOptionalNote(op.note),
       delta: normalizeMoney(op.delta),
-      before: normalizeMoney(op.before),
-      after: normalizeMoney(op.after),
+      before: normalizeStoredOpBalance(op.accountType, op.before),
+      after: normalizeStoredOpBalance(op.accountType, op.after),
     }
   }
 
   return {
     ...op,
     note: normalizeOptionalNote(op.note),
-    amount: normalizeMoney(op.amount),
-    fromBefore: normalizeMoney(op.fromBefore),
-    fromAfter: normalizeMoney(op.fromAfter),
-    toBefore: normalizeMoney(op.toBefore),
-    toAfter: normalizeMoney(op.toAfter),
+    amount: normalizeTransferAmount(op.amount),
+    fromBefore: normalizeUnknownOpBalance(op.fromBefore),
+    fromAfter: normalizeUnknownOpBalance(op.fromAfter),
+    toBefore: normalizeUnknownOpBalance(op.toBefore),
+    toAfter: normalizeUnknownOpBalance(op.toAfter),
   }
 }
 
@@ -77,8 +92,8 @@ function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
     return {
       ...op,
       note: normalizeOptionalNote(op.note),
-      before: normalizeMoney(op.before),
-      after: normalizeMoney(op.after),
+      before: normalizeStoredOpBalance(op.accountType, op.before),
+      after: normalizeStoredOpBalance(op.accountType, op.after),
     }
   }
 
@@ -87,19 +102,19 @@ function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
       ...op,
       note: normalizeOptionalNote(op.note),
       delta: normalizeMoney(op.delta),
-      before: normalizeMoney(op.before),
-      after: normalizeMoney(op.after),
+      before: normalizeStoredOpBalance(op.accountType, op.before),
+      after: normalizeStoredOpBalance(op.accountType, op.after),
     }
   }
 
   return {
     ...op,
     note: normalizeOptionalNote(op.note),
-    amount: normalizeMoney(op.amount),
-    fromBefore: normalizeMoney(op.fromBefore),
-    fromAfter: normalizeMoney(op.fromAfter),
-    toBefore: normalizeMoney(op.toBefore),
-    toAfter: normalizeMoney(op.toAfter),
+    amount: normalizeTransferAmount(op.amount),
+    fromBefore: normalizeUnknownOpBalance(op.fromBefore),
+    fromAfter: normalizeUnknownOpBalance(op.fromAfter),
+    toBefore: normalizeUnknownOpBalance(op.toBefore),
+    toAfter: normalizeUnknownOpBalance(op.toAfter),
   }
 }
 

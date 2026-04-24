@@ -1,6 +1,6 @@
 import { Check, Download, Upload } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { queueToastAfterReload, useOverlay } from '../lib/overlay'
 import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
@@ -8,6 +8,7 @@ import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
+import { quickFade, standardEase } from '../lib/motionPresets'
 
 export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
@@ -117,23 +118,49 @@ export function SettingsScreen(props: {
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
+                  transition={{
+                    opacity: { delay: i * 0.05, duration: 0.18, ease: standardEase },
+                    y: { delay: i * 0.05, duration: 0.18, ease: standardEase },
+                  }}
                   whileTap={{ scale: 0.99 }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div className="swatches" aria-hidden="true">
                       {(t.id === 'random' ? randomSwatches : [t.colors.liquid, t.colors.invest, t.colors.fixed]).map(
                         (color, idx) => (
-                          <span key={`${t.id}-${idx}`} className="swatch" style={{ background: color }} />
+                          <motion.span
+                            key={`${t.id}-${idx}`}
+                            className="swatch"
+                            style={{ background: color }}
+                            animate={{ y: active ? -1 : 0, scale: active ? 1.04 : 1 }}
+                            transition={{ ...quickFade, delay: active ? idx * 0.025 : 0 }}
+                          />
                         ),
                       )}
                     </div>
                     <div style={{ fontWeight: 900, fontSize: 14 }}>{t.name}</div>
                   </div>
 
-                  <span className={active ? 'check checkOn' : 'check'} aria-label={active ? 'selected' : 'unselected'}>
-                    {active ? <Check size={12} color="#fff" strokeWidth={4} /> : null}
-                  </span>
+                  <motion.span
+                    className={active ? 'check checkOn' : 'check'}
+                    aria-label={active ? 'selected' : 'unselected'}
+                    animate={{ scale: active ? 1.06 : 1 }}
+                    transition={quickFade}
+                  >
+                    <AnimatePresence initial={false}>
+                      {active ? (
+                        <motion.span
+                          key="check"
+                          initial={{ opacity: 0, scale: 0.62, rotate: -18 }}
+                          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                          exit={{ opacity: 0, scale: 0.72 }}
+                          transition={quickFade}
+                        >
+                          <Check size={12} color="#fff" strokeWidth={4} />
+                        </motion.span>
+                      ) : null}
+                    </AnimatePresence>
+                  </motion.span>
                 </motion.div>
               )
             })}

@@ -7,6 +7,7 @@ import { useOverlay } from '../lib/overlay'
 import { formatCny as formatCnyBase } from '../lib/format'
 import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from '../lib/money'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
+import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
 import { type ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
 
@@ -32,15 +33,6 @@ function formatSigned(amount: number) {
   if (amount > 0) return `+${formatCny(amount)}`
   if (amount < 0) return `-${formatCny(Math.abs(amount))}`
   return formatCny(amount)
-}
-
-function isDebtAccount(account: Account) {
-  return account.type === 'credit_card' || account.type === 'loan' || account.type === 'payable' || account.type === 'other_debt'
-}
-
-function applyFlow(account: Account, flow: number) {
-  if (isDebtAccount(account)) return addMoney(account.balance, -flow)
-  return addMoney(account.balance, flow)
 }
 
 function toMoneyInputValue(value: number) {
@@ -300,17 +292,27 @@ export function AccountDetailSheet(props: {
   const setBalanceValueTrimmed = balanceValue.trim()
   const setBalanceParsedRaw = Number(setBalanceValueTrimmed)
   const setBalanceParsed = normalizeMoney(setBalanceParsedRaw)
-  const canSubmitSetBalance = setBalanceValueTrimmed !== '' && Number.isFinite(setBalanceParsedRaw)
+  const hasValidSetBalanceAmount =
+    setBalanceValueTrimmed !== '' &&
+    Number.isFinite(setBalanceParsedRaw) &&
+    !isNegativeAccountBalance(setBalanceParsed)
   const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
   const nextNote = normalizeNoteValue(noteValue)
   const setBalanceNoopValue = normalizeMoney(editingSetBalanceOp ? editingSetBalanceOp.after : account.balance)
+  const setBalanceEditDiff = editingSetBalanceOp ? subtractMoney(setBalanceParsed, editingSetBalanceOp.after) : 0
+  const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
+  const wouldSetBalanceGoNegative =
+    Boolean(editingSetBalanceOp) &&
+    hasValidSetBalanceAmount &&
+    canApplySetBalanceDiff &&
+    !canApplyBalanceDelta(account.balance, setBalanceEditDiff)
+  const canSubmitSetBalance = hasValidSetBalanceAmount && !wouldSetBalanceGoNegative
   const isSetBalanceNoop = Boolean(
     editingSetBalanceOp &&
       canSubmitSetBalance &&
       moneyEquals(setBalanceParsed, setBalanceNoopValue) &&
       nextNote === editingSetBalanceOp.note,
   )
-  const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
 
   const OP_DELETE_REVEAL_PX = 72
 
@@ -332,9 +334,9 @@ export function AccountDetailSheet(props: {
   const adjustAmountTrimmed = adjustAmount.trim()
   const adjustParsedRaw = Number(adjustAmountTrimmed)
   const adjustParsed = normalizeMoney(adjustParsedRaw)
-  const canSubmitAdjust =
+  const hasValidAdjustAmount =
     adjustAmountTrimmed !== '' && Number.isFinite(adjustParsedRaw) && adjustParsed > 0
-  const newAdjustDelta = canSubmitAdjust
+  const newAdjustDelta = hasValidAdjustAmount
     ? adjustDirection === 'plus'
       ? adjustParsed
       : -adjustParsed
@@ -343,6 +345,11 @@ export function AccountDetailSheet(props: {
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
   const previewAdjustDiff = editingAdjustOp ? subtractMoney(newAdjustDelta, editingAdjustOp.delta) : newAdjustDelta
   const canApplyAdjustDiff = editingAdjustOp ? canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at) : true
+  const wouldAdjustGoNegative =
+    hasValidAdjustAmount &&
+    canApplyAdjustDiff &&
+    !canApplyBalanceDelta(account.balance, previewAdjustDiff)
+  const canSubmitAdjust = hasValidAdjustAmount && !wouldAdjustGoNegative
   const previewAdjustApplied = canApplyAdjustDiff ? previewAdjustDiff : 0
   const previewAdjustAfter = addMoney(account.balance, previewAdjustApplied)
   const isAdjustNoop = Boolean(
@@ -376,17 +383,6 @@ export function AccountDetailSheet(props: {
     setTransferPeerId('')
     setTransferAmount('')
     transitionToAction('none')
-  }
-
-  const toggleBalanceSign = () => {
-    const raw = balanceValue.trim()
-    if (!raw) {
-      setBalanceValue(isIPhone ? '-0' : '-')
-      refocusActiveInput()
-      return
-    }
-    setBalanceValue(raw.startsWith('-') ? raw.slice(1) : `-${raw}`)
-    refocusActiveInput()
   }
 
   const submitRename = () => {
@@ -428,6 +424,11 @@ export function AccountDetailSheet(props: {
     }
 
     const num = normalizeMoney(parsed)
+    if (isNegativeAccountBalance(num)) {
+      toast('余额不能为负', { tone: 'danger' })
+      refocusActiveInput()
+      return
+    }
 
     if (editingSetBalanceOp) {
       if (moneyEquals(num, editingSetBalanceOp.after) && nextNote === editingSetBalanceOp.note) {
@@ -439,6 +440,11 @@ export function AccountDetailSheet(props: {
 
       const canApply = canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at)
       const diff = subtractMoney(num, editingSetBalanceOp.after)
+      if (canApply && !canApplyBalanceDelta(account.balance, diff)) {
+        toast('保存后余额不能为负', { tone: 'danger' })
+        refocusActiveInput()
+        return
+      }
       if (canApply && diff !== 0) onAdjust(editingSetBalanceOp.accountId, diff)
 
       onUpdateOp(editingSetBalanceOp.id, { ...editingSetBalanceOp, after: num, note: nextNote })
@@ -494,6 +500,11 @@ export function AccountDetailSheet(props: {
 
       const canApply = canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at)
       const diff = subtractMoney(delta, editingAdjustOp.delta)
+      if (canApply && !canApplyBalanceDelta(account.balance, diff)) {
+        toast('操作后余额不能为负', { tone: 'danger' })
+        refocusActiveInput()
+        return
+      }
       if (canApply && diff !== 0) onAdjust(editingAdjustOp.accountId, diff)
 
       onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: addMoney(editingAdjustOp.before, delta), note: nextNote })
@@ -508,6 +519,11 @@ export function AccountDetailSheet(props: {
     }
 
     const after = addMoney(account.balance, delta)
+    if (isNegativeAccountBalance(after)) {
+      toast('操作后余额不能为负', { tone: 'danger' })
+      refocusActiveInput()
+      return
+    }
 
     onAddOp({
       kind: 'adjust',
@@ -551,14 +567,25 @@ export function AccountDetailSheet(props: {
 
       const fromBefore = normalizeMoney(editingTransferOp.fromBefore)
       const toBefore = normalizeMoney(editingTransferOp.toBefore)
-      const nextFromAfter = applyFlow({ ...from, balance: fromBefore }, -num)
-      const nextToAfter = applyFlow({ ...to, balance: toBefore }, num)
+      const nextFromAfter = applyAccountFlow(from.type, fromBefore, -num)
+      const nextToAfter = applyAccountFlow(to.type, toBefore, num)
+      if (isNegativeAccountBalance(nextFromAfter) || isNegativeAccountBalance(nextToAfter)) {
+        toast('转账后余额不能为负', { tone: 'danger' })
+        return
+      }
 
       const diffFrom = subtractMoney(nextFromAfter, normalizeMoney(editingTransferOp.fromAfter))
       const diffTo = subtractMoney(nextToAfter, normalizeMoney(editingTransferOp.toAfter))
 
       const canApplyFrom = canRollbackBalance(editingTransferOp.fromId, editingTransferOp.at)
       const canApplyTo = canRollbackBalance(editingTransferOp.toId, editingTransferOp.at)
+      if (
+        (canApplyFrom && !canApplyBalanceDelta(from.balance, diffFrom)) ||
+        (canApplyTo && !canApplyBalanceDelta(to.balance, diffTo))
+      ) {
+        toast('保存后余额不能为负', { tone: 'danger' })
+        return
+      }
       if (canApplyFrom && diffFrom !== 0) onAdjust(editingTransferOp.fromId, diffFrom)
       if (canApplyTo && diffTo !== 0) onAdjust(editingTransferOp.toId, diffTo)
 
@@ -599,8 +626,12 @@ export function AccountDetailSheet(props: {
 
     const fromBefore = normalizeMoney(from.balance)
     const toBefore = normalizeMoney(to.balance)
-    const fromAfter = applyFlow({ ...from, balance: fromBefore }, -num)
-    const toAfter = applyFlow({ ...to, balance: toBefore }, num)
+    const fromAfter = applyAccountFlow(from.type, fromBefore, -num)
+    const toAfter = applyAccountFlow(to.type, toBefore, num)
+    if (isNegativeAccountBalance(fromAfter) || isNegativeAccountBalance(toAfter)) {
+      toast('转账后余额不能为负', { tone: 'danger' })
+      return
+    }
 
     onAddOp({
       kind: 'transfer',
@@ -925,38 +956,48 @@ export function AccountDetailSheet(props: {
 
                           const handleDeleteOp = async () => {
                             const getAccountName = (id: string) => byId.get(id)?.name ?? '账户'
+                            const canRollbackTarget = (targetAccountId: string, at: string, delta: number) => {
+                              if (!canRollbackBalance(targetAccountId, at)) return false
+                              const target = byId.get(targetAccountId)
+                              if (!target) return false
+                              return canApplyBalanceDelta(target.balance, delta)
+                            }
                             const rollbackTargets: Array<{ accountId: string; name: string; delta: number; canRollback: boolean }> = []
 
                             if (op.kind === 'adjust') {
+                              const delta = subtractMoney(0, op.delta)
                               rollbackTargets.push({
                                 accountId: op.accountId,
                                 name: getAccountName(op.accountId),
-                                delta: subtractMoney(0, op.delta),
-                                canRollback: canRollbackBalance(op.accountId, op.at),
+                                delta,
+                                canRollback: canRollbackTarget(op.accountId, op.at, delta),
                               })
                             }
 
                             if (op.kind === 'set_balance') {
+                              const delta = subtractMoney(op.before, op.after)
                               rollbackTargets.push({
                                 accountId: op.accountId,
                                 name: getAccountName(op.accountId),
-                                delta: subtractMoney(op.before, op.after),
-                                canRollback: canRollbackBalance(op.accountId, op.at),
+                                delta,
+                                canRollback: canRollbackTarget(op.accountId, op.at, delta),
                               })
                             }
 
                             if (op.kind === 'transfer') {
+                              const fromDelta = subtractMoney(op.fromBefore, op.fromAfter)
+                              const toDelta = subtractMoney(op.toBefore, op.toAfter)
                               rollbackTargets.push({
                                 accountId: op.fromId,
                                 name: getAccountName(op.fromId),
-                                delta: subtractMoney(op.fromBefore, op.fromAfter),
-                                canRollback: canRollbackBalance(op.fromId, op.at),
+                                delta: fromDelta,
+                                canRollback: canRollbackTarget(op.fromId, op.at, fromDelta),
                               })
                               rollbackTargets.push({
                                 accountId: op.toId,
                                 name: getAccountName(op.toId),
-                                delta: subtractMoney(op.toBefore, op.toAfter),
-                                canRollback: canRollbackBalance(op.toId, op.at),
+                                delta: toDelta,
+                                canRollback: canRollbackTarget(op.toId, op.at, toDelta),
                               })
                             }
 
@@ -966,15 +1007,15 @@ export function AccountDetailSheet(props: {
 
                             const noRollbackHint =
                               affectedCount > 1
-                                ? '；其中部分账户余额不变（已在后续校准中固定）'
-                                : '；余额不变（已在后续校准中固定）'
+                                ? '；其中部分账户余额不变（后续校准或余额不足）'
+                                : '；余额不变（后续校准或余额不足）'
 
                             const rollbackSummary =
                               willRollbackCount > 0
                                 ? `将回滚：${willRollback.map((t) => `${t.name} ${formatSigned(t.delta)}`).join('；')}${
                                     willRollbackCount < affectedCount ? noRollbackHint : ''
                                   }`
-                                : '余额不会变化（已在后续校准中固定）'
+                                : '余额不会变化（后续校准或余额不足）'
 
                             const confirmTitle =
                               op.kind === 'transfer'
@@ -1229,6 +1270,11 @@ export function AccountDetailSheet(props: {
                       余额不会变（已在后续校准中固定）
                     </div>
                   ) : null}
+                  {wouldAdjustGoNegative ? (
+                    <div className="mt-1 text-[11px] font-semibold text-rose-500">
+                      操作后余额不能为负
+                    </div>
+                  ) : null}
                 </div>
 
                 <motion.button
@@ -1251,8 +1297,8 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <div className="flex items-baseline gap-2 flex-1 min-w-0">
+                <div className="mt-4">
+                  <div className="flex items-baseline gap-2 min-w-0">
                     <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
                     <input
                       ref={balanceInputRef}
@@ -1274,15 +1320,6 @@ export function AccountDetailSheet(props: {
                       aria-label="set balance"
                     />
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={toggleBalanceSign}
-                    className="px-2 py-2 rounded-full text-[13px] font-semibold text-slate-500 hover:bg-white/60"
-                    aria-label="toggle sign"
-                  >
-                    +/-
-                  </button>
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-4">
@@ -1303,6 +1340,18 @@ export function AccountDetailSheet(props: {
                 {editingSetBalanceOp && !canApplySetBalanceDiff ? (
                   <div className="mt-1 text-[11px] font-semibold text-slate-400">
                     余额不会变（已在后续校准中固定）
+                  </div>
+                ) : null}
+                {setBalanceValueTrimmed !== '' &&
+                Number.isFinite(setBalanceParsedRaw) &&
+                isNegativeAccountBalance(setBalanceParsed) ? (
+                  <div className="mt-1 text-[11px] font-semibold text-rose-500">
+                    余额不能为负
+                  </div>
+                ) : null}
+                {wouldSetBalanceGoNegative ? (
+                  <div className="mt-1 text-[11px] font-semibold text-rose-500">
+                    保存后余额不能为负
                   </div>
                 ) : null}
 

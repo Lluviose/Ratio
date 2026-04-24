@@ -39,5 +39,36 @@ describe('normalizeSnapshot', () => {
       { id: 'b', type: 'fund', name: '基金2', balance: 0 },
     ])
   })
+
+  it('migrates negative snapshot balances to the non-negative account model', () => {
+    const raw = {
+      date: '2025-01-01',
+      net: 9999,
+      debt: -50,
+      cash: -10,
+      invest: 20,
+      fixed: 30,
+      receivable: -5,
+      accounts: [
+        { id: 'asset', type: 'cash', name: 'Cash', balance: -10 },
+        { id: 'debt', type: 'credit_card', name: 'Card', balance: -50 },
+      ],
+    } as unknown as Snapshot
+
+    const s = normalizeSnapshot(raw)
+
+    expect(s).toMatchObject({
+      net: 0,
+      debt: 50,
+      cash: 0,
+      invest: 20,
+      fixed: 30,
+      receivable: 0,
+    })
+    expect(s.accounts).toEqual([
+      { id: 'asset', type: 'cash', name: 'Cash', balance: 0 },
+      { id: 'debt', type: 'credit_card', name: 'Card', balance: 50 },
+    ])
+  })
 })
 

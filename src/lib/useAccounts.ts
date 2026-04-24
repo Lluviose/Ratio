@@ -10,6 +10,12 @@ import {
   type AccountGroupId,
   type AccountTypeId,
 } from './accounts'
+import {
+  applyAccountFlow,
+  canApplyBalanceDelta,
+  isNegativeAccountBalance,
+  normalizeStoredAccountBalance,
+} from './accountBalance'
 
 function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -35,15 +41,6 @@ function coerceAccountTypeId(value: unknown): AccountTypeId {
   return 'other_liquid'
 }
 
-function isDebtAccount(type: AccountTypeId) {
-  return type === 'credit_card' || type === 'loan' || type === 'payable' || type === 'other_debt'
-}
-
-function applyFlow(type: AccountTypeId, balance: number, flow: number) {
-  if (isDebtAccount(type)) return addMoney(balance, -flow)
-  return addMoney(balance, flow)
-}
-
 const initialAccounts: Account[] = []
 
 function coerceAccounts(value: unknown): Account[] {
@@ -58,8 +55,7 @@ function coerceAccounts(value: unknown): Account[] {
     const id = typeof item.id === 'string' && item.id.trim() ? item.id : createId()
     const name =
       typeof item.name === 'string' && item.name.trim() ? item.name.trim() : defaultAccountName(type)
-    const balance =
-      typeof item.balance === 'number' && Number.isFinite(item.balance) ? normalizeMoney(item.balance) : 0
+    const balance = normalizeStoredAccountBalance(type, item.balance)
     const updatedAt = typeof item.updatedAt === 'string' && item.updatedAt ? item.updatedAt : now
 
     result.push({ id, type, name, balance, updatedAt })
@@ -92,6 +88,7 @@ export function useAccounts() {
     (id: string, balance: number) => {
       if (!Number.isFinite(balance)) return
       const nextBalance = normalizeMoney(balance)
+      if (isNegativeAccountBalance(nextBalance)) return
       setAccounts((prev) =>
         prev.map((a) => (a.id === id ? { ...a, balance: nextBalance, updatedAt: nowIso() } : a)),
       )
@@ -113,11 +110,17 @@ export function useAccounts() {
       if (!Number.isFinite(delta)) return
       const normalizedDelta = normalizeMoney(delta)
       if (normalizedDelta === 0) return
-      setAccounts((prev) =>
-        prev.map((a) =>
-          a.id === id ? { ...a, balance: addMoney(a.balance, normalizedDelta), updatedAt: nowIso() } : a,
-        ),
-      )
+      setAccounts((prev) => {
+        let changed = false
+        const ts = nowIso()
+        const next = prev.map((a) => {
+          if (a.id !== id) return a
+          if (!canApplyBalanceDelta(a.balance, normalizedDelta)) return a
+          changed = true
+          return { ...a, balance: addMoney(a.balance, normalizedDelta), updatedAt: ts }
+        })
+        return changed ? next : prev
+      })
     },
     [setAccounts],
   )
@@ -135,8 +138,10 @@ export function useAccounts() {
         const to = prev.find((a) => a.id === toId)
         if (!from || !to) return prev
 
-        const fromAfter = applyFlow(from.type, from.balance, -normalizedAmount)
-        const toAfter = applyFlow(to.type, to.balance, normalizedAmount)
+        const fromAfter = applyAccountFlow(from.type, from.balance, -normalizedAmount)
+        const toAfter = applyAccountFlow(to.type, to.balance, normalizedAmount)
+        if (isNegativeAccountBalance(fromAfter) || isNegativeAccountBalance(toAfter)) return prev
+
         const ts = nowIso()
 
         return prev.map((a) => {

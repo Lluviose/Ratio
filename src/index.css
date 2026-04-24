@@ -32,6 +32,27 @@
   color-scheme: light;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  .appFrame,
+  .topBar,
+  .navBar,
+  .card,
+  .themeRow,
+  .input,
+  .select,
+  .iconBtn,
+  .assetItem,
+  .subRow,
+  .actionRow,
+  .pickRow {
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease,
+      box-shadow 180ms ease;
+  }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -203,6 +224,10 @@ a {
   overflow: auto;
 }
 
+.contentWithNav {
+  padding-bottom: calc(92px + var(--safe-bottom));
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--hairline);
@@ -273,11 +298,28 @@ a {
   justify-items: center;
   gap: 6px;
   color: rgba(11, 15, 26, 0.6);
+  position: relative;
+  overflow: hidden;
 }
 
 .navItemActive {
-  background: rgba(11, 15, 26, 0.04);
+  background: transparent;
   color: var(--text);
+}
+
+.navActiveIndicator {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  box-shadow: 0 10px 24px -18px rgba(15, 23, 42, 0.42);
+}
+
+.navIcon,
+.navLabel {
+  position: relative;
+  z-index: 1;
 }
 
 .navLabel {
@@ -462,6 +504,7 @@ a {
   border-radius: 18px;
   border: 1px solid rgba(11, 15, 26, 0.06);
   cursor: pointer;
+  will-change: background-color, border-color;
 }
 
 .swatches {
@@ -469,11 +512,14 @@ a {
 }
 
 .swatch {
+  display: inline-block;
+  flex: 0 0 auto;
   width: 26px;
   height: 26px;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.9);
   margin-left: -10px;
+  box-shadow: 0 8px 18px -14px rgba(15, 23, 42, 0.45);
 }
 
 .swatch:first-child {
@@ -488,11 +534,16 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
 }
 
 .checkOn {
   border-color: var(--primary);
   background: rgb(var(--primary-rgb) / 0.12);
+  transform: scale(1.06);
 }
 
 .toggle {
@@ -914,4 +965,116 @@ button:disabled {
   background: transparent;
   font-size: inherit;
   color: inherit;
+}
+
+.screenSkeleton {
+  display: grid;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.skeletonBlock {
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.58)),
+    rgba(11, 15, 26, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 24px -22px rgba(15, 23, 42, 0.48);
+}
+
+.skeletonSegment,
+.skeletonPills {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.skeletonSegment .skeletonBlock {
+  width: 118px;
+  height: 34px;
+}
+
+.skeletonPills .skeletonBlock {
+  width: 52px;
+  height: 28px;
+}
+
+.skeletonChart {
+  height: 240px;
+  margin-top: 8px;
+  border-radius: 26px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.48);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeletonLine {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  height: 4px;
+  border-radius: 999px;
+  transform-origin: left center;
+}
+
+.skeletonLineA {
+  top: 96px;
+  transform: rotate(-9deg);
+}
+
+.skeletonLineB {
+  top: 138px;
+  transform: rotate(7deg);
+  opacity: 0.68;
+}
+
+.skeletonAxis {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.skeletonAxis .skeletonBlock {
+  height: 8px;
+  opacity: 0.62;
+}
+
+.skeletonTextLine {
+  height: 12px;
+}
+
+.skeletonStatsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.skeletonStatsGrid .skeletonBlock {
+  height: 72px;
+  border-radius: 18px;
+}
+
+.skeletonCard {
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--hairline);
+  background: var(--card);
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.skeletonRows {
+  display: grid;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.skeletonRows .skeletonBlock {
+  height: 42px;
+  border-radius: 18px;
 }

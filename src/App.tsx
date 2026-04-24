@@ -1,14 +1,13 @@
-import { ChevronLeft } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { BarChart3, ChevronLeft, Settings as SettingsIcon, TrendingUp, Wallet } from 'lucide-react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen'
 import { TourScreen } from './screens/TourScreen'
-import { SettingsScreen } from './screens/SettingsScreen'
-import { StatsScreen } from './screens/StatsScreen'
-import { TrendScreen } from './screens/TrendScreen'
 import { AccountDetailSheet } from './components/AccountDetailSheet'
 import { AddAccountScreen } from './screens/AddAccountScreen'
-import { AiAssistant } from './components/AiAssistant'
+import { LazyAiAssistant } from './components/LazyAiAssistant'
+import { LazyLoadBoundary } from './components/LazyLoadBoundary'
+import { ScreenSkeleton } from './components/ScreenSkeleton'
 import { type Account } from './lib/accounts'
 import { useAccounts } from './lib/useAccounts'
 import { useSnapshots } from './lib/useSnapshots'
@@ -18,9 +17,110 @@ import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions,
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
+import { navSpring, screenTransition } from './lib/motionPresets'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
+
+const tabOrder: Record<TabId, number> = {
+  assets: 0,
+  trend: 1,
+  stats: 2,
+  settings: 3,
+}
+
+const screenVariants = {
+  initial: (direction: number) => ({
+    opacity: 0,
+    x: direction >= 0 ? 22 : -22,
+  }),
+  animate: {
+    opacity: 1,
+    x: 0,
+  },
+  exit: (direction: number) => ({
+    opacity: 0,
+    x: direction >= 0 ? -22 : 22,
+  }),
+}
+
+const loadTrendScreen = () => import('./screens/TrendScreen')
+const loadStatsScreen = () => import('./screens/StatsScreen')
+const loadSettingsScreen = () => import('./screens/SettingsScreen')
+
+const TrendScreen = lazy(() => loadTrendScreen().then((mod) => ({ default: mod.TrendScreen })))
+const StatsScreen = lazy(() => loadStatsScreen().then((mod) => ({ default: mod.StatsScreen })))
+const SettingsScreen = lazy(() => loadSettingsScreen().then((mod) => ({ default: mod.SettingsScreen })))
+
+function preloadTab(tab: TabId) {
+  if (tab === 'trend') return loadTrendScreen()
+  if (tab === 'stats') return loadStatsScreen()
+  if (tab === 'settings') return loadSettingsScreen()
+  return Promise.resolve()
+}
+
+function scheduleIdleWork(work: () => void) {
+  if (typeof window === 'undefined') return () => {}
+
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+    cancelIdleCallback?: (handle: number) => void
+  }
+
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const id = idleWindow.requestIdleCallback(work, { timeout: 3500 })
+    return () => idleWindow.cancelIdleCallback?.(id)
+  }
+
+  const timer = window.setTimeout(work, 1400)
+  return () => window.clearTimeout(timer)
+}
+
+function ScreenLoadError() {
+  return (
+    <div className="muted" style={{ padding: 28, textAlign: 'center', fontSize: 13, fontWeight: 800 }}>
+      模块加载失败，请检查网络后刷新
+    </div>
+  )
+}
+
+function BottomTabNav(props: { tab: TabId; onNavigate: (tab: TabId) => void }) {
+  const { tab, onNavigate } = props
+  const options: Array<{ id: TabId; label: string; icon: typeof Wallet }> = [
+    { id: 'assets', label: '资产', icon: Wallet },
+    { id: 'trend', label: '趋势', icon: TrendingUp },
+    { id: 'stats', label: '统计', icon: BarChart3 },
+    { id: 'settings', label: '设置', icon: SettingsIcon },
+  ]
+
+  return (
+    <div className="navBar">
+      <div className="navBarGrid">
+        {options.map((item) => {
+          const active = item.id === tab
+          const Icon = item.icon
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={active ? 'navItem navItemActive' : 'navItem'}
+              onClick={() => onNavigate(item.id)}
+              aria-current={active ? 'page' : undefined}
+            >
+              {active ? <motion.div className="navActiveIndicator" layoutId="bottomNavActive" transition={navSpring} /> : null}
+              <motion.span className="navIcon" animate={{ y: active ? -1 : 0, opacity: active ? 1 : 0.72 }} transition={screenTransition}>
+                <Icon size={20} strokeWidth={2.5} />
+              </motion.span>
+              <motion.span className="navLabel" animate={{ opacity: active ? 1 : 0.68 }} transition={screenTransition}>
+                {item.label}
+              </motion.span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
 
 function hexToRgbTriplet(hex: string): string | null {
   const raw = hex.trim().replace(/^#/, '')
@@ -51,6 +151,7 @@ export default function App() {
   const [detailTransitionAccountId, setDetailTransitionAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
+  const [tabDirection, setTabDirection] = useState(1)
 
   const accounts = useAccounts()
   const accountOps = useAccountOps()
@@ -114,6 +215,23 @@ export default function App() {
     }
   }, [tab])
 
+  useEffect(() => {
+    if (!tourSeen) return
+
+    return scheduleIdleWork(() => {
+      void loadTrendScreen().catch(() => undefined)
+      void loadStatsScreen().catch(() => undefined)
+      void loadSettingsScreen().catch(() => undefined)
+    })
+  }, [tourSeen])
+
+  const navigateTab = (next: TabId) => {
+    if (next === tab) return
+    void preloadTab(next).catch(() => undefined)
+    setTabDirection(Math.sign(tabOrder[next] - tabOrder[tab]) || 1)
+    setTab(next)
+  }
+
   return (
     <div className="appViewport">
       <div className="appFrame">
@@ -168,7 +286,7 @@ export default function App() {
                         type="button"
                         className="iconBtn"
                         aria-label="back"
-                        onClick={() => setTab('assets')}
+                        onClick={() => navigateTab('assets')}
                       >
                         <ChevronLeft size={20} strokeWidth={2.5} />
                       </button>
@@ -190,15 +308,17 @@ export default function App() {
                 </div>
               ) : null}
 
-              <div className={tab === 'assets' ? 'relative flex-1 min-h-0' : 'content relative'}>
-                <AnimatePresence mode="wait">
+              <div className={tab === 'assets' ? 'relative flex-1 min-h-0' : 'content contentWithNav relative'}>
+                <AnimatePresence mode="wait" custom={tabDirection}>
                   {tab === 'assets' && (
                     <motion.div
                       key="assets"
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      transition={{ duration: 0.2 }}
+                      custom={tabDirection}
+                      variants={screenVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={screenTransition}
                       style={{ height: '100%' }}
                     >
                       <AssetsScreen
@@ -206,7 +326,7 @@ export default function App() {
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
                         addButtonTone={themeColors.debt}
-                        onNavigate={(next) => setTab(next)}
+                        onNavigate={navigateTab}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
                           setDetailTransitionAccountId(a.id)
@@ -220,50 +340,70 @@ export default function App() {
                   {tab === 'trend' && (
                     <motion.div
                       key="trend"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.2 }}
+                      custom={tabDirection}
+                      variants={screenVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={screenTransition}
                       style={{ height: '100%' }}
                     >
-                      <TrendScreen snapshots={snapshots} colors={themeColors} />
+                      <LazyLoadBoundary fallback={<ScreenLoadError />}>
+                        <Suspense fallback={<ScreenSkeleton screen="trend" />}>
+                          <TrendScreen snapshots={snapshots} colors={themeColors} />
+                        </Suspense>
+                      </LazyLoadBoundary>
                     </motion.div>
                   )}
                   {tab === 'stats' && (
                     <motion.div
                       key="stats"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.2 }}
+                      custom={tabDirection}
+                      variants={screenVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={screenTransition}
                       style={{ height: '100%' }}
                     >
-                      <StatsScreen snapshots={snapshots} colors={themeColors} />
+                      <LazyLoadBoundary fallback={<ScreenLoadError />}>
+                        <Suspense fallback={<ScreenSkeleton screen="stats" />}>
+                          <StatsScreen snapshots={snapshots} colors={themeColors} />
+                        </Suspense>
+                      </LazyLoadBoundary>
                     </motion.div>
                   )}
                   {tab === 'settings' && (
                     <motion.div
                       key="settings"
-                      initial={{ opacity: 0, x: 20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -20 }}
-                      transition={{ duration: 0.2 }}
+                      custom={tabDirection}
+                      variants={screenVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={screenTransition}
                       style={{ height: '100%' }}
                     >
-                      <SettingsScreen
-                        themeOptions={themeOptions}
-                        theme={theme}
-                        onThemeChange={(id) => {
-                          if (id === 'random') setRandomTheme(pickRandomThemeId())
-                          setTheme(id)
-                        }}
-                      />
+                      <LazyLoadBoundary fallback={<ScreenLoadError />}>
+                        <Suspense fallback={<ScreenSkeleton screen="settings" />}>
+                          <SettingsScreen
+                            themeOptions={themeOptions}
+                            theme={theme}
+                            onThemeChange={(id) => {
+                              if (id === 'random') setRandomTheme(pickRandomThemeId())
+                              setTheme(id)
+                            }}
+                          />
+                        </Suspense>
+                      </LazyLoadBoundary>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
 
-              {tab === 'assets' && view === 'main' && selectedAccountId == null ? <AiAssistant /> : null}
+              {tab !== 'assets' ? <BottomTabNav tab={tab} onNavigate={navigateTab} /> : null}
+
+              {tab === 'assets' && view === 'main' && selectedAccountId == null ? <LazyAiAssistant /> : null}
 
               <AccountDetailSheet
                 open={Boolean(selectedAccountId)}

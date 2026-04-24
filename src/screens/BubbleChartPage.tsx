@@ -1,6 +1,6 @@
-import { motion, type MotionValue } from 'framer-motion'
+import { AnimatePresence, motion, type MotionValue } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
-import { useCallback, useRef, type PointerEvent } from 'react'
+import { useCallback, useRef, useState, type PointerEvent } from 'react'
 
 type BubbleGesture = {
   nodes: Array<{ id: string; radius: number }>
@@ -22,6 +22,7 @@ type Tracking = {
 }
 
 type RapidTap = { bubbleId: string; count: number; tMs: number }
+type BubbleRipple = { id: number; x: number; y: number; radius: number }
 
 export function BubbleChartPage(props: {
   isActive: boolean
@@ -32,6 +33,8 @@ export function BubbleChartPage(props: {
 
   const trackingRef = useRef<Tracking | null>(null)
   const rapidTapRef = useRef<RapidTap | null>(null)
+  const rippleCounterRef = useRef(0)
+  const [ripple, setRipple] = useState<BubbleRipple | null>(null)
 
   const pickBubbleId = useCallback(
     (x: number, y: number) => {
@@ -77,6 +80,9 @@ export function BubbleChartPage(props: {
       const x = pageX - scrollLeft
       const bubbleId = pickBubbleId(x, y)
       if (!bubbleId) return
+      const node = gesture.nodes.find((n) => n.id === bubbleId)
+      const radius = node ? Math.max(34, Math.min(92, node.radius * 0.78)) : 52
+      setRipple({ id: rippleCounterRef.current++, x, y, radius })
 
       const tMs = performance.now()
       trackingRef.current = {
@@ -184,6 +190,29 @@ export function BubbleChartPage(props: {
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-transparent">
+      <AnimatePresence>
+        {ripple ? (
+          <motion.div
+            key={ripple.id}
+            className="absolute z-[12] pointer-events-none rounded-full border border-white/70"
+            style={{
+              left: ripple.x - ripple.radius,
+              top: ripple.y - ripple.radius,
+              width: ripple.radius * 2,
+              height: ripple.radius * 2,
+              boxShadow: '0 0 0 1px rgba(15,23,42,0.04)',
+            }}
+            initial={{ opacity: 0.34, scale: 0.52 }}
+            animate={{ opacity: 0, scale: 1.55 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+            onAnimationComplete={() => {
+              setRipple((current) => (current?.id === ripple.id ? null : current))
+            }}
+          />
+        ) : null}
+      </AnimatePresence>
+
       <div
         className="absolute inset-0 z-10"
         style={{ touchAction: 'pan-x' }}
