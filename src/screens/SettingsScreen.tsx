@@ -10,10 +10,18 @@ import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { quickFade, standardEase } from '../lib/motionPresets'
 
+type ThemeChangeOrigin = { x: number; y: number }
+
+function getThemeChangeOrigin(el: HTMLElement): ThemeChangeOrigin {
+  const swatches = el.querySelector('.swatches')
+  const rect = (swatches ?? el).getBoundingClientRect()
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+}
+
 export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
   theme: ThemeId
-  onThemeChange: (id: ThemeId) => void
+  onThemeChange: (id: ThemeId, origin?: ThemeChangeOrigin) => void
 }) {
   const { themeOptions, theme, onThemeChange } = props
 
@@ -102,19 +110,23 @@ export function SettingsScreen(props: {
           <div className="stack" style={{ marginTop: 16 }}>
             {themeOptions.map((t, i) => {
               const active = t.id === theme
+              const activeAccent = t.id === 'random' ? 'var(--primary)' : t.colors.invest
               return (
                 <motion.div
                   key={t.id}
                   className="themeRow"
-                  onClick={() => onThemeChange(t.id)}
+                  onClick={(e) => onThemeChange(t.id, getThemeChangeOrigin(e.currentTarget))}
                   role="button"
                   tabIndex={0}
                   style={{
                     background: active ? 'var(--bg)' : 'transparent',
-                    borderColor: active ? 'var(--primary)' : 'rgba(11, 15, 26, 0.06)',
+                    borderColor: active ? activeAccent : 'rgba(11, 15, 26, 0.06)',
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') onThemeChange(t.id)
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onThemeChange(t.id, getThemeChangeOrigin(e.currentTarget))
+                    }
                   }}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -144,6 +156,7 @@ export function SettingsScreen(props: {
                   <motion.span
                     className={active ? 'check checkOn' : 'check'}
                     aria-label={active ? 'selected' : 'unselected'}
+                    style={active ? { background: activeAccent, borderColor: activeAccent } : undefined}
                     animate={{ scale: active ? 1.06 : 1 }}
                     transition={quickFade}
                   >

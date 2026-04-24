@@ -1,5 +1,5 @@
 import { BarChart3, ChevronLeft, Settings as SettingsIcon, TrendingUp, Wallet } from 'lucide-react'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen'
 import { TourScreen } from './screens/TourScreen'
@@ -18,9 +18,19 @@ import { useLocalStorageState } from './lib/useLocalStorageState'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { navSpring, screenTransition } from './lib/motionPresets'
+import { useReducedMotion } from './lib/useReducedMotion'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
+type ThemeChangeOrigin = { x: number; y: number }
+type ThemeTransition = {
+  key: number
+  targetTheme: ThemeId
+  color: string
+  origin: ThemeChangeOrigin
+  radius: number
+  reducedMotion: boolean
+}
 
 const tabOrder: Record<TabId, number> = {
   assets: 0,
@@ -141,6 +151,80 @@ function hexToRgbTriplet(hex: string): string | null {
   return null
 }
 
+function getThemeTransitionRadius(origin: ThemeChangeOrigin): number {
+  if (typeof window === 'undefined') return 900
+  const maxX = Math.max(origin.x, window.innerWidth - origin.x)
+  const maxY = Math.max(origin.y, window.innerHeight - origin.y)
+  return Math.ceil(Math.hypot(maxX, maxY) + 96)
+}
+
+function getThemeTransitionOrigin(origin?: ThemeChangeOrigin): ThemeChangeOrigin {
+  if (origin) return origin
+  if (typeof window === 'undefined') return { x: 200, y: 400 }
+  return { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+}
+
+function pickNextRandomTheme(current: RealThemeId): RealThemeId {
+  let next = pickRandomThemeId()
+  if (next !== current || realThemeOptions.length <= 1) return next
+
+  const fallback = realThemeOptions.find((t) => t.id !== current && t.id !== 'random')?.id as RealThemeId | undefined
+  if (fallback) next = fallback
+  return next
+}
+
+function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
+  const { transition } = props
+  const { color, origin, radius, reducedMotion } = transition
+
+  if (reducedMotion) {
+    return (
+      <motion.div
+        className="themeTransitionLayer"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.2 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        style={{ background: color }}
+      />
+    )
+  }
+
+  return (
+    <motion.div
+      className="themeTransitionLayer"
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <motion.div
+        className="themeTransitionBloom"
+        initial={{ scale: 0.04, opacity: 0.62 }}
+        animate={{ scale: 1, opacity: [0.62, 0.46, 0.18] }}
+        transition={{
+          scale: { duration: 0.58, ease: [0.16, 1, 0.3, 1] },
+          opacity: { duration: 0.72, times: [0, 0.45, 1], ease: [0.16, 1, 0.3, 1] },
+        }}
+        style={{
+          left: origin.x - radius,
+          top: origin.y - radius,
+          width: radius * 2,
+          height: radius * 2,
+          background: `radial-gradient(circle, ${color} 0%, ${color} 42%, transparent 72%)`,
+        }}
+      />
+      <motion.div
+        className="themeTransitionWash"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 0.16, 0.08] }}
+        transition={{ duration: 0.72, times: [0, 0.45, 1], ease: [0.16, 1, 0.3, 1] }}
+        style={{ background: color }}
+      />
+    </motion.div>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState<TabId>('assets')
   const [view, setView] = useState<ViewId>('main')
@@ -152,10 +236,14 @@ export default function App() {
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
   const [tabDirection, setTabDirection] = useState(1)
+  const [themeTransition, setThemeTransition] = useState<ThemeTransition | null>(null)
+  const themeTransitionSeqRef = useRef(0)
+  const themeTransitionTimersRef = useRef<number[]>([])
 
   const accounts = useAccounts()
   const accountOps = useAccountOps()
   const { snapshots, upsertFromAccounts } = useSnapshots()
+  const prefersReducedMotion = useReducedMotion()
 
   const resolvedTheme = theme === 'random' ? randomTheme : theme
 
@@ -224,6 +312,53 @@ export default function App() {
       void loadSettingsScreen().catch(() => undefined)
     })
   }, [tourSeen])
+
+  const clearThemeTransitionTimers = useCallback(() => {
+    for (const timer of themeTransitionTimersRef.current) {
+      window.clearTimeout(timer)
+    }
+    themeTransitionTimersRef.current = []
+  }, [])
+
+  useEffect(() => clearThemeTransitionTimers, [clearThemeTransitionTimers])
+
+  const handleThemeChange = useCallback(
+    (id: ThemeId, origin?: ThemeChangeOrigin) => {
+      if (id !== 'random' && id === theme) return
+
+      clearThemeTransitionTimers()
+      const nextRandomTheme = id === 'random' ? pickNextRandomTheme(randomTheme) : randomTheme
+      const nextResolvedTheme = id === 'random' ? nextRandomTheme : id
+      const nextTheme = realThemeOptions.find((t) => t.id === nextResolvedTheme) || realThemeOptions[0]
+      const nextOrigin = getThemeTransitionOrigin(origin)
+      const key = themeTransitionSeqRef.current + 1
+      themeTransitionSeqRef.current = key
+
+      setThemeTransition({
+        key,
+        targetTheme: id,
+        color: nextTheme.colors.invest,
+        origin: nextOrigin,
+        radius: getThemeTransitionRadius(nextOrigin),
+        reducedMotion: prefersReducedMotion,
+      })
+
+      const applyDelay = prefersReducedMotion ? 70 : 210
+      const clearDelay = prefersReducedMotion ? 260 : 820
+
+      const applyTimer = window.setTimeout(() => {
+        if (id === 'random') setRandomTheme(nextRandomTheme)
+        setTheme(id)
+      }, applyDelay)
+
+      const clearTimer = window.setTimeout(() => {
+        setThemeTransition((current) => (current?.key === key ? null : current))
+      }, clearDelay)
+
+      themeTransitionTimersRef.current = [applyTimer, clearTimer]
+    },
+    [clearThemeTransitionTimers, prefersReducedMotion, randomTheme, setTheme, theme],
+  )
 
   const navigateTab = (next: TabId) => {
     if (next === tab) return
@@ -388,11 +523,8 @@ export default function App() {
                         <Suspense fallback={<ScreenSkeleton screen="settings" />}>
                           <SettingsScreen
                             themeOptions={themeOptions}
-                            theme={theme}
-                            onThemeChange={(id) => {
-                              if (id === 'random') setRandomTheme(pickRandomThemeId())
-                              setTheme(id)
-                            }}
+                            theme={themeTransition?.targetTheme ?? theme}
+                            onThemeChange={handleThemeChange}
                           />
                         </Suspense>
                       </LazyLoadBoundary>
@@ -430,6 +562,9 @@ export default function App() {
               />
             </motion.div>
           )}
+          </AnimatePresence>
+          <AnimatePresence initial={false}>
+            {themeTransition ? <ThemeTransitionOverlay key={themeTransition.key} transition={themeTransition} /> : null}
           </AnimatePresence>
         </OverlayProvider>
       </div>

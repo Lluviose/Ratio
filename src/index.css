@@ -119,6 +119,33 @@ body {
   height: 100%;
 }
 
+.themeTransitionLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  overflow: hidden;
+  contain: layout paint style;
+  isolation: isolate;
+}
+
+.themeTransitionBloom {
+  position: fixed;
+  border-radius: 9999px;
+  filter: blur(18px);
+  mix-blend-mode: multiply;
+  transform-origin: center;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.themeTransitionWash {
+  position: absolute;
+  inset: 0;
+  will-change: opacity;
+}
+
 button {
   font: inherit;
   transition: transform 0.1s ease, background-color 0.2s ease;
