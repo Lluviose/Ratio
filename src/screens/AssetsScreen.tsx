@@ -37,6 +37,13 @@ type Rect = { x: number; y: number; w: number; h: number }
 
 const LIST_GROUP_ORDER: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
 
+const INITIAL_HOME_PAGE_INDEX = 2
+const BUBBLE_PAGE_ACTIVE_MAX = 0.8
+const BUBBLE_PHYSICS_ENABLE_MAX = 0.24
+const BUBBLE_PHYSICS_DISABLE_MAX = 0.34
+const BUBBLE_BURSTS_ENABLE_MAX = 0.62
+const BUBBLE_BURSTS_DISABLE_MAX = 0.72
+
 type Block = {
   id: GroupId
   name: string
@@ -51,6 +58,12 @@ type OverlayBlockModel = Block
 type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly' | 'assetTopNoDebt' | 'assetMiddleNoDebt' | 'assetBottomNoDebt' | 'assetOnlyNoDebt'
 
 type CornerRadii = { tl: number; tr: number; bl: number; br: number }
+
+type BubbleRuntimeState = {
+  pageActive: boolean
+  physicsActive: boolean
+  burstsVisible: boolean
+}
 
 type HomeBlockGeometry = {
   block: OverlayBlockModel
@@ -82,6 +95,17 @@ function getRatioCorner(kind: CornerKind, chartRadius: number): CornerRadii {
 function getListCorner(kind: CornerKind, listRadius: number): CornerRadii {
   const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
   return { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
+}
+
+function getBubbleRuntimeState(idx: number, current?: BubbleRuntimeState): BubbleRuntimeState {
+  const pageActive = idx < BUBBLE_PAGE_ACTIVE_MAX
+  const physicsActive = current?.physicsActive ? idx < BUBBLE_PHYSICS_DISABLE_MAX : idx < BUBBLE_PHYSICS_ENABLE_MAX
+  const burstsVisible = current?.burstsVisible ? idx < BUBBLE_BURSTS_DISABLE_MAX : idx < BUBBLE_BURSTS_ENABLE_MAX
+  return { pageActive, physicsActive, burstsVisible }
+}
+
+function isSameBubbleRuntimeState(a: BubbleRuntimeState, b: BubbleRuntimeState): boolean {
+  return a.pageActive === b.pageActive && a.physicsActive === b.physicsActive && a.burstsVisible === b.burstsVisible
 }
 
 function OverlayBlock(props: {
@@ -581,12 +605,14 @@ export function AssetsScreen(props: {
   // Also visible on Page 0 (Bubble)
   const overlayFade = useTransform(scrollIdx, [0, 1, 2, 2.08, 3], [1, 1, 1, 0, 0])
   
-  // Bubble chart visibility
-  const [isBubblePageActive, setIsBubblePageActive] = useState(true)
+  const [bubbleRuntime, setBubbleRuntime] = useState<BubbleRuntimeState>(() => getBubbleRuntimeState(INITIAL_HOME_PAGE_INDEX))
   
   useEffect(() => {
     return scrollIdx.on('change', (v) => {
-        setIsBubblePageActive(v < 0.8)
+      setBubbleRuntime((current) => {
+        const next = getBubbleRuntimeState(v, current)
+        return isSameBubbleRuntimeState(current, next) ? current : next
+      })
     })
   }, [scrollIdx])
 
@@ -701,7 +727,13 @@ export function AssetsScreen(props: {
     return m
   }, [bubbleNodes])
 
-  const bubblePhysics = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
+  const bubblePhysics = useBubblePhysics(
+    bubbleNodes,
+    viewport.w,
+    viewport.h,
+    bubbleRuntime.physicsActive,
+    bubbleRuntime.burstsVisible,
+  )
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -1411,7 +1443,7 @@ export function AssetsScreen(props: {
           />
         ))}
 
-        {isBubblePageActive
+        {bubbleRuntime.burstsVisible
           ? Array.from(bubblePhysics.bursts.entries()).flatMap(([parentId, burst]) => {
               const color = bubbleColorById.get(parentId) ?? 'rgba(0,0,0,0.25)'
               return burst.shards.map((shard) => (
@@ -1561,7 +1593,7 @@ export function AssetsScreen(props: {
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
           <div className="w-full h-full relative">
             <BubbleChartPage
-              isActive={isBubblePageActive}
+              isActive={bubbleRuntime.pageActive}
               onNext={() => scrollToPage(1)}
               gesture={{
                 nodes: bubbleNodes.map((n) => ({ id: n.id, radius: n.radius })),

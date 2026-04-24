@@ -52,12 +52,13 @@ export function useBubblePhysics(
   nodes: BubbleNode[],
   width: number,
   height: number,
-  isActive: boolean
+  isActive: boolean,
+  keepBurstsVisible = isActive
 ): BubblePhysics {
   const [positions] = useState(() => new Map<string, BubblePosition>())
   const [bursts] = useState(() => new Map<string, BubbleBurst>())
   const [burstProgress] = useState(() => new Map<string, MotionValue<number>>())
-  const [, bump] = useState(0)
+  const [runtimeRevision, bump] = useState(0)
 
   nodes.forEach((node) => {
     if (!positions.has(node.id)) {
@@ -334,12 +335,14 @@ export function useBubblePhysics(
     const runner = runnerRef.current
     if (!engine || !runner) return
 
-    if (isActive) {
+    const shouldRun = isActive || (keepBurstsVisible && burstStatesRef.current.size > 0)
+
+    if (shouldRun) {
       Matter.Runner.run(runner, engine)
     } else {
       Matter.Runner.stop(runner)
     }
-  }, [height, isActive, nodes.length, width])
+  }, [height, isActive, keepBurstsVisible, nodes.length, runtimeRevision, width])
 
   useEffect(() => {
     if (!isActive) return
@@ -349,7 +352,7 @@ export function useBubblePhysics(
   }, [isActive])
 
   useEffect(() => {
-    if (isActive) return
+    if (keepBurstsVisible) return
 
     const engine = engineRef.current
     if (!engine) {
@@ -379,7 +382,7 @@ export function useBubblePhysics(
     bursts.clear()
     burstStatesRef.current = new Map()
     bump((v) => v + 1)
-  }, [bursts, burstProgress, isActive])
+  }, [bursts, burstProgress, keepBurstsVisible])
 
   const flick = useCallback((id: string, velocity: { x: number; y: number }) => {
     const body = bodiesRef.current.get(id)
