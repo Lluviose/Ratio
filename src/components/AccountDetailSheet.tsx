@@ -6,6 +6,13 @@ import { SegmentedControl } from './SegmentedControl'
 import { useOverlay } from '../lib/overlay'
 import { formatCny as formatCnyBase } from '../lib/format'
 import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from '../lib/money'
+import {
+  appendMoneyExpressionOperator,
+  evaluateMoneyExpression,
+  sanitizeMoneyExpressionInput,
+  type MoneyExpressionOperator,
+  type MoneyExpressionResult,
+} from '../lib/moneyExpression'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
 import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
 import { type ThemeColors } from '../lib/themes'
@@ -44,6 +51,67 @@ function toMoneyInputValue(value: number) {
 function normalizeNoteValue(value: string) {
   const note = value.trim()
   return note ? note : undefined
+}
+
+function MoneyExpressionPreview(props: { show: boolean; result: MoneyExpressionResult }) {
+  const { show, result } = props
+  if (!show) return null
+
+  return (
+    <div className="mt-2 flex min-h-9 items-center justify-between rounded-[18px] border border-white/80 bg-white/70 px-3 py-2 shadow-sm">
+      <div className="text-[13px] font-black text-slate-400">=</div>
+      {result.ok ? (
+        <div className={`text-[13px] font-semibold ${result.value < 0 ? 'text-rose-500' : 'text-slate-700'}`}>
+          {formatCny(result.value)}
+        </div>
+      ) : (
+        <div className="text-[12px] font-semibold text-slate-400">
+          {result.reason === 'invalid' ? '无法计算' : '继续输入金额'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MoneyExpressionKeypad(props: { onOperator: (operator: MoneyExpressionOperator) => void; onClear: () => void }) {
+  const { onOperator, onClear } = props
+  const keyClass =
+    'h-11 rounded-full border border-white/80 bg-white/80 text-slate-800 text-[18px] font-black shadow-sm transition-colors'
+
+  return (
+    <div className="mt-3 grid grid-cols-3 gap-2">
+      <motion.button
+        type="button"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => onOperator('+')}
+        whileTap={{ scale: 0.96 }}
+        className={keyClass}
+        aria-label="add"
+      >
+        +
+      </motion.button>
+      <motion.button
+        type="button"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => onOperator('-')}
+        whileTap={{ scale: 0.96 }}
+        className={keyClass}
+        aria-label="subtract"
+      >
+        -
+      </motion.button>
+      <motion.button
+        type="button"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={onClear}
+        whileTap={{ scale: 0.96 }}
+        className={`${keyClass} text-[14px] text-slate-500`}
+        aria-label="clear"
+      >
+        AC
+      </motion.button>
+    </div>
+  )
 }
 
 export function AccountDetailSheet(props: {
@@ -113,6 +181,7 @@ export function AccountDetailSheet(props: {
   const [noteValue, setNoteValue] = useState('')
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
+  const transferInputRef = useRef<HTMLInputElement | null>(null)
   const suppressOpClickRef = useRef(false)
   const openedAtRef = useRef<number | null>(null)
   const initKeyRef = useRef<string | null>(null)
@@ -125,6 +194,7 @@ export function AccountDetailSheet(props: {
   const amountInputProps = isIPhone
     ? ({ type: 'number', inputMode: 'decimal', step: 'any' } as const)
     : ({ inputMode: 'decimal' } as const)
+  const expressionInputProps = { inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const
 
   const handleClosePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault()
@@ -290,11 +360,11 @@ export function AccountDetailSheet(props: {
     )
 
   const setBalanceValueTrimmed = balanceValue.trim()
-  const setBalanceParsedRaw = Number(setBalanceValueTrimmed)
-  const setBalanceParsed = normalizeMoney(setBalanceParsedRaw)
+  const setBalanceExpression = evaluateMoneyExpression(balanceValue)
+  const setBalanceParsed = setBalanceExpression.ok ? setBalanceExpression.value : 0
   const hasValidSetBalanceAmount =
     setBalanceValueTrimmed !== '' &&
-    Number.isFinite(setBalanceParsedRaw) &&
+    setBalanceExpression.ok &&
     !isNegativeAccountBalance(setBalanceParsed)
   const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
   const nextNote = normalizeNoteValue(noteValue)
@@ -343,6 +413,12 @@ export function AccountDetailSheet(props: {
     : 0
   const editingAdjustOp = editingOp?.kind === 'adjust' ? editingOp : null
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
+  const transferAmountTrimmed = transferAmount.trim()
+  const transferExpression = evaluateMoneyExpression(transferAmount)
+  const transferParsed = transferExpression.ok ? transferExpression.value : 0
+  const hasValidTransferAmount = transferAmountTrimmed !== '' && transferExpression.ok && transferParsed > 0
+  const isTransferNoop = Boolean(editingTransferOp && hasValidTransferAmount && moneyEquals(transferParsed, editingTransferOp.amount))
+  const canSubmitTransfer = hasValidTransferAmount && (editingTransferOp ? !isTransferNoop : Boolean(transferPeerId))
   const previewAdjustDiff = editingAdjustOp ? subtractMoney(newAdjustDelta, editingAdjustOp.delta) : newAdjustDelta
   const canApplyAdjustDiff = editingAdjustOp ? canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at) : true
   const wouldAdjustGoNegative =
@@ -362,10 +438,41 @@ export function AccountDetailSheet(props: {
         ? balanceInputRef.current
         : action === 'adjust'
           ? adjustInputRef.current
-          : null
+          : action === 'transfer'
+            ? transferInputRef.current
+            : null
     if (!el) return
     el.focus()
     el.select()
+  }
+
+  const focusInputAtEnd = (input: HTMLInputElement | null) => {
+    if (!input || typeof window === 'undefined') return
+    window.requestAnimationFrame(() => {
+      input.focus()
+      const pos = input.value.length
+      input.setSelectionRange(pos, pos)
+    })
+  }
+
+  const appendBalanceOperator = (operator: MoneyExpressionOperator) => {
+    setBalanceValue((value) => appendMoneyExpressionOperator(value, operator))
+    focusInputAtEnd(balanceInputRef.current)
+  }
+
+  const clearBalanceExpression = () => {
+    setBalanceValue('')
+    focusInputAtEnd(balanceInputRef.current)
+  }
+
+  const appendTransferOperator = (operator: MoneyExpressionOperator) => {
+    setTransferAmount((value) => appendMoneyExpressionOperator(value, operator))
+    focusInputAtEnd(transferInputRef.current)
+  }
+
+  const clearTransferExpression = () => {
+    setTransferAmount('')
+    focusInputAtEnd(transferInputRef.current)
   }
 
   const cancelEdit = () => {
@@ -409,21 +516,14 @@ export function AccountDetailSheet(props: {
   }
 
   const submitSetBalance = () => {
-    const raw = balanceValue.trim()
-    if (!raw) {
+    const evaluated = evaluateMoneyExpression(balanceValue)
+    if (!balanceValue.trim() || !evaluated.ok) {
       toast('请输入正确余额', { tone: 'danger' })
       refocusActiveInput()
       return
     }
 
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed)) {
-      toast('请输入正确余额', { tone: 'danger' })
-      refocusActiveInput()
-      return
-    }
-
-    const num = normalizeMoney(parsed)
+    const num = evaluated.value
     if (isNegativeAccountBalance(num)) {
       toast('余额不能为负', { tone: 'danger' })
       refocusActiveInput()
@@ -544,10 +644,11 @@ export function AccountDetailSheet(props: {
 
   const submitTransfer = () => {
     if (editingTransferOp) {
-      const parsed = Number(transferAmount)
-      const num = normalizeMoney(parsed)
-      if (!Number.isFinite(parsed) || num <= 0) {
+      const evaluated = evaluateMoneyExpression(transferAmount)
+      const num = evaluated.ok ? evaluated.value : 0
+      if (!evaluated.ok || num <= 0) {
         toast('请输入正确金额', { tone: 'danger' })
+        refocusActiveInput()
         return
       }
       if (moneyEquals(num, editingTransferOp.amount)) {
@@ -614,10 +715,11 @@ export function AccountDetailSheet(props: {
       return
     }
 
-    const parsed = Number(transferAmount)
-    const num = normalizeMoney(parsed)
-    if (!Number.isFinite(parsed) || num <= 0) {
+    const evaluated = evaluateMoneyExpression(transferAmount)
+    const num = evaluated.ok ? evaluated.value : 0
+    if (!evaluated.ok || num <= 0) {
       toast('请输入正确金额', { tone: 'danger' })
+      refocusActiveInput()
       return
     }
 
@@ -1303,10 +1405,10 @@ export function AccountDetailSheet(props: {
                     <input
                       ref={balanceInputRef}
                       className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
-                      {...amountInputProps}
+                      {...expressionInputProps}
                       placeholder="0"
                       value={balanceValue}
-                      onChange={(e) => setBalanceValue(e.target.value)}
+                      onChange={(e) => setBalanceValue(sanitizeMoneyExpressionInput(e.target.value))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault()
@@ -1320,6 +1422,8 @@ export function AccountDetailSheet(props: {
                       aria-label="set balance"
                     />
                   </div>
+                  <MoneyExpressionPreview show={setBalanceValueTrimmed !== ''} result={setBalanceExpression} />
+                  <MoneyExpressionKeypad onOperator={appendBalanceOperator} onClear={clearBalanceExpression} />
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-4">
@@ -1342,9 +1446,7 @@ export function AccountDetailSheet(props: {
                     余额不会变（已在后续校准中固定）
                   </div>
                 ) : null}
-                {setBalanceValueTrimmed !== '' &&
-                Number.isFinite(setBalanceParsedRaw) &&
-                isNegativeAccountBalance(setBalanceParsed) ? (
+                {setBalanceExpression.ok && isNegativeAccountBalance(setBalanceParsed) ? (
                   <div className="mt-1 text-[11px] font-semibold text-rose-500">
                     余额不能为负
                   </div>
@@ -1460,27 +1562,31 @@ export function AccountDetailSheet(props: {
                       </select>
                     </label>
 
-                    <label className="field">
+                    <div className="field">
                       <div className="fieldLabel">金额</div>
                       <div className="relative">
                         <input
+                          ref={transferInputRef}
                           className="input"
-                          {...amountInputProps}
+                          {...expressionInputProps}
                           placeholder="0.00"
                           value={transferAmount}
-                          onChange={(e) => setTransferAmount(e.target.value)}
+                          onChange={(e) => setTransferAmount(sanitizeMoneyExpressionInput(e.target.value))}
                           style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
                         />
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
                       </div>
-                    </label>
+                      <MoneyExpressionPreview show={transferAmountTrimmed !== ''} result={transferExpression} />
+                      <MoneyExpressionKeypad onOperator={appendTransferOperator} onClear={clearTransferExpression} />
+                    </div>
                   </div>
 
                   <motion.button
                     type="button"
                     onClick={submitTransfer}
-                    whileTap={{ scale: 0.99 }}
-                    className="mt-6 w-full h-14 rounded-[22px] bg-slate-900 text-white font-semibold text-[16px] shadow-sm"
+                    disabled={!canSubmitTransfer}
+                    whileTap={{ scale: canSubmitTransfer ? 0.99 : 1 }}
+                    className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitTransfer ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
                   >
                     {editingTransferOp ? '保存修改' : '完成'}
                   </motion.button>
