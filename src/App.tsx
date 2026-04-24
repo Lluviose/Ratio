@@ -407,7 +407,7 @@ export default function App() {
 
               <AccountDetailSheet
                 open={Boolean(selectedAccountId)}
-                accountId={selectedAccountId}
+                accountId={selectedAccountId ?? detailTransitionAccountId}
                 accounts={accounts.accounts}
                 ops={accountOps.ops}
                 initialAction={detailAction}
