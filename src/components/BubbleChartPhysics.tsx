@@ -68,6 +68,13 @@ export function useBubblePhysics(
     }
   })
 
+  // Stable hash of node physical config — only changes when the set of bubbles
+  // or their radii actually shift, avoiding engine teardown on every data update.
+  const nodesConfigHash = useMemo(
+    () => nodes.map((n) => `${n.id}:${n.radius.toFixed(0)}`).sort().join('|'),
+    [nodes],
+  )
+
   const engineRef = useRef<Matter.Engine | null>(null)
   const runnerRef = useRef<Matter.Runner | null>(null)
   const bodiesRef = useRef(new Map<string, Matter.Body>())
@@ -317,7 +324,8 @@ export function useBubblePhysics(
       burstStatesRef.current = new Map()
       clusterBoostRef.current = null
     }
-  }, [bursts, burstProgress, height, nodes, positions, width])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nodesConfigHash encapsulates the relevant parts of nodes
+  }, [bursts, burstProgress, height, nodesConfigHash, positions, width])
 
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
