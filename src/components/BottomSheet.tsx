@@ -139,6 +139,27 @@ export function BottomSheet(props: {
 
   const overlayFadeInDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.18
   const overlayFadeOutDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.2
+  const overlayEase: [number, number, number, number] = [0.16, 1, 0.3, 1]
+  const overlayInitial = {
+    backgroundColor: 'rgba(11, 15, 26, 0)',
+    backdropFilter: resolvedSheetMotion === 'morph' ? 'none' : 'blur(0px)',
+  }
+  const overlayAnimate = {
+    backgroundColor: 'rgba(11, 15, 26, 0.4)',
+    backdropFilter: resolvedSheetMotion === 'morph' ? 'none' : 'blur(2px)',
+    transition: {
+      duration: overlayFadeInDuration,
+      ease: overlayEase,
+    },
+  }
+  const overlayExit = {
+    backgroundColor: 'rgba(11, 15, 26, 0)',
+    backdropFilter: resolvedSheetMotion === 'morph' ? 'none' : 'blur(0px)',
+    transition: {
+      duration: overlayFadeOutDuration,
+      ease: overlayEase,
+    },
+  }
 
   const sheetIdRef = useRef<string>(makeSheetId())
   const scrollLockCountRef = useRef(0)
@@ -190,26 +211,9 @@ export function BottomSheet(props: {
           role="dialog"
           aria-modal="true"
           onClick={onClose}
-          initial={{
-            backgroundColor: 'rgba(11, 15, 26, 0)',
-            backdropFilter: 'blur(0px)',
-          }}
-          animate={{
-            backgroundColor: 'rgba(11, 15, 26, 0.4)',
-            backdropFilter: 'blur(2px)',
-            transition: {
-              duration: overlayFadeInDuration,
-              ease: [0.16, 1, 0.3, 1],
-            },
-          }}
-          exit={{
-            backgroundColor: 'rgba(11, 15, 26, 0)',
-            backdropFilter: 'blur(0px)',
-            transition: {
-              duration: overlayFadeOutDuration,
-              ease: [0.16, 1, 0.3, 1],
-            },
-          }}
+          initial={overlayInitial}
+          animate={overlayAnimate}
+          exit={overlayExit}
         >
           <motion.div
             className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}    
@@ -225,7 +229,7 @@ export function BottomSheet(props: {
                     opacity: { type: 'tween', duration: 0.18, ease: [0.16, 1, 0.3, 1] },
                   }
                 : {
-                    layout: { type: 'spring', stiffness: 520, damping: 52, mass: 1 },
+                    layout: { type: 'spring', stiffness: 360, damping: 42, mass: 0.95 },
                   }
             }
             style={{ ...resolvedSheetStyle, willChange: 'transform' }}

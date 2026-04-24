@@ -178,7 +178,7 @@ export function AssetsTypeDetailPage(props: {
                 <motion.div
                   key={account.id}
                   layoutId={accountDetailSheetLayoutId(account.id)}
-                  layout="position"
+                  layout
                   className="p-3 rounded-[22px] bg-[var(--bg)] border border-[var(--hairline)] shadow-[0_10px_26px_-22px_rgba(0,0,0,0.28)] cursor-pointer"
                   onClick={() => {
                     if (isActive) return
@@ -194,7 +194,11 @@ export function AssetsTypeDetailPage(props: {
                     className="flex items-center justify-between gap-3"
                     initial={false}
                     animate={{ opacity: isActive ? 0 : 1 }}
-                    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                    transition={{
+                      duration: isActive ? 0.1 : 0.14,
+                      delay: isActive ? 0.05 : 0,
+                      ease: [0.16, 1, 0.3, 1],
+                    }}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="w-9 h-9 rounded-2xl bg-white/80 flex items-center justify-center text-slate-700 shadow-sm border border-white/70">
