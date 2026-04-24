@@ -194,13 +194,14 @@ function BubbleChartPageComponent(props: {
         {ripple ? (
           <motion.div
             key={ripple.id}
-            className="absolute z-[12] pointer-events-none rounded-full border border-white/70"
+            className="absolute left-0 top-0 z-[12] pointer-events-none rounded-full border border-white/70"
             style={{
-              left: ripple.x - ripple.radius,
-              top: ripple.y - ripple.radius,
+              x: ripple.x - ripple.radius,
+              y: ripple.y - ripple.radius,
               width: ripple.radius * 2,
               height: ripple.radius * 2,
               boxShadow: '0 0 0 1px rgba(15,23,42,0.04)',
+              willChange: 'transform, opacity',
             }}
             initial={{ opacity: 0.34, scale: 0.52 }}
             animate={{ opacity: 0, scale: 1.55 }}

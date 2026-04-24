@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { ChevronDown, GripVertical, MoreHorizontal } from 'lucide-react'
-import { type ComponentType, type Ref, useEffect, useMemo, useState } from 'react'
+import { memo, type ComponentType, type Ref, useEffect, useMemo, useState } from 'react'
 import { BottomSheet } from '../components/BottomSheet'
 import {
   ACCOUNT_SORT_MODE_KEY,
@@ -19,6 +19,9 @@ import { expressiveEase, standardEase } from '../lib/motionPresets'
 import type { GroupedAccounts } from './AssetsScreen'
 
 type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
+
+const GROUP_ORDER: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+const GROUP_RANK = new Map<GroupId, number>(GROUP_ORDER.map((id, i) => [id, i]))
 
 function withAlpha(color: string, alpha: number): string {
   const hex = color.trim()
@@ -46,7 +49,7 @@ function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export function AssetsListPage(props: {
+function AssetsListPageComponent(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
   onPickType: (type: AccountTypeId) => void
@@ -76,12 +79,10 @@ export function AssetsListPage(props: {
   }, [expandedGroup])
 
   const groups = useMemo(() => {
-    const order: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
-    const rank = new Map(order.map((id, i) => [id, i]))
     return grouped.groupCards
       .filter((g) => g.accounts.length > 0)
       .slice()
-      .sort((a, b) => (rank.get(a.group.id as GroupId) ?? 999) - (rank.get(b.group.id as GroupId) ?? 999))
+      .sort((a, b) => (GROUP_RANK.get(a.group.id as GroupId) ?? 999) - (GROUP_RANK.get(b.group.id as GroupId) ?? 999))
   }, [grouped.groupCards])
 
   const maskedText = '*****'
@@ -94,21 +95,48 @@ export function AssetsListPage(props: {
     return `${d.getMonth() + 1}月${d.getDate()}日 更新`
   }
 
+  const groupModels = useMemo(
+    () =>
+      groups.map((g) => {
+        const id = g.group.id as GroupId
+        const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
+        const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().slice(-1)[0] : undefined
+
+        const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
+          .map((type) => {
+            const accounts = g.accounts.filter((a) => a.type === type)
+            const total = accounts.reduce((sum, a) => addMoney(sum, a.balance), 0)
+            const updatedAt = accounts.map((a) => a.updatedAt).sort().slice(-1)[0]
+            const opt = getAccountTypeOption(type)
+            return { type, opt, accounts, total, updatedAt }
+          })
+          .sort((a, b) => b.total - a.total)
+
+        const typeCardsSorted =
+          accountSortMode === 'balance'
+            ? typeCards
+            : sortByOrder(
+                typeCards,
+                (t) => t.type,
+                mergeOrder(
+                  typeCards.map((t) => t.type),
+                  manualTypeOrderByGroup[id],
+                ),
+              )
+
+        return { ...g, id, typeNames, updatedAt, typeCardsSorted }
+      }),
+    [accountSortMode, groups, manualTypeOrderByGroup],
+  )
+
   const sortSheetModel = useMemo(() => {
     if (!typeSortGroup) return null
-    const g = groups.find((x) => x.group.id === typeSortGroup)
-    if (!g) return null
+    const model = groupModels.find((x) => x.id === typeSortGroup)
+    if (!model) return null
 
-    const typeCards = Array.from(new Set(g.accounts.map((a) => a.type))).map((type) => {
-      const accounts = g.accounts.filter((a) => a.type === type)
-      const total = accounts.reduce((sum, a) => addMoney(sum, a.balance), 0)
-      const opt = getAccountTypeOption(type)
-      return { type, opt, accounts, total }
-    })
-
-    const byType = new Map(typeCards.map((t) => [t.type, t]))
-    return { group: g.group, byType }
-  }, [groups, typeSortGroup])
+    const byType = new Map(model.typeCardsSorted.map((t) => [t.type, t]))
+    return { group: model.group, byType }
+  }, [groupModels, typeSortGroup])
 
   const closeTypeSort = () => {
     if (typeSortGroup) {
@@ -121,36 +149,12 @@ export function AssetsListPage(props: {
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">     
       <div className="px-4 pt-[104px] pb-24">
         <div className="flex flex-col gap-[4px]">
-          {groups.map((g, i) => {
-            const id = g.group.id as GroupId
+          {groupModels.map((g, i) => {
+            const id = g.id
             const isExpanded = expandedGroup === id
             const cardBg = isExpanded ? withAlpha(g.group.tone, 0.42) : '#ffffff'
             const listLeft = isExpanded ? 44 : 56
 
-            const typeNames = Array.from(new Set(g.accounts.map((a) => getAccountTypeOption(a.type).name))).join('、')
-            const updatedAt = g.accounts.length > 0 ? g.accounts.map((a) => a.updatedAt).sort().slice(-1)[0] : undefined
-
-            const typeCards = Array.from(new Set(g.accounts.map((a) => a.type)))
-              .map((type) => {
-                const accounts = g.accounts.filter((a) => a.type === type)      
-                const total = accounts.reduce((sum, a) => addMoney(sum, a.balance), 0)       
-                const updatedAt = accounts.map((a) => a.updatedAt).sort().slice(-1)[0]
-                const opt = getAccountTypeOption(type)
-                return { type, opt, accounts, total, updatedAt }
-              })
-              .sort((a, b) => b.total - a.total)
-
-            const typeCardsSorted =
-              accountSortMode === 'balance'
-                ? typeCards
-                : sortByOrder(
-                    typeCards,
-                    (t) => t.type,
-                    mergeOrder(
-                      typeCards.map((t) => t.type),
-                      manualTypeOrderByGroup[id],
-                    ),
-                  )
 
             // 是否需要入场动画
             const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
@@ -219,7 +223,7 @@ export function AssetsListPage(props: {
                           </div>
                           {!isExpanded ? (
                             <div className="mt-1 text-[11px] font-medium text-slate-500 truncate max-w-[220px]">
-                              {typeNames}
+                              {g.typeNames}
                             </div>
                           ) : null}
                         </div>
@@ -228,7 +232,7 @@ export function AssetsListPage(props: {
                             {hideAmounts ? maskedText : formatCny(g.total)}
                           </div>
                           {!isExpanded ? (
-                            <div className="mt-1 text-[10px] font-medium text-slate-400">{formatTime(updatedAt)}</div>
+                            <div className="mt-1 text-[10px] font-medium text-slate-400">{formatTime(g.updatedAt)}</div>
                           ) : null}
                         </div>
                       </div>
@@ -279,7 +283,7 @@ export function AssetsListPage(props: {
                                       className="w-full px-4 py-3 text-left text-[13px] font-medium text-slate-800 hover:bg-black/5"
                                       onClick={() => {
                                         setTypeMenuOpenGroup(null)
-                                        setTypeSortDraft(typeCardsSorted.map((t) => t.type))
+                                        setTypeSortDraft(g.typeCardsSorted.map((t) => t.type))
                                         setTypeSortGroup(id)
                                       }}
                                     >
@@ -293,7 +297,7 @@ export function AssetsListPage(props: {
                         ) : null}
 
                         <div className="flex flex-col gap-2">
-                          {typeCardsSorted.map((t, typeIndex) => {
+                          {g.typeCardsSorted.map((t, typeIndex) => {
                             const Icon = getIcon(t.type)
                             return (
                               <motion.button
@@ -416,3 +420,5 @@ export function AssetsListPage(props: {
     </div>
   )
 }
+
+export const AssetsListPage = memo(AssetsListPageComponent)

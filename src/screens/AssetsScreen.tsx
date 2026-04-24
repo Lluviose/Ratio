@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
-import { type ComponentType, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type ComponentType, type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { pickForegroundColor } from '../lib/themes'
@@ -43,6 +43,27 @@ const BUBBLE_PHYSICS_ENABLE_MAX = 0.24
 const BUBBLE_PHYSICS_DISABLE_MAX = 0.34
 const BUBBLE_BURSTS_ENABLE_MAX = 0.62
 const BUBBLE_BURSTS_DISABLE_MAX = 0.72
+
+const horizontalPageStyle: CSSProperties = {
+  touchAction: 'pan-x',
+  contain: 'layout paint style',
+  isolation: 'isolate',
+  backfaceVisibility: 'hidden',
+  WebkitBackfaceVisibility: 'hidden',
+}
+
+const containedPageStyle: CSSProperties = {
+  contain: 'layout paint style',
+  isolation: 'isolate',
+  backfaceVisibility: 'hidden',
+  WebkitBackfaceVisibility: 'hidden',
+}
+
+const homeScrollerStyle: CSSProperties = {
+  WebkitOverflowScrolling: 'touch',
+  overscrollBehaviorX: 'contain',
+  contain: 'layout paint style',
+}
 
 type Block = {
   id: GroupId
@@ -773,6 +794,23 @@ export function AssetsScreen(props: {
     }),
     [bubbleGestureNodes, bubblePhysics.positions, getBubbleScrollLeft, handleBubbleBurst, handleBubbleFlick],
   )
+  const goToListPage = useCallback(() => scrollToPage(2), [scrollToPage])
+  const handlePickType = useCallback(
+    (type: AccountTypeId) => {
+      setSelectedType(type)
+      scrollToPage(3)
+    },
+    [scrollToPage],
+  )
+  const handleToggleGroup = useCallback((id: GroupId) => {
+    setExpandedGroup((current) => (current === id ? null : id))
+  }, [])
+  const handleDetailBack = useCallback(() => {
+    setIsReturningFromDetail(true)
+    setAnimationKey((k) => k + 1)
+    scrollToPage(2)
+    setSelectedType(null)
+  }, [scrollToPage])
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -1644,9 +1682,9 @@ export function AssetsScreen(props: {
       <div
         ref={scrollerRef}
         className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={homeScrollerStyle}
       >
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={horizontalPageStyle}>
           <div className="w-full h-full relative">
             <BubbleChartPage
               isActive={bubbleRuntime.pageActive}
@@ -1656,22 +1694,19 @@ export function AssetsScreen(props: {
           </div>
         </div>
 
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
-          <AssetsRatioPage onBack={() => scrollToPage(2)} />
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={horizontalPageStyle}>
+          <AssetsRatioPage onBack={goToListPage} />
         </div>
 
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden">
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={containedPageStyle}>
           <motion.div className="w-full h-full" style={{ x: edgePullX, scale: edgePullScale }}>
             <AssetsListPage
               key={`list-${animationKey}`}
               grouped={grouped}
               getIcon={getIcon}
-              onPickType={(type) => {
-                setSelectedType(type)
-                scrollToPage(3)
-              }}
+              onPickType={handlePickType}
               expandedGroup={expandedGroup}
-              onToggleGroup={(id) => setExpandedGroup((current) => (current === id ? null : id))}
+              onToggleGroup={handleToggleGroup}
               hideAmounts={hideAmounts}
               scrollRef={listScrollRef}
               onGroupEl={onGroupEl}
@@ -1682,7 +1717,7 @@ export function AssetsScreen(props: {
           </motion.div>
         </div>
 
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto">
+        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto" style={containedPageStyle}>
           <AssetsTypeDetailPage
             type={selectedType}
             accounts={accounts}
@@ -1690,12 +1725,7 @@ export function AssetsScreen(props: {
             hideAmounts={hideAmounts}
             themeColor={selectedThemeColor}
             activeAccountId={activeAccountId}
-            onBack={() => {
-              setIsReturningFromDetail(true)
-              setAnimationKey(k => k + 1)
-              scrollToPage(2)
-              setSelectedType(null)
-            }}
+            onBack={handleDetailBack}
             onEditAccount={onEditAccount}
           />
         </div>
