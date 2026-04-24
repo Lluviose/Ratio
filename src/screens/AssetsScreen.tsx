@@ -36,6 +36,9 @@ type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
 type Rect = { x: number; y: number; w: number; h: number }
 
 const LIST_GROUP_ORDER: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
+const HOME_SWIPE_IDLE_MS = 140
+const BUBBLE_PAGE_ACTIVE_MAX_SCROLL = 0.8
+const BUBBLE_PHYSICS_ACTIVE_MAX_SCROLL = 0.18
 
 type Block = {
   id: GroupId
@@ -49,6 +52,25 @@ type Block = {
 type OverlayBlockModel = Block
 
 type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly' | 'assetTopNoDebt' | 'assetMiddleNoDebt' | 'assetBottomNoDebt' | 'assetOnlyNoDebt'
+type CornerRadii = { tl: number; tr: number; bl: number; br: number }
+
+function getRatioCorner(kind: CornerKind, chartRadius: number): CornerRadii {
+  if (kind === 'debt') return { tl: 0, tr: chartRadius, bl: chartRadius, br: 0 }
+  if (kind === 'assetOnly') return { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
+  if (kind === 'assetTop') return { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+  if (kind === 'assetBottom') return { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
+  if (kind === 'assetMiddle') return { tl: 0, tr: chartRadius, bl: 0, br: 0 }
+  if (kind === 'assetOnlyNoDebt') return { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
+  if (kind === 'assetTopNoDebt') return { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
+  if (kind === 'assetBottomNoDebt') return { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
+  if (kind === 'assetMiddleNoDebt') return { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
+  return { tl: 0, tr: 0, bl: 0, br: 0 }
+}
+
+function getListCorner(kind: CornerKind, listRadius: number): CornerRadii {
+  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
+  return { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
+}
 
 function OverlayBlock(props: {
   block: OverlayBlockModel
@@ -69,6 +91,7 @@ function OverlayBlock(props: {
   isReturningFromDetail?: boolean
   blockIndex?: number
   viewportWidth?: number
+  isHomeSwiping?: boolean
 }) {
   const {
     block,
@@ -89,6 +112,7 @@ function OverlayBlock(props: {
     isReturningFromDetail = false,
     blockIndex = 0,
     viewportWidth = 400,
+    isHomeSwiping = false,
   } = props
 
   const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
@@ -180,35 +204,15 @@ function OverlayBlock(props: {
   // - 无负债时：资产左右上角有圆角，右下角无圆角
   // - 每个色块（除最后一个）都向下延伸，延伸部分垫在下方色块的圆角处
   // - 最底部色块右下角有圆角
-  const ratioCorner =
-    kind === 'debt'
-      ? { tl: 0, tr: chartRadius, bl: chartRadius, br: 0 }
-      : kind === 'assetOnly'
-        ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-      : kind === 'assetTop'
-        ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
-        : kind === 'assetBottom'
-          ? { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-          : kind === 'assetMiddle'
-            ? { tl: 0, tr: chartRadius, bl: 0, br: 0 }
-            : kind === 'assetOnlyNoDebt'
-              ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
-              : kind === 'assetTopNoDebt'
-                ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
-                : kind === 'assetBottomNoDebt'
-                  ? { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
-                  : kind === 'assetMiddleNoDebt'
-                    ? { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
-                    : { tl: 0, tr: 0, bl: 0, br: 0 }
+  const ratioCorner = getRatioCorner(kind, chartRadius)
 
   // List 视图下的圆角逻辑：
   // - 左侧与屏幕齐平，不做圆角
   // - 右上始终圆角
   // - 只有列表最后一个条目的右下才做圆角
   //   （有负债时：负债永远最后；最后一个资产不做底部圆角，避免和负债形成“双圆角”）
-  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
   // List 模式的彩色色块：左侧与屏幕齐平，不做圆角；右侧做圆角（末尾块底部也圆角）
-  const listCorner = { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
+  const listCorner = getListCorner(kind, listRadius)
   const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
 
   const tl = useTransform(scrollIdx, (idx) => {
@@ -393,38 +397,46 @@ function OverlayBlock(props: {
         originX: 0.5,
         originY: 0.5,
         overflow: 'hidden',
+        willChange: 'transform, opacity, left, top, width, height',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
+        contain: 'layout paint style',
       }}
     >
       {/* Sphere 3D Effects Overlay */}
-      <motion.div 
-        className="absolute inset-0 z-0"
-        style={{ opacity: sphereEffectOpacity }}
-      >
-        {/* Inner Highlight/Shadow using CSS gradients/shadows */}
-        <div className="absolute inset-0" style={{ 
-            background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)' 
-        }} />
-        <div className="absolute inset-0" style={{ 
-            boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)' 
-        }} />
-      </motion.div>
+      {!isHomeSwiping ? (
+        <>
+          <motion.div
+            className="absolute inset-0 z-0"
+            style={{ opacity: sphereEffectOpacity }}
+          >
+            {/* Inner Highlight/Shadow using CSS gradients/shadows */}
+            <div className="absolute inset-0" style={{
+                background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)'
+            }} />
+            <div className="absolute inset-0" style={{
+                boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)'
+            }} />
+          </motion.div>
 
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-          opacity: surfaceHighlightOpacity,
-          background: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0) 36%)',
-        }}
-      />
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          zIndex: 1,
-          opacity: surfaceHighlightOpacity,
-          boxShadow: 'inset 0 -14px 20px rgba(15,23,42,0.04)',
-        }}
-      />
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              zIndex: 1,
+              opacity: surfaceHighlightOpacity,
+              background: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0) 36%)',
+            }}
+          />
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              zIndex: 1,
+              opacity: surfaceHighlightOpacity,
+              boxShadow: 'inset 0 -14px 20px rgba(15,23,42,0.04)',
+            }}
+          />
+        </>
+      ) : null}
 
       <motion.div
         style={{
@@ -495,6 +507,93 @@ function OverlayBlock(props: {
   )
 }
 
+function FastOverlayBlock(props: {
+  block: OverlayBlockModel
+  kind: CornerKind
+  ratioRect?: Rect
+  listRect?: Rect
+  bubblePos?: { x: MotionValue<number>; y: MotionValue<number> }
+  bubbleRadius?: number
+  scrollIdx: MotionValue<number>
+  overlayFade: MotionValue<number>
+  chartRadius: number
+  listRadius: number
+}) {
+  const { block, kind, ratioRect, listRect, bubblePos, bubbleRadius, scrollIdx, overlayFade, chartRadius, listRadius } = props
+
+  const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
+  const list = listRect ?? ratioRect ?? ratio
+  const bRadius = bubbleRadius ?? 60
+  const defaultBX = useMotionValue(ratio.x + ratio.w / 2)
+  const defaultBY = useMotionValue(ratio.y + ratio.h / 2)
+  const bX = bubblePos?.x ?? defaultBX
+  const bY = bubblePos?.y ?? defaultBY
+
+  const x = useTransform([scrollIdx, bX], (values) => {
+    const idx = values[0] as number
+    const bx = values[1] as number
+    if (idx < 1) return lerp(bx - bRadius, ratio.x, Math.max(0, idx))
+    return lerp(ratio.x, list.x, Math.min(1, Math.max(0, idx - 1)))
+  })
+  const y = useTransform([scrollIdx, bY], (values) => {
+    const idx = values[0] as number
+    const by = values[1] as number
+    if (idx < 1) return lerp(by - bRadius, ratio.y, Math.max(0, idx))
+    return lerp(ratio.y, list.y, Math.min(1, Math.max(0, idx - 1)))
+  })
+  const w = useTransform(scrollIdx, (idx) => {
+    if (idx < 1) return lerp(bRadius * 2, ratio.w, Math.max(0, idx))
+    return lerp(ratio.w, list.w, Math.min(1, Math.max(0, idx - 1)))
+  })
+  const h = useTransform(scrollIdx, (idx) => {
+    if (idx < 1) return lerp(bRadius * 2, ratio.h, Math.max(0, idx))
+    return lerp(ratio.h, list.h, Math.min(1, Math.max(0, idx - 1)))
+  })
+
+  const ratioCorner = getRatioCorner(kind, chartRadius)
+  const listCorner = getListCorner(kind, listRadius)
+  const bubbleCorner = { tl: bRadius, tr: bRadius, bl: bRadius, br: bRadius }
+  const tl = useTransform(scrollIdx, (idx) => {
+    if (idx < 1) return lerp(bubbleCorner.tl, ratioCorner.tl, Math.max(0, idx))
+    return lerp(ratioCorner.tl, listCorner.tl, Math.min(1, Math.max(0, idx - 1)))
+  })
+  const tr = useTransform(scrollIdx, (idx) => {
+    if (idx < 1) return lerp(bubbleCorner.tr, ratioCorner.tr, Math.max(0, idx))
+    return lerp(ratioCorner.tr, listCorner.tr, Math.min(1, Math.max(0, idx - 1)))
+  })
+  const bl = useTransform(scrollIdx, (idx) => {
+    if (idx < 1) return lerp(bubbleCorner.bl, ratioCorner.bl, Math.max(0, idx))
+    return lerp(ratioCorner.bl, listCorner.bl, Math.min(1, Math.max(0, idx - 1)))
+  })
+  const br = useTransform(scrollIdx, (idx) => {
+    if (idx < 1) return lerp(bubbleCorner.br, ratioCorner.br, Math.max(0, idx))
+    return lerp(ratioCorner.br, listCorner.br, Math.min(1, Math.max(0, idx - 1)))
+  })
+
+  return (
+    <motion.div
+      className="absolute pointer-events-none"
+      style={{
+        left: x,
+        top: y,
+        width: w,
+        height: h,
+        background: block.tone,
+        borderTopLeftRadius: tl,
+        borderTopRightRadius: tr,
+        borderBottomLeftRadius: bl,
+        borderBottomRightRadius: br,
+        opacity: overlayFade,
+        overflow: 'hidden',
+        willChange: 'transform, opacity, left, top, width, height',
+        backfaceVisibility: 'hidden',
+        WebkitBackfaceVisibility: 'hidden',
+        contain: 'layout paint style',
+      }}
+    />
+  )
+}
+
 export function AssetsScreen(props: {
   grouped: GroupedAccounts
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
@@ -513,6 +612,7 @@ export function AssetsScreen(props: {
   const moreRef = useRef<HTMLDivElement | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const measureRafRef = useRef<number | null>(null)
+  const homeSwipeIdleTimerRef = useRef<number | null>(null)
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
@@ -531,6 +631,8 @@ export function AssetsScreen(props: {
   const [isReturningFromDetail, setIsReturningFromDetail] = useState(false)
   // 动画触发计数器，用于强制重新挂载组件以触发入场动画
   const [animationKey, setAnimationKey] = useState(0)
+  const [isHomeSwiping, setIsHomeSwiping] = useState(false)
+  const isHomeSwipingRef = useRef(false)
 
   const didInitRef = useRef(false)
 
@@ -563,6 +665,26 @@ export function AssetsScreen(props: {
     el.scrollTo({ left: target, behavior: 'smooth' })
   }
 
+  const markHomeSwiping = useCallback(() => {
+    if (!isHomeSwipingRef.current) {
+      isHomeSwipingRef.current = true
+      setIsHomeSwiping(true)
+    }
+
+    if (homeSwipeIdleTimerRef.current) window.clearTimeout(homeSwipeIdleTimerRef.current)
+    homeSwipeIdleTimerRef.current = window.setTimeout(() => {
+      isHomeSwipingRef.current = false
+      homeSwipeIdleTimerRef.current = null
+      setIsHomeSwiping(false)
+    }, HOME_SWIPE_IDLE_MS)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (homeSwipeIdleTimerRef.current) window.clearTimeout(homeSwipeIdleTimerRef.current)
+    }
+  }, [])
+
   const scrollIdx = useTransform(scrollLeft, (v) => {
     const w = scrollerWidth || viewport.w || 1
     return v / w
@@ -582,11 +704,27 @@ export function AssetsScreen(props: {
   
   // Bubble chart visibility
   const [isBubblePageActive, setIsBubblePageActive] = useState(true)
+  const [isBubblePhysicsActive, setIsBubblePhysicsActive] = useState(true)
+  const isBubblePageActiveRef = useRef(true)
+  const isBubblePhysicsActiveRef = useRef(true)
   
   useEffect(() => {
-    return scrollIdx.on('change', (v) => {
-        setIsBubblePageActive(v < 0.8)
-    })
+    const updateBubbleActivity = (v: number) => {
+      const nextPageActive = v < BUBBLE_PAGE_ACTIVE_MAX_SCROLL
+      if (nextPageActive !== isBubblePageActiveRef.current) {
+        isBubblePageActiveRef.current = nextPageActive
+        setIsBubblePageActive(nextPageActive)
+      }
+
+      const nextPhysicsActive = v < BUBBLE_PHYSICS_ACTIVE_MAX_SCROLL
+      if (nextPhysicsActive !== isBubblePhysicsActiveRef.current) {
+        isBubblePhysicsActiveRef.current = nextPhysicsActive
+        setIsBubblePhysicsActive(nextPhysicsActive)
+      }
+    }
+
+    updateBubbleActivity(scrollIdx.get())
+    return scrollIdx.on('change', updateBubbleActivity)
   }, [scrollIdx])
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
@@ -694,7 +832,7 @@ export function AssetsScreen(props: {
     return m
   }, [bubbleNodes])
 
-  const bubblePhysics = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePageActive)
+  const bubblePhysics = useBubblePhysics(bubbleNodes, viewport.w, viewport.h, isBubblePhysicsActive && !isHomeSwiping)
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -1049,11 +1187,48 @@ export function AssetsScreen(props: {
     if (!el) return
 
     let raf = 0
+    let pendingScrollLeft = el.scrollLeft
+    const scheduleScrollLeftUpdate = (value: number) => {
+      pendingScrollLeft = value
+      if (raf) return
+
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const w = el.clientWidth || 1
+        const maxScroll = w * 2
+        let currentScroll = pendingScrollLeft
+
+        if (!selectedType) {
+          if (edgeLockRef.current) {
+            if (!edgePointerDownRef.current) {
+              edgeLockRef.current = false
+              edgePullTargetX.set(0)
+            } else if (currentScroll <= maxScroll) {
+              edgeLockRef.current = false
+              edgePullTargetX.set(0)
+            } else {
+              if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
+              currentScroll = maxScroll
+            }
+          }
+
+          scrollLeft.set(Math.min(currentScroll, maxScroll))
+          return
+        }
+
+        edgeLockRef.current = false
+        edgePullTargetX.set(0)
+        scrollLeft.set(currentScroll)
+      })
+    }
+
     const onScroll = () => {
+      markHomeSwiping()
+
       if (!selectedType) {
         const w = el.clientWidth || 1
         const maxScroll = w * 2
-        const current = el.scrollLeft
+        let current = el.scrollLeft
 
         // 核心修正：无论是否有手势，只要不是 selectedType 状态，都强制不允许超过 maxScroll
         if (current > maxScroll) {
@@ -1071,47 +1246,13 @@ export function AssetsScreen(props: {
 
           // 强制重置滚动位置，防止看到空白页
           if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-          scrollLeft.set(maxScroll)
+          current = maxScroll
+          scheduleScrollLeftUpdate(current)
           return
         }
       }
 
-      scrollLeft.set(el.scrollLeft)
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => {
-        const w = el.clientWidth || 1
-        const currentScroll = el.scrollLeft
-        const maxScroll = w * 2
-
-        if (!selectedType) {
-          // 如果在锁定状态
-          if (edgeLockRef.current) {
-             // 如果用户已经松手，或者是回弹过程中
-             if (!edgePointerDownRef.current) {
-               edgeLockRef.current = false
-               edgePullTargetX.set(0)
-             } else if (currentScroll <= maxScroll) {
-               // 还没松手但滚回了范围内
-               edgeLockRef.current = false
-               edgePullTargetX.set(0)
-             } else {
-               // 还在拖动且在边界外，强制锁住
-               if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-               scrollLeft.set(maxScroll)
-               return
-             }
-          }
-
-          // 正常滚动情况
-          scrollLeft.set(currentScroll)
-          return
-        }
-
-        // selectedType 状态（详情页），允许正常滚动
-        edgeLockRef.current = false
-        edgePullTargetX.set(0)
-        scrollLeft.set(currentScroll)
-      })
+      scheduleScrollLeftUpdate(el.scrollLeft)
     }
 
     const onPointerDown = (e: PointerEvent) => {
@@ -1147,7 +1288,7 @@ export function AssetsScreen(props: {
       window.removeEventListener('touchend', onPointerEnd)
       window.removeEventListener('touchcancel', onPointerEnd)
     }
-  }, [edgePullTargetX, scrollLeft, selectedType])
+  }, [edgePullTargetX, markHomeSwiping, scrollLeft, selectedType])
 
   useEffect(() => {
     const el = listScrollRef.current
@@ -1258,7 +1399,11 @@ export function AssetsScreen(props: {
   }, [selectedType, grouped.groupCards])
 
   return (
-    <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
+    <div
+      ref={viewportRef}
+      className="relative w-full h-full overflow-hidden"
+      style={{ background: 'var(--bg)', contain: 'layout paint style' }}
+    >
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
       {initialized ? (
         <div className="absolute inset-0 z-0 pointer-events-none">
@@ -1348,31 +1493,48 @@ export function AssetsScreen(props: {
 
             我们只需要确保 OverlayBlock 在 List 模式下也向下延伸即可。
          */}
-        {overlayBlocksInListOrder.map((b, i) => (
-          <OverlayBlock
-            key={`${b.id}-${animationKey}`}
-            block={b}
-            kind={blockKinds[b.id] ?? 'assetMiddle'}
-            ratioRect={ratioLayout.rects[b.id]}
-            listRect={listRects[b.id]}
-            displayHeight={b.id === 'debt' ? undefined : ratioLayout.displayHeights[b.id]}
-            bubblePos={bubblePhysics.positions.get(b.id)}
-            bubbleRadius={bubbleNodes.find(n => n.id === b.id)?.radius}
-            burstProgress={bubblePhysics.burstProgress.get(b.id)}
-            scrollIdx={scrollIdx}
-            overlayFade={overlayFade}
-            labelsOpacity={labelsOpacity}
-            chartRadius={chartRadius}
-            listRadius={listRadius}
-            isReturning={isReturning}
-            isInitialLoad={isInitialLoad}
-            isReturningFromDetail={isReturningFromDetail}
-            blockIndex={i}
-            viewportWidth={viewport.w}
-          />
-        ))}
+        {overlayBlocksInListOrder.map((b, i) =>
+          isHomeSwiping ? (
+            <FastOverlayBlock
+              key={`fast-${b.id}-${animationKey}`}
+              block={b}
+              kind={blockKinds[b.id] ?? 'assetMiddle'}
+              ratioRect={ratioLayout.rects[b.id]}
+              listRect={listRects[b.id]}
+              bubblePos={bubblePhysics.positions.get(b.id)}
+              bubbleRadius={bubbleNodes.find((n) => n.id === b.id)?.radius}
+              scrollIdx={scrollIdx}
+              overlayFade={overlayFade}
+              chartRadius={chartRadius}
+              listRadius={listRadius}
+            />
+          ) : (
+            <OverlayBlock
+              key={`rich-${b.id}-${animationKey}`}
+              block={b}
+              kind={blockKinds[b.id] ?? 'assetMiddle'}
+              ratioRect={ratioLayout.rects[b.id]}
+              listRect={listRects[b.id]}
+              displayHeight={b.id === 'debt' ? undefined : ratioLayout.displayHeights[b.id]}
+              bubblePos={bubblePhysics.positions.get(b.id)}
+              bubbleRadius={bubbleNodes.find((n) => n.id === b.id)?.radius}
+              burstProgress={bubblePhysics.burstProgress.get(b.id)}
+              scrollIdx={scrollIdx}
+              overlayFade={overlayFade}
+              labelsOpacity={labelsOpacity}
+              chartRadius={chartRadius}
+              listRadius={listRadius}
+              isReturning={isReturning}
+              isInitialLoad={isInitialLoad}
+              isReturningFromDetail={isReturningFromDetail}
+              blockIndex={i}
+              viewportWidth={viewport.w}
+              isHomeSwiping={isHomeSwiping}
+            />
+          ),
+        )}
 
-        {isBubblePageActive
+        {isBubblePhysicsActive && !isHomeSwiping
           ? Array.from(bubblePhysics.bursts.entries()).flatMap(([parentId, burst]) => {
               const color = bubbleColorById.get(parentId) ?? 'rgba(0,0,0,0.25)'
               return burst.shards.map((shard) => (
@@ -1517,7 +1679,14 @@ export function AssetsScreen(props: {
       <div
         ref={scrollerRef}
         className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehaviorX: 'contain',
+          overscrollBehaviorY: 'none',
+          touchAction: 'pan-x',
+          contain: 'layout paint style',
+          willChange: 'scroll-position',
+        }}
       >
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={{ touchAction: 'pan-x' }}>
           <div className="w-full h-full relative">
