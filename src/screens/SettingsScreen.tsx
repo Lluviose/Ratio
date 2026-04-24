@@ -18,12 +18,26 @@ function getThemeChangeOrigin(el: HTMLElement): ThemeChangeOrigin {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
 }
 
+function withAlpha(color: string, alpha: number): string {
+  const raw = color.trim().replace(/^#/, '')
+  if (raw.length !== 3 && raw.length !== 6) return color
+
+  const full = raw.length === 3 ? raw.split('').map((v) => v + v).join('') : raw
+  const r = Number.parseInt(full.slice(0, 2), 16)
+  const g = Number.parseInt(full.slice(2, 4), 16)
+  const b = Number.parseInt(full.slice(4, 6), 16)
+  if ([r, g, b].some((v) => Number.isNaN(v))) return color
+
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
   theme: ThemeId
+  activeThemeColor: string
   onThemeChange: (id: ThemeId, origin?: ThemeChangeOrigin) => void
 }) {
-  const { themeOptions, theme, onThemeChange } = props
+  const { themeOptions, theme, activeThemeColor, onThemeChange } = props
 
   const [accountSortMode, setAccountSortMode] = useLocalStorageState<AccountSortMode>(
     ACCOUNT_SORT_MODE_KEY,
@@ -110,7 +124,9 @@ export function SettingsScreen(props: {
           <div className="stack" style={{ marginTop: 16 }}>
             {themeOptions.map((t, i) => {
               const active = t.id === theme
-              const activeAccent = t.id === 'random' ? 'var(--primary)' : t.colors.invest
+              const activeAccent = active ? activeThemeColor : t.colors.invest
+              const activeBackground = active ? withAlpha(activeAccent, 0.1) : 'transparent'
+              const activeShadow = active ? `0 12px 28px -24px ${withAlpha(activeAccent, 0.72)}` : undefined
               return (
                 <motion.div
                   key={t.id}
@@ -119,8 +135,9 @@ export function SettingsScreen(props: {
                   role="button"
                   tabIndex={0}
                   style={{
-                    background: active ? 'var(--bg)' : 'transparent',
+                    background: activeBackground,
                     borderColor: active ? activeAccent : 'rgba(11, 15, 26, 0.06)',
+                    boxShadow: activeShadow,
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {

@@ -1,5 +1,5 @@
 import { BarChart3, ChevronLeft, Settings as SettingsIcon, TrendingUp, Wallet } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen'
 import { TourScreen } from './screens/TourScreen'
@@ -13,7 +13,15 @@ import { useAccounts } from './lib/useAccounts'
 import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
 import { accountDetailSheetLayoutId } from './lib/layoutIds'
-import { pickForegroundColor, pickRandomThemeId, realThemeOptions, themeOptions, type RealThemeId, type ThemeId } from './lib/themes'
+import {
+  pickForegroundColor,
+  pickRandomThemeId,
+  realThemeOptions,
+  themeOptions,
+  type RealThemeId,
+  type ThemeColors,
+  type ThemeId,
+} from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
@@ -151,6 +159,29 @@ function hexToRgbTriplet(hex: string): string | null {
   return null
 }
 
+function rgbaFromHex(hex: string, alpha: number): string {
+  const rgb = hexToRgbTriplet(hex)
+  if (!rgb) return hex
+  return `rgb(${rgb} / ${alpha})`
+}
+
+function getThemeTransitionGradient(color: string): string {
+  const core = rgbaFromHex(color, 0.92)
+  const middle = rgbaFromHex(color, 0.52)
+  const edge = rgbaFromHex(color, 0)
+  return `radial-gradient(circle, ${core} 0%, ${color} 34%, ${middle} 54%, ${edge} 76%)`
+}
+
+function applyDocumentTheme(theme: RealThemeId, colors: ThemeColors) {
+  if (typeof document === 'undefined') return
+
+  document.documentElement.dataset.theme = theme
+  document.documentElement.style.setProperty('--primary', colors.invest)
+  document.documentElement.style.setProperty('--primary-contrast', pickForegroundColor(colors.invest))
+  const rgb = hexToRgbTriplet(colors.invest)
+  if (rgb) document.documentElement.style.setProperty('--primary-rgb', rgb)
+}
+
 function getThemeTransitionRadius(origin: ThemeChangeOrigin): number {
   if (typeof window === 'undefined') return 900
   const maxX = Math.max(origin.x, window.innerWidth - origin.x)
@@ -176,6 +207,8 @@ function pickNextRandomTheme(current: RealThemeId): RealThemeId {
 function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
   const { transition } = props
   const { color, origin, radius, reducedMotion } = transition
+  const gradient = getThemeTransitionGradient(color)
+  const pulseSize = 54
 
   if (reducedMotion) {
     return (
@@ -196,29 +229,56 @@ function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
       initial={{ opacity: 1 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
     >
       <motion.div
+        className="themeTransitionPulse"
+        initial={{ scale: 0.42, opacity: 0.58 }}
+        animate={{ scale: 2.7, opacity: 0 }}
+        transition={{ duration: 0.46, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          left: origin.x - pulseSize / 2,
+          top: origin.y - pulseSize / 2,
+          width: pulseSize,
+          height: pulseSize,
+          borderColor: color,
+          boxShadow: `0 0 0 1px ${color}, 0 12px 34px -16px ${color}`,
+        }}
+      />
+      <motion.div
+        className="themeTransitionCore"
+        initial={{ scale: 0.18, opacity: 0.5 }}
+        animate={{ scale: 1.35, opacity: 0 }}
+        transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          left: origin.x - 18,
+          top: origin.y - 18,
+          width: 36,
+          height: 36,
+          background: color,
+        }}
+      />
+      <motion.div
         className="themeTransitionBloom"
-        initial={{ scale: 0.04, opacity: 0.62 }}
-        animate={{ scale: 1, opacity: [0.62, 0.46, 0.18] }}
+        initial={{ scale: 0.035, opacity: 0.72 }}
+        animate={{ scale: 1, opacity: [0.72, 0.54, 0.2, 0.02] }}
         transition={{
-          scale: { duration: 0.58, ease: [0.16, 1, 0.3, 1] },
-          opacity: { duration: 0.72, times: [0, 0.45, 1], ease: [0.16, 1, 0.3, 1] },
+          scale: { duration: 0.68, ease: [0.16, 1, 0.3, 1] },
+          opacity: { duration: 0.86, times: [0, 0.38, 0.72, 1], ease: [0.16, 1, 0.3, 1] },
         }}
         style={{
           left: origin.x - radius,
           top: origin.y - radius,
           width: radius * 2,
           height: radius * 2,
-          background: `radial-gradient(circle, ${color} 0%, ${color} 42%, transparent 72%)`,
+          background: gradient,
         }}
       />
       <motion.div
         className="themeTransitionWash"
         initial={{ opacity: 0 }}
-        animate={{ opacity: [0, 0.16, 0.08] }}
-        transition={{ duration: 0.72, times: [0, 0.45, 1], ease: [0.16, 1, 0.3, 1] }}
+        animate={{ opacity: [0, 0.18, 0.12, 0] }}
+        transition={{ duration: 0.9, times: [0, 0.32, 0.62, 1], ease: [0.16, 1, 0.3, 1] }}
         style={{ background: color }}
       />
     </motion.div>
@@ -267,12 +327,8 @@ export default function App() {
     }
   }, [accounts.grouped, themeColors])
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = resolvedTheme
-    document.documentElement.style.setProperty('--primary', themeColors.invest)
-    document.documentElement.style.setProperty('--primary-contrast', pickForegroundColor(themeColors.invest))
-    const rgb = hexToRgbTriplet(themeColors.invest)
-    if (rgb) document.documentElement.style.setProperty('--primary-rgb', rgb)
+  useLayoutEffect(() => {
+    applyDocumentTheme(resolvedTheme, themeColors)
   }, [resolvedTheme, themeColors])
 
   useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts)
@@ -328,7 +384,7 @@ export default function App() {
 
       clearThemeTransitionTimers()
       const nextRandomTheme = id === 'random' ? pickNextRandomTheme(randomTheme) : randomTheme
-      const nextResolvedTheme = id === 'random' ? nextRandomTheme : id
+      const nextResolvedTheme: RealThemeId = id === 'random' ? nextRandomTheme : id
       const nextTheme = realThemeOptions.find((t) => t.id === nextResolvedTheme) || realThemeOptions[0]
       const nextOrigin = getThemeTransitionOrigin(origin)
       const key = themeTransitionSeqRef.current + 1
@@ -343,10 +399,11 @@ export default function App() {
         reducedMotion: prefersReducedMotion,
       })
 
-      const applyDelay = prefersReducedMotion ? 70 : 210
-      const clearDelay = prefersReducedMotion ? 260 : 820
+      const applyDelay = prefersReducedMotion ? 70 : 250
+      const clearDelay = prefersReducedMotion ? 260 : 900
 
       const applyTimer = window.setTimeout(() => {
+        applyDocumentTheme(nextResolvedTheme, nextTheme.colors)
         if (id === 'random') setRandomTheme(nextRandomTheme)
         setTheme(id)
       }, applyDelay)
@@ -524,6 +581,7 @@ export default function App() {
                           <SettingsScreen
                             themeOptions={themeOptions}
                             theme={themeTransition?.targetTheme ?? theme}
+                            activeThemeColor={themeTransition?.color ?? themeColors.invest}
                             onThemeChange={handleThemeChange}
                           />
                         </Suspense>

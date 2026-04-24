@@ -132,12 +132,25 @@ body {
 .themeTransitionBloom {
   position: fixed;
   border-radius: 9999px;
-  filter: blur(18px);
-  mix-blend-mode: multiply;
   transform-origin: center;
   will-change: transform, opacity;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+
+.themeTransitionPulse,
+.themeTransitionCore {
+  position: fixed;
+  border-radius: 9999px;
+  transform-origin: center;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.themeTransitionPulse {
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .themeTransitionWash {
