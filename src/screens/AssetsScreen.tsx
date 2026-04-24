@@ -108,6 +108,20 @@ function isSameBubbleRuntimeState(a: BubbleRuntimeState, b: BubbleRuntimeState):
   return a.pageActive === b.pageActive && a.physicsActive === b.physicsActive && a.burstsVisible === b.burstsVisible
 }
 
+function isSameRect(a?: Rect, b?: Rect): boolean {
+  if (!a || !b) return a === b
+  return (
+    Math.abs(a.x - b.x) < 0.5 &&
+    Math.abs(a.y - b.y) < 0.5 &&
+    Math.abs(a.w - b.w) < 0.5 &&
+    Math.abs(a.h - b.h) < 0.5
+  )
+}
+
+function isSameRectMap(a: Partial<Record<GroupId, Rect>>, b: Partial<Record<GroupId, Rect>>): boolean {
+  return LIST_GROUP_ORDER.every((id) => isSameRect(a[id], b[id]))
+}
+
 function OverlayBlock(props: {
   geometry: HomeBlockGeometry
   scrollIdx: MotionValue<number>
@@ -578,7 +592,7 @@ export function AssetsScreen(props: {
     return { background: addButtonTone, color: pickForegroundColor(addButtonTone) }
   }, [addButtonTone])
 
-  const scrollToPage = (index: number) => {
+  const scrollToPage = useCallback((index: number) => {
     const el = scrollerRef.current
     if (!el) return
     const w = el.clientWidth || 0
@@ -586,7 +600,7 @@ export function AssetsScreen(props: {
 
     const target = w * index
     el.scrollTo({ left: target, behavior: 'smooth' })
-  }
+  }, [])
 
   const scrollIdx = useTransform(scrollLeft, (v) => {
     const w = scrollerWidth || viewport.w || 1
@@ -606,13 +620,16 @@ export function AssetsScreen(props: {
   const overlayFade = useTransform(scrollIdx, [0, 1, 2, 2.08, 3], [1, 1, 1, 0, 0])
   
   const [bubbleRuntime, setBubbleRuntime] = useState<BubbleRuntimeState>(() => getBubbleRuntimeState(INITIAL_HOME_PAGE_INDEX))
+  const bubbleRuntimeRef = useRef(bubbleRuntime)
   
   useEffect(() => {
     return scrollIdx.on('change', (v) => {
-      setBubbleRuntime((current) => {
-        const next = getBubbleRuntimeState(v, current)
-        return isSameBubbleRuntimeState(current, next) ? current : next
-      })
+      const current = bubbleRuntimeRef.current
+      const next = getBubbleRuntimeState(v, current)
+      if (isSameBubbleRuntimeState(current, next)) return
+
+      bubbleRuntimeRef.current = next
+      setBubbleRuntime(next)
     })
   }, [scrollIdx])
 
@@ -733,6 +750,28 @@ export function AssetsScreen(props: {
     viewport.h,
     bubbleRuntime.physicsActive,
     bubbleRuntime.burstsVisible,
+  )
+
+  const bubbleGestureNodes = useMemo(() => bubbleNodes.map((n) => ({ id: n.id, radius: n.radius })), [bubbleNodes])
+  const goToRatioPage = useCallback(() => scrollToPage(1), [scrollToPage])
+  const getBubbleScrollLeft = useCallback(() => scrollLeft.get(), [scrollLeft])
+  const handleBubbleFlick = useCallback(
+    (id: string, velocity: { x: number; y: number }) => bubblePhysics.flick(id, velocity),
+    [bubblePhysics],
+  )
+  const handleBubbleBurst = useCallback(
+    (id: string, point: { x: number; y: number }) => bubblePhysics.burst(id, point),
+    [bubblePhysics],
+  )
+  const bubbleGesture = useMemo(
+    () => ({
+      nodes: bubbleGestureNodes,
+      positions: bubblePhysics.positions,
+      onFlick: handleBubbleFlick,
+      onBurst: handleBubbleBurst,
+      getScrollLeft: getBubbleScrollLeft,
+    }),
+    [bubbleGestureNodes, bubblePhysics.positions, getBubbleScrollLeft, handleBubbleBurst, handleBubbleFlick],
   )
 
   const ratioLayout = useMemo(() => {
@@ -999,13 +1038,24 @@ export function AssetsScreen(props: {
       }
     }
 
-    setListRects(next)
+    setListRects((prev) => (isSameRectMap(prev, next) ? prev : next))
   }, [scrollLeft, scrollerWidth])
 
   const scheduleMeasure = useCallback(() => {
-    if (measureRafRef.current) cancelAnimationFrame(measureRafRef.current)
-    measureRafRef.current = requestAnimationFrame(() => measureListRects())
+    if (measureRafRef.current !== null) return
+    measureRafRef.current = requestAnimationFrame(() => {
+      measureRafRef.current = null
+      measureListRects()
+    })
   }, [measureListRects])
+
+  useEffect(() => {
+    return () => {
+      if (measureRafRef.current === null) return
+      cancelAnimationFrame(measureRafRef.current)
+      measureRafRef.current = null
+    }
+  }, [])
 
   const onGroupEl = useCallback(
     (id: GroupId, el: HTMLDivElement | null) => {
@@ -1121,6 +1171,14 @@ export function AssetsScreen(props: {
     if (!el) return
 
     let raf = 0
+    const cancelPendingScrollFrame = () => {
+      if (!raf) return
+      cancelAnimationFrame(raf)
+      raf = 0
+    }
+    const commitScrollLeft = (value: number) => {
+      if (scrollLeft.get() !== value) scrollLeft.set(value)
+    }
     const onScroll = () => {
       if (!selectedType) {
         const w = el.clientWidth || 1
@@ -1142,15 +1200,16 @@ export function AssetsScreen(props: {
           }
 
           // 强制重置滚动位置，防止看到空白页
+          cancelPendingScrollFrame()
           if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-          scrollLeft.set(maxScroll)
+          commitScrollLeft(maxScroll)
           return
         }
       }
 
-      scrollLeft.set(el.scrollLeft)
-      cancelAnimationFrame(raf)
+      cancelPendingScrollFrame()
       raf = requestAnimationFrame(() => {
+        raf = 0
         const w = el.clientWidth || 1
         const currentScroll = el.scrollLeft
         const maxScroll = w * 2
@@ -1169,20 +1228,20 @@ export function AssetsScreen(props: {
              } else {
                // 还在拖动且在边界外，强制锁住
                if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-               scrollLeft.set(maxScroll)
+               commitScrollLeft(maxScroll)
                return
              }
           }
 
           // 正常滚动情况
-          scrollLeft.set(currentScroll)
+          commitScrollLeft(currentScroll)
           return
         }
 
         // selectedType 状态（详情页），允许正常滚动
         edgeLockRef.current = false
         edgePullTargetX.set(0)
-        scrollLeft.set(currentScroll)
+        commitScrollLeft(currentScroll)
       })
     }
 
@@ -1210,7 +1269,7 @@ export function AssetsScreen(props: {
     window.addEventListener('touchend', onPointerEnd, { passive: true })
     window.addEventListener('touchcancel', onPointerEnd, { passive: true })
     return () => {
-      cancelAnimationFrame(raf)
+      cancelPendingScrollFrame()
       el.removeEventListener('pointerdown', onPointerDown)
       window.removeEventListener('pointermove', onPointerMove)
       el.removeEventListener('scroll', onScroll)
@@ -1225,15 +1284,12 @@ export function AssetsScreen(props: {
     const el = listScrollRef.current
     if (!el) return
 
-    let raf = 0
     const onScroll = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => scheduleMeasure())
+      scheduleMeasure()
     }
 
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => {
-      cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
     }
   }, [scheduleMeasure])
@@ -1594,14 +1650,8 @@ export function AssetsScreen(props: {
           <div className="w-full h-full relative">
             <BubbleChartPage
               isActive={bubbleRuntime.pageActive}
-              onNext={() => scrollToPage(1)}
-              gesture={{
-                nodes: bubbleNodes.map((n) => ({ id: n.id, radius: n.radius })),
-                positions: bubblePhysics.positions,
-                onFlick: (id, velocity) => bubblePhysics.flick(id, velocity),
-                onBurst: (id, point) => bubblePhysics.burst(id, point),
-                getScrollLeft: () => scrollLeft.get(),
-              }}
+              onNext={goToRatioPage}
+              gesture={bubbleGesture}
             />
           </div>
         </div>

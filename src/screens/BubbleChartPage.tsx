@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, type MotionValue } from 'framer-motion'
 import { ChevronRight } from 'lucide-react'
-import { useCallback, useRef, useState, type PointerEvent } from 'react'
+import { memo, useCallback, useRef, useState, type PointerEvent } from 'react'
 
 type BubbleGesture = {
   nodes: Array<{ id: string; radius: number }>
@@ -24,7 +24,7 @@ type Tracking = {
 type RapidTap = { bubbleId: string; count: number; tMs: number }
 type BubbleRipple = { id: number; x: number; y: number; radius: number }
 
-export function BubbleChartPage(props: {
+function BubbleChartPageComponent(props: {
   isActive: boolean
   onNext: () => void
   gesture?: BubbleGesture
@@ -243,3 +243,5 @@ export function BubbleChartPage(props: {
     </div>
   )
 }
+
+export const BubbleChartPage = memo(BubbleChartPageComponent)
