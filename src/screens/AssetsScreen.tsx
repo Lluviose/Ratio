@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
 import { type ComponentType, type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
@@ -15,13 +15,6 @@ import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhys
 /** Linear interpolation helper */
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
-}
-
-function rubberband(distance: number, max: number, k = 80): number {
-  const d = Math.max(0, distance)
-  const m = Math.max(0, max)
-  const stiffness = Math.max(1, k)
-  return m * (1 - Math.exp(-d / stiffness))
 }
 
 export type GroupedAccounts = {
@@ -596,12 +589,9 @@ export function AssetsScreen(props: {
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
-
   const edgeLockRef = useRef(false)
   const edgePointerDownRef = useRef(false)
   const edgePullTargetX = useMotionValue(0)
-  const edgePullX = useSpring(edgePullTargetX, { stiffness: 400, damping: 40, mass: 1 })
-  const edgePullScale = useTransform(edgePullX, [-60, 0], [0.99, 1])
 
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
 
@@ -1233,8 +1223,7 @@ export function AssetsScreen(props: {
             // 我们通过计算当前 scrollLeft 超出多少来映射阻尼，但强制重置 scrollLeft
 
             // 为了避免抖动，这里我们使用 current 超过 maxScroll 的部分
-            const overscroll = current - maxScroll
-            edgePullTargetX.set(-rubberband(overscroll, 60, 160))
+            edgePullTargetX.set(0)
           }
 
           // 强制重置滚动位置，防止看到空白页
@@ -1317,6 +1306,66 @@ export function AssetsScreen(props: {
       window.removeEventListener('touchcancel', onPointerEnd)
     }
   }, [edgePullTargetX, scrollLeft, selectedType])
+
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+
+    let touchStart: { x: number; y: number; scrollLeft: number; locked: boolean } | null = null
+    const getListMaxScroll = () => (el.clientWidth || 1) * 2
+    const commitListEdge = () => {
+      const maxScroll = getListMaxScroll()
+      if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
+      if (scrollLeft.get() !== maxScroll) scrollLeft.set(maxScroll)
+    }
+
+    const onTouchStart = (e: TouchEvent) => {
+      const touch = e.touches[0]
+      if (!touch) return
+
+      touchStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        scrollLeft: el.scrollLeft,
+        locked: false,
+      }
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (selectedType || !touchStart) return
+
+      const touch = e.touches[0]
+      if (!touch) return
+
+      const maxScroll = getListMaxScroll()
+      const atListRightEdge = touchStart.scrollLeft >= maxScroll - 2 || el.scrollLeft >= maxScroll - 2
+      if (!atListRightEdge) return
+
+      const dx = touch.clientX - touchStart.x
+      const dy = touch.clientY - touchStart.y
+      const isLeftSwipe = dx < -6 && Math.abs(dx) > Math.abs(dy) * 1.1
+      if (!touchStart.locked && !isLeftSwipe) return
+
+      touchStart.locked = true
+      e.preventDefault()
+      commitListEdge()
+    }
+
+    const onTouchEnd = () => {
+      touchStart = null
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [scrollLeft, selectedType])
 
   useEffect(() => {
     const el = listScrollRef.current
@@ -1699,7 +1748,7 @@ export function AssetsScreen(props: {
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={containedPageStyle}>
-          <motion.div className="w-full h-full" style={{ x: edgePullX, scale: edgePullScale }}>
+          <div className="w-full h-full">
             <AssetsListPage
               key={`list-${animationKey}`}
               grouped={grouped}
@@ -1714,7 +1763,7 @@ export function AssetsScreen(props: {
               isReturning={isReturning}
               isReturningFromDetail={isReturningFromDetail}
             />
-          </motion.div>
+          </div>
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto" style={containedPageStyle}>
