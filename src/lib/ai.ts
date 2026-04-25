@@ -1,7 +1,4 @@
-export const AI_BASE_URL = 'https://cliapi.shinonome.com.cn' as const
-export const AI_API_KEY = 'caiwu' as const
-export const AI_MODEL = 'gpt-5.2' as const
-export const AI_REASONING_EFFORT = 'high' as const
+import { fetchCloudAiChat, getCloudSyncSettings, hasCloudCredentials } from './cloud'
 
 export type AiChatMessage = {
   role: 'system' | 'user' | 'assistant'
@@ -19,21 +16,31 @@ export type AiFinancialContextV1 = {
   }
 }
 
-export function getAiEndpointIssue(baseUrl: string = AI_BASE_URL): string | null {
+export function getAiEndpointIssue(): string | null {
   if (typeof window === 'undefined') return null
 
-  let aiUrl: URL
+  const cloudSettings = getCloudSyncSettings()
+  if (!cloudSettings.useCloudAi) return '请先在设置中启用云端 AI 代理'
+  if (!hasCloudCredentials(cloudSettings)) return '云端 AI 已启用，但云同步账号未配置'
+
+  let serverUrl: URL
   try {
-    aiUrl = new URL(baseUrl)
+    serverUrl = new URL(cloudSettings.serverUrl)
   } catch {
-    return 'AI 端点地址无效'
+    return '云端服务器地址无效'
   }
 
-  if (window.location.protocol === 'https:' && aiUrl.protocol === 'http:') {
-    return '当前页面为 HTTPS，浏览器会拦截 HTTP AI 接口请求'
+  if (window.location.protocol === 'https:' && serverUrl.protocol === 'http:') {
+    return '当前页面为 HTTPS，浏览器会拦截 HTTP 云端 AI 代理请求'
   }
 
   return null
+}
+
+export function getAiTransportLabel() {
+  const cloudSettings = getCloudSyncSettings()
+  if (cloudSettings.useCloudAi && hasCloudCredentials(cloudSettings)) return `云端代理：${cloudSettings.serverUrl}`
+  return '云端 AI 未启用'
 }
 
 function safeJsonParse(raw: string | null): unknown {
@@ -55,14 +62,6 @@ export function buildAiFinancialContext(storage: Storage = localStorage): AiFina
       snapshots: safeJsonParse(storage.getItem('ratio.snapshots')),
       accountOps: safeJsonParse(storage.getItem('ratio.accountOps')),
     },
-  }
-}
-
-function tryReadText(res: Response) {
-  try {
-    return res.text()
-  } catch {
-    return Promise.resolve('')
   }
 }
 
@@ -93,30 +92,9 @@ export async function fetchAiChatCompletion(args: { messages: AiChatMessage[]; s
   const issue = getAiEndpointIssue()
   if (issue) throw new Error(issue)
 
-  const url = new URL('/v1/chat/completions', AI_BASE_URL)
-  const res = await fetch(url, {
-    method: 'POST',
-    signal,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${AI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: AI_MODEL,
-      messages,
-      reasoning_effort: AI_REASONING_EFFORT,
-    }),
-  })
-
-  if (!res.ok) {
-    const text = await tryReadText(res)
-    const message = text ? `${res.status} ${res.statusText}: ${text}` : `${res.status} ${res.statusText}`
-    throw new Error(message)
-  }
-
-  const json = (await res.json()) as unknown
+  const cloudSettings = getCloudSyncSettings()
+  const json = await fetchCloudAiChat(cloudSettings, { messages, signal })
   const content = readResponseContent(json)
-
   if (typeof content !== 'string' || content.trim().length === 0) throw new Error('Empty AI response')
   return content
 }

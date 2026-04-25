@@ -2,7 +2,7 @@ import { dispatchStorageWrite } from './storageEvents'
 
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
-export const RATIO_BACKUP_EXCLUDE_PREFIXES: readonly string[] = []
+export const RATIO_BACKUP_EXCLUDE_PREFIXES: readonly string[] = ['ratio.cloudSync']
 
 export type RatioBackupFile = {
   schema: typeof RATIO_BACKUP_SCHEMA_V1

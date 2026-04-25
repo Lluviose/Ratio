@@ -27,6 +27,8 @@ import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { navSpring, screenTransition } from './lib/motionPresets'
 import { useReducedMotion } from './lib/useReducedMotion'
+import { initCloudAutoSync } from './lib/cloudSync'
+import { initTelemetry, trackTelemetry } from './lib/telemetry'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
@@ -368,6 +370,16 @@ export default function App() {
       void loadSettingsScreen().catch(() => undefined)
     })
   }, [tourSeen])
+
+  useEffect(() => {
+    initCloudAutoSync()
+    initTelemetry()
+  }, [])
+
+  useEffect(() => {
+    if (!tourSeen) return
+    trackTelemetry('tab_view', { tab })
+  }, [tab, tourSeen])
 
   const clearThemeTransitionTimers = useCallback(() => {
     for (const timer of themeTransitionTimersRef.current) {

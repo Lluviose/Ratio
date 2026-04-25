@@ -1,14 +1,27 @@
-import { Check, Download, Upload } from 'lucide-react'
+import { Activity, Bot, Check, Cloud, Download, DownloadCloud, RefreshCw, Upload, UploadCloud } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { queueToastAfterReload, useOverlay } from '../lib/overlay'
 import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
+import {
+  CLOUD_SYNC_SETTINGS_KEY,
+  DEFAULT_CLOUD_SYNC_SETTINGS,
+  coerceCloudSyncSettings,
+  createCloudUser,
+  downloadCloudBackup,
+  fetchCloudAiStatus,
+  fetchCloudMe,
+  uploadCloudBackup,
+  writeCloudSyncSettingsPatch,
+} from '../lib/cloud'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { quickFade, standardEase } from '../lib/motionPresets'
+import { Toggle } from '../components/Toggle'
+import { trackTelemetry } from '../lib/telemetry'
 
 type ThemeChangeOrigin = { x: number; y: number }
 
@@ -47,6 +60,10 @@ export function SettingsScreen(props: {
     MONTH_START_DAY_KEY,
     DEFAULT_MONTH_START_DAY,
   )
+  const [cloudSync, setCloudSync] = useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
+    coerce: coerceCloudSyncSettings,
+  })
+  const [cloudAiStatus, setCloudAiStatus] = useState<string>('')
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -101,6 +118,111 @@ export function SettingsScreen(props: {
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Import failed'
+      toast(msg, { tone: 'danger' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const updateCloudSync = (patch: Partial<typeof cloudSync>) => {
+    setCloudSync((current) => ({ ...current, ...patch }))
+  }
+
+  const cloudReady = Boolean(cloudSync.serverUrl.trim() && cloudSync.username.trim() && cloudSync.password)
+
+  const registerCloud = async () => {
+    setBusy(true)
+    try {
+      const res = await createCloudUser(cloudSync)
+      toast(`云账号已创建：${res.user.username}`, { tone: 'success' })
+      trackTelemetry('cloud_register')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cloud register failed'
+      toast(msg, { tone: 'danger' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const testCloud = async () => {
+    setBusy(true)
+    try {
+      const res = await fetchCloudMe(cloudSync)
+      toast(`已连接：${res.user.username}`, { tone: 'success' })
+      trackTelemetry('cloud_connect_test')
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cloud connection failed'
+      toast(msg, { tone: 'danger' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const uploadCloud = async () => {
+    setBusy(true)
+    try {
+      const meta = await uploadCloudBackup(cloudSync, buildRatioBackup())
+      updateCloudSync({ lastBackupAt: meta.updatedAt })
+      toast(`已上传 ${meta.itemCount} 项数据`, { tone: 'success' })
+      trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cloud upload failed'
+      toast(msg, { tone: 'danger' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const restoreCloud = async () => {
+    const ok = await confirm({
+      title: '从云端恢复',
+      message: '云端备份会覆盖当前设备上的 Ratio 数据。继续前建议先导出一个本地备份。',
+      confirmText: '恢复云端备份',
+      cancelText: '取消',
+      tone: 'danger',
+    })
+    if (!ok) return
+
+    setBusy(true)
+    try {
+      const res = await downloadCloudBackup(cloudSync)
+      if (!res.backup) {
+        toast('云端还没有备份', { tone: 'neutral' })
+        return
+      }
+      const restore = restoreRatioBackup(res.backup)
+      const restoredAt = new Date().toISOString()
+      writeCloudSyncSettingsPatch({ ...cloudSync, lastRestoreAt: restoredAt })
+      trackTelemetry('cloud_backup_restore', { restoredKeys: restore.restoredKeys.length })
+      queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
+      window.location.reload()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Cloud restore failed'
+      toast(msg, { tone: 'danger' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const checkCloudAiStatus = async () => {
+    setBusy(true)
+    try {
+      const res = await fetchCloudAiStatus(cloudSync)
+      if (!res.ai.configured) {
+        const message = res.ai.issue ? `云端 AI 未就绪：${res.ai.issue}` : '云端 AI 未就绪'
+        setCloudAiStatus(message)
+        toast(message, { tone: 'neutral' })
+        return
+      }
+      setCloudAiStatus(
+        `云端 AI 已就绪：${res.ai.model} / reasoning ${res.ai.reasoningEffort}${
+          res.ai.hasApiKey ? ` / key ${res.ai.apiKeyMasked}` : ''
+        }`,
+      )
+      toast('云端 AI 已就绪', { tone: 'success' })
+      trackTelemetry('cloud_ai_status_check', { configured: true })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Check AI status failed'
       toast(msg, { tone: 'danger' })
     } finally {
       setBusy(false)
@@ -267,7 +389,160 @@ export function SettingsScreen(props: {
         className="card"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.32 }}
+        transition={{ delay: 0.3 }}
+      >
+        <div className="cardInner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Cloud size={18} />
+            <div style={{ fontWeight: 950, fontSize: 16 }}>云同步</div>
+          </div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+            通过自托管后端备份 Ratio 数据。账号密码只保存在当前设备，不会写入备份文件。
+          </div>
+
+          <div className="stack" style={{ marginTop: 16 }}>
+            <label className="field">
+              <div className="fieldLabel">服务器地址</div>
+              <input
+                className="input"
+                value={cloudSync.serverUrl}
+                placeholder="http://localhost:8787"
+                onChange={(e) => updateCloudSync({ serverUrl: e.target.value })}
+              />
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+              <label className="field">
+                <div className="fieldLabel">账号</div>
+                <input
+                  className="input"
+                  value={cloudSync.username}
+                  autoComplete="username"
+                  onChange={(e) => updateCloudSync({ username: e.target.value })}
+                />
+              </label>
+              <label className="field">
+                <div className="fieldLabel">密码</div>
+                <input
+                  className="input"
+                  type="password"
+                  value={cloudSync.password}
+                  autoComplete="current-password"
+                  onChange={(e) => updateCloudSync({ password: e.target.value })}
+                />
+              </label>
+            </div>
+
+            <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
+              <div>
+                <div className="assetName">自动备份</div>
+                <div className="assetSub" style={{ marginTop: 4 }}>
+                  数据变更后自动上传，最短间隔 30 秒
+                </div>
+              </div>
+              <Toggle checked={cloudSync.autoSync} onChange={(autoSync) => updateCloudSync({ autoSync })} />
+            </div>
+
+            <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
+              <div>
+                <div className="assetName">日志遥测</div>
+                <div className="assetSub" style={{ marginTop: 4 }}>
+                  仅上传错误、页面切换和同步结果，不包含账号余额明细
+                </div>
+              </div>
+              <Toggle
+                checked={cloudSync.telemetryEnabled}
+                onChange={(telemetryEnabled) => updateCloudSync({ telemetryEnabled })}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+              <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={testCloud}>
+                <RefreshCw size={16} />
+                <span>测试连接</span>
+              </button>
+              <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={registerCloud}>
+                <span>创建账号</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+              <button type="button" className="assetItem" disabled={busy || !cloudReady} onClick={uploadCloud}>
+                <div>
+                  <div className="assetName">上传</div>
+                  <div className="assetSub">覆盖云端备份</div>
+                </div>
+                <UploadCloud size={18} />
+              </button>
+              <button type="button" className="assetItem" disabled={busy || !cloudReady} onClick={restoreCloud}>
+                <div>
+                  <div className="assetName">恢复</div>
+                  <div className="assetSub">覆盖本机数据</div>
+                </div>
+                <DownloadCloud size={18} />
+              </button>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+              {cloudSync.lastBackupAt ? `最近上传：${cloudSync.lastBackupAt}` : '尚未上传云端备份'}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.34 }}
+      >
+        <div className="cardInner">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Bot size={18} />
+            <div style={{ fontWeight: 950, fontSize: 16 }}>AI 接口</div>
+          </div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+            AI 对话端口由云端后台统一配置，前端只保存是否启用代理。
+          </div>
+
+          <div className="stack" style={{ marginTop: 16 }}>
+            <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
+              <div>
+                <div className="assetName">使用云端 AI 代理</div>
+                <div className="assetSub" style={{ marginTop: 4 }}>
+                  需要先连接云同步账号，AI 服务参数在 Docker Compose 后台配置
+                </div>
+              </div>
+              <Toggle checked={cloudSync.useCloudAi} onChange={(useCloudAi) => updateCloudSync({ useCloudAi })} />
+            </div>
+
+            <button
+              type="button"
+              className="assetItem"
+              disabled={busy || !cloudReady}
+              onClick={checkCloudAiStatus}
+            >
+              <div>
+                <div className="assetName">检查云端 AI</div>
+                <div className="assetSub">读取后台统一配置的可用状态</div>
+              </div>
+              <Activity size={18} />
+            </button>
+
+            {cloudAiStatus ? (
+              <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+                {cloudAiStatus}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.38 }}
       >
         <div className="cardInner">
           <div style={{ fontWeight: 950, fontSize: 16 }}>备份与恢复</div>

@@ -665,6 +665,10 @@ a {
 }
 
 .primaryBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: none;
   height: 52px;
   border-radius: 20px;

@@ -3,7 +3,8 @@ import { ArrowUp, Sparkles, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { AI_BASE_URL, buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, type AiChatMessage } from '../lib/ai'
+import { buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, getAiTransportLabel, type AiChatMessage } from '../lib/ai'
+import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSettings } from '../lib/cloud'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type UiMessage = {
@@ -69,7 +70,7 @@ function ChatMarkdown(props: { children: string }) {
 function prettyError(err: unknown) {
   const raw = err instanceof Error ? err.message : typeof err === 'string' ? err : 'Unknown error'
   if (/load failed|failed to fetch|networkerror|cors/i.test(raw)) {
-    return `无法连接到 AI 端点（${AI_BASE_URL}）。请检查网络/端点可用性，以及是否存在 CORS 或证书问题。`
+    return '无法连接到云端 AI 代理。请检查云端服务器地址、网络、CORS 或证书配置。'
   }
   return raw
 }
@@ -79,12 +80,16 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
   const [open, setOpen] = useState(() => initialOpen)
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
   const [privacyAccepted, setPrivacyAccepted] = useLocalStorageState<boolean>('ratio.aiPrivacyAccepted', false)
+  useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
+    coerce: coerceCloudSyncSettings,
+  })
   const [privacyOpen, setPrivacyOpen] = useState(false)
   const [messages, setMessages] = useState<UiMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
 
-  const transportIssue = useMemo(() => getAiEndpointIssue(), [])
+  const transportIssue = getAiEndpointIssue()
+  const aiTransportLabel = getAiTransportLabel()
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -303,7 +308,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                     {!isOnline
                       ? '当前离线，AI 分析不可用。请联网后再试。'
                       : transportIssue
-                      ? '当前环境无法直接连接 AI 端点。建议在本地 http 环境使用（例如运行 `npm run dev`），或为端点配置 HTTPS 反向代理。'
+                      ? '当前环境无法连接云端 AI 代理。请检查设置中的云端服务器地址，或为后端配置 HTTPS 反向代理。'
                       : '你可以问我：资产结构是否健康、负债压力如何、近期变化原因、下一步优化建议等。'}
                   </div>
                 ) : null}
@@ -402,7 +407,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                     <div className="px-5 pt-5 pb-3">
                       <div className="text-[15px] font-extrabold tracking-tight text-slate-900">隐私提示</div>
                       <div className="mt-2 text-[12px] font-semibold text-slate-600 leading-relaxed">
-                        为了进行 AI 分析，你的财务数据将以 JSON 形式发送到第三方模型端点（包含账户、快照、期间变动记录等）。请确认你理解并同意后继续使用。
+                        为了进行 AI 分析，你的财务数据将以 JSON 形式发送到你配置的云端后台，再由后台转发到统一 AI 对话服务。请确认你理解并同意后继续使用。
                       </div>
                       {transportIssue ? (
                         <div className="mt-2 text-[12px] font-semibold text-rose-600 leading-relaxed">
@@ -410,7 +415,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                         </div>
                       ) : null}
                       <div className="mt-2 text-[11px] font-semibold text-slate-500/80 break-all">
-                        端点：{AI_BASE_URL}
+                        服务：{aiTransportLabel}
                       </div>
                     </div>
 

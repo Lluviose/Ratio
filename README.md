@@ -24,6 +24,24 @@ npm run dev
 
 打开 `http://localhost:5173`。
 
+### 云端后台（Docker Compose）
+
+后台用于账号备份、云端 AI 代理和日志遥测。AI 对话端口只在后台统一配置，前端不会保存 AI Base URL、API Key 或模型参数。
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d --build
+```
+
+在 `.env` 中配置：
+
+- `RATIO_AI_CHAT_URL`：OpenAI-compatible `/v1/chat/completions` 完整地址；或使用 `RATIO_AI_BASE_URL` + `RATIO_AI_CHAT_PATH`
+- `RATIO_AI_API_KEY`：后台转发 AI 请求时使用的密钥
+- `RATIO_AI_MODEL` / `RATIO_AI_REASONING_EFFORT`：统一模型配置
+- `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
+
+启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号和密码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。
+
 ### 常用命令
 
 - `npm run dev`：启动开发服务器
