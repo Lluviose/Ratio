@@ -558,6 +558,7 @@ export function AssetsScreen(props: {
 
   const didInitRef = useRef(false)
   const detailUnmountTimerRef = useRef<number | null>(null)
+  const detailPageReachedRef = useRef(false)
   const showOverlayLabelsRef = useRef(true)
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
@@ -773,6 +774,7 @@ export function AssetsScreen(props: {
         window.clearTimeout(detailUnmountTimerRef.current)
         detailUnmountTimerRef.current = null
       }
+      detailPageReachedRef.current = false
       setSelectedType(type)
       setDetailPageMounted(true)
       window.requestAnimationFrame(() => scrollToPage(3))
@@ -782,17 +784,34 @@ export function AssetsScreen(props: {
   const handleToggleGroup = useCallback((id: GroupId) => {
     setExpandedGroup((current) => (current === id ? null : id))
   }, [])
+  const closeDetailPage = useCallback(
+    (shouldScrollToList: boolean) => {
+      if (detailUnmountTimerRef.current !== null) return
+
+      detailPageReachedRef.current = false
+      if (shouldScrollToList) scrollToPage(2)
+      else {
+        const el = scrollerRef.current
+        const listScrollLeft = (el?.clientWidth || 1) * 2
+        if (el && el.scrollLeft > listScrollLeft) {
+          el.scrollLeft = listScrollLeft
+          if (scrollLeft.get() !== listScrollLeft) scrollLeft.set(listScrollLeft)
+        }
+      }
+
+      setIsReturningFromDetail(true)
+      setAnimationKey((k) => k + 1)
+      detailUnmountTimerRef.current = window.setTimeout(() => {
+        setSelectedType(null)
+        setDetailPageMounted(false)
+        detailUnmountTimerRef.current = null
+      }, 260)
+    },
+    [scrollLeft, scrollToPage],
+  )
   const handleDetailBack = useCallback(() => {
-    if (detailUnmountTimerRef.current !== null) window.clearTimeout(detailUnmountTimerRef.current)
-    setIsReturningFromDetail(true)
-    setAnimationKey((k) => k + 1)
-    scrollToPage(2)
-    detailUnmountTimerRef.current = window.setTimeout(() => {
-      setSelectedType(null)
-      setDetailPageMounted(false)
-      detailUnmountTimerRef.current = null
-    }, 260)
-  }, [scrollToPage])
+    closeDetailPage(true)
+  }, [closeDetailPage])
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -1208,22 +1227,41 @@ export function AssetsScreen(props: {
       commitScrollLeft(max)
       return true
     }
+    const syncDetailReturn = () => {
+      if (!detailPageMounted || detailUnmountTimerRef.current !== null) return
+
+      const w = el.clientWidth || 1
+      const listScrollLeft = w * 2
+      const detailScrollLeft = w * 3
+      const reachedTolerance = Math.max(12, w * 0.04)
+      const returnedTolerance = Math.max(8, w * 0.03)
+
+      if (el.scrollLeft >= detailScrollLeft - reachedTolerance) detailPageReachedRef.current = true
+      if (detailPageReachedRef.current && el.scrollLeft <= listScrollLeft + returnedTolerance) {
+        closeDetailPage(false)
+      }
+    }
     const onScroll = () => {
       if (clampToAvailablePages()) return
+      syncDetailReturn()
       if (raf) cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         raf = 0
-        if (!clampToAvailablePages()) commitScrollLeft(el.scrollLeft)
+        if (!clampToAvailablePages()) {
+          commitScrollLeft(el.scrollLeft)
+          syncDetailReturn()
+        }
       })
     }
 
     clampToAvailablePages()
+    syncDetailReturn()
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       if (raf) cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
     }
-  }, [detailPageMounted, scrollLeft])
+  }, [closeDetailPage, detailPageMounted, scrollLeft])
 
   useEffect(() => {
     const el = scrollerRef.current
@@ -1250,14 +1288,16 @@ export function AssetsScreen(props: {
     }
 
     const onTouchMove = (e: TouchEvent) => {
-      if (detailPageMounted || !touchStart) return
+      if (!touchStart) return
 
       const touch = e.touches[0]
       if (!touch) return
 
       const maxScroll = getListMaxScroll()
-      const atListRightEdge = touchStart.scrollLeft >= maxScroll - 2 || el.scrollLeft >= maxScroll - 2
-      if (!atListRightEdge) return
+      const listPageTolerance = Math.max(4, (el.clientWidth || 1) * 0.01)
+      const startedOnListPage = Math.abs(touchStart.scrollLeft - maxScroll) <= listPageTolerance
+      const isReturningFromDetailPage = detailUnmountTimerRef.current !== null && touchStart.scrollLeft >= maxScroll - listPageTolerance
+      if (!startedOnListPage && !isReturningFromDetailPage) return
 
       const dx = touch.clientX - touchStart.x
       const dy = touch.clientY - touchStart.y
@@ -1283,7 +1323,7 @@ export function AssetsScreen(props: {
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [detailPageMounted, scrollLeft])
+  }, [scrollLeft])
 
   useEffect(() => {
     const el = listScrollRef.current
