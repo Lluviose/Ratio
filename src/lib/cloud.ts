@@ -30,6 +30,20 @@ export type CloudAiStatus = {
   issue: string | null
 }
 
+export class CloudRequestError extends Error {
+  status: number
+  code: string
+  details: Record<string, unknown>
+
+  constructor(args: { status: number; code: string; message: string; details?: Record<string, unknown> }) {
+    super(args.message)
+    this.name = 'CloudRequestError'
+    this.status = args.status
+    this.code = args.code
+    this.details = args.details ?? {}
+  }
+}
+
 export const DEFAULT_CLOUD_SYNC_SETTINGS: CloudSyncSettings = {
   serverUrl: 'http://localhost:8787',
   username: '',
@@ -107,12 +121,24 @@ async function readError(res: Response) {
     const json = (await res.json()) as unknown
     if (isRecord(json)) {
       const error = json.error
-      if (isRecord(error) && typeof error.message === 'string') return error.message
+      if (isRecord(error) && typeof error.message === 'string') {
+        const { code, message, ...details } = error
+        return new CloudRequestError({
+          status: res.status,
+          code: typeof code === 'string' ? code : 'error',
+          message,
+          details,
+        })
+      }
     }
   } catch {
     // fall through
   }
-  return `${res.status} ${res.statusText}`
+  return new CloudRequestError({
+    status: res.status,
+    code: 'http_error',
+    message: `${res.status} ${res.statusText}`,
+  })
 }
 
 export async function cloudRequest<T>(
@@ -130,7 +156,7 @@ export async function cloudRequest<T>(
     ...init,
     headers,
   })
-  if (!res.ok) throw new Error(await readError(res))
+  if (!res.ok) throw await readError(res)
   return (await res.json()) as T
 }
 
@@ -140,7 +166,7 @@ export async function createCloudUser(settings: CloudSyncSettings) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username: settings.username.trim(), password: settings.password }),
   })
-  if (!res.ok) throw new Error(await readError(res))
+  if (!res.ok) throw await readError(res)
   return (await res.json()) as { user: { username: string; createdAt: string } }
 }
 
@@ -148,11 +174,17 @@ export function fetchCloudMe(settings: CloudSyncSettings) {
   return cloudRequest<{ user: { username: string; createdAt: string } }>(settings, '/api/me')
 }
 
-export function uploadCloudBackup(settings: CloudSyncSettings, backup: RatioBackupFile) {
+export function uploadCloudBackup(
+  settings: CloudSyncSettings,
+  backup: RatioBackupFile,
+  options: { expectedUpdatedAt?: string; force?: boolean } = {},
+) {
   return cloudRequest<CloudBackupMeta>(settings, '/api/backup', {
     method: 'PUT',
     body: JSON.stringify({
       backup,
+      expectedUpdatedAt: options.expectedUpdatedAt ?? '',
+      force: options.force === true,
       device: typeof navigator === 'undefined' ? 'unknown' : navigator.userAgent.slice(0, 120),
     }),
   })

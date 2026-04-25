@@ -6,6 +6,7 @@ import { queueToastAfterReload, useOverlay } from '../lib/overlay'
 import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
+  CloudRequestError,
   DEFAULT_CLOUD_SYNC_SETTINGS,
   coerceCloudSyncSettings,
   createCloudUser,
@@ -14,6 +15,7 @@ import {
   fetchCloudMe,
   uploadCloudBackup,
   writeCloudSyncSettingsPatch,
+  type CloudBackupMeta,
 } from '../lib/cloud'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
@@ -130,6 +132,21 @@ export function SettingsScreen(props: {
 
   const cloudReady = Boolean(cloudSync.serverUrl.trim() && cloudSync.username.trim() && cloudSync.password)
 
+  const readConflictMeta = (err: unknown): CloudBackupMeta | null => {
+    if (!(err instanceof CloudRequestError)) return null
+    if (err.code !== 'backup_conflict') return null
+    const meta = err.details.meta
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null
+    const record = meta as Record<string, unknown>
+    if (typeof record.updatedAt !== 'string') return null
+    return {
+      updatedAt: record.updatedAt,
+      clientCreatedAt: typeof record.clientCreatedAt === 'string' ? record.clientCreatedAt : record.updatedAt,
+      itemCount: typeof record.itemCount === 'number' ? record.itemCount : 0,
+      device: typeof record.device === 'string' ? record.device : '',
+    }
+  }
+
   const registerCloud = async () => {
     setBusy(true)
     try {
@@ -158,18 +175,40 @@ export function SettingsScreen(props: {
     }
   }
 
-  const uploadCloud = async () => {
+  const uploadCloud = async (force = false): Promise<void> => {
+    let retrying = false
     setBusy(true)
     try {
-      const meta = await uploadCloudBackup(cloudSync, buildRatioBackup())
+      const meta = await uploadCloudBackup(cloudSync, buildRatioBackup(), {
+        expectedUpdatedAt: cloudSync.lastBackupAt,
+        force,
+      })
       updateCloudSync({ lastBackupAt: meta.updatedAt })
       toast(`已上传 ${meta.itemCount} 项数据`, { tone: 'success' })
-      trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount })
+      trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount, force })
     } catch (err) {
+      const conflictMeta = readConflictMeta(err)
+      if (err instanceof CloudRequestError && err.code === 'backup_conflict' && !force) {
+        setBusy(false)
+        const ok = await confirm({
+          title: '云端备份已更新',
+          message: conflictMeta
+            ? `云端已有更新的备份（${conflictMeta.updatedAt}）。继续上传会覆盖云端数据。`
+            : '云端备份状态已变化。继续上传会覆盖当前云端状态。',
+          confirmText: '覆盖云端备份',
+          cancelText: '取消',
+          tone: 'danger',
+        })
+        if (ok) {
+          retrying = true
+          return uploadCloud(true)
+        }
+        return
+      }
       const msg = err instanceof Error ? err.message : 'Cloud upload failed'
       toast(msg, { tone: 'danger' })
     } finally {
-      setBusy(false)
+      if (!retrying) setBusy(false)
     }
   }
 
@@ -192,7 +231,7 @@ export function SettingsScreen(props: {
       }
       const restore = restoreRatioBackup(res.backup)
       const restoredAt = new Date().toISOString()
-      writeCloudSyncSettingsPatch({ ...cloudSync, lastRestoreAt: restoredAt })
+      writeCloudSyncSettingsPatch({ lastRestoreAt: restoredAt, lastBackupAt: res.meta?.updatedAt ?? cloudSync.lastBackupAt })
       trackTelemetry('cloud_backup_restore', { restoredKeys: restore.restoredKeys.length })
       queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
       window.location.reload()
@@ -467,7 +506,7 @@ export function SettingsScreen(props: {
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-              <button type="button" className="assetItem" disabled={busy || !cloudReady} onClick={uploadCloud}>
+              <button type="button" className="assetItem" disabled={busy || !cloudReady} onClick={() => void uploadCloud()}>
                 <div>
                   <div className="assetName">上传</div>
                   <div className="assetSub">覆盖云端备份</div>

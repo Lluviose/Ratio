@@ -1,6 +1,6 @@
 import http from 'node:http'
 import { mkdir, readFile, rename, stat, writeFile, appendFile } from 'node:fs/promises'
-import { createHash, pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import path from 'node:path'
 
 const PORT = Number(process.env.PORT || 8787)
@@ -15,6 +15,8 @@ const AI_MODEL = process.env.RATIO_AI_MODEL || 'gpt-5.2'
 const AI_REASONING_EFFORT = process.env.RATIO_AI_REASONING_EFFORT || 'high'
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 const BACKUP_SCHEMA = 'ratio.backup.v1'
+
+const mutationQueues = new Map()
 
 function now() {
   return new Date().toISOString()
@@ -45,8 +47,8 @@ function corsHeaders() {
   }
 }
 
-function fail(res, status, message, code = 'error') {
-  jsonResponse(res, status, { error: { code, message } })
+function fail(res, status, message, code = 'error', details = undefined) {
+  jsonResponse(res, status, { error: { code, message, ...(details && typeof details === 'object' ? details : {}) } })
 }
 
 function userId(username) {
@@ -82,7 +84,7 @@ async function readJsonFile(file, fallback) {
 
 async function writeJsonFile(file, value) {
   await mkdir(path.dirname(file), { recursive: true })
-  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`
+  const tmp = `${file}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
   await rename(tmp, file)
 }
@@ -95,6 +97,32 @@ async function readUsers() {
 
 async function writeUsers(data) {
   await writeJsonFile(USERS_FILE, data)
+}
+
+async function runQueuedMutation(key, task) {
+  const previous = mutationQueues.get(key) || Promise.resolve()
+  const operation = previous
+    .catch(() => undefined)
+    .then(task)
+  const next = operation.then(
+    () => undefined,
+    () => undefined,
+  )
+  mutationQueues.set(key, next)
+  try {
+    return await operation
+  } finally {
+    if (mutationQueues.get(key) === next) mutationQueues.delete(key)
+  }
+}
+
+async function mutateUsers(mutator) {
+  return runQueuedMutation(USERS_FILE, async () => {
+    const data = await readUsers()
+    const result = await mutator(data)
+    await writeUsers(data)
+    return result
+  })
 }
 
 async function parseBody(req, maxBytes = 1024 * 1024) {
@@ -230,46 +258,77 @@ async function handleRegister(req, res) {
   if (!/^[\w.@-]{3,64}$/.test(username)) return fail(res, 400, 'Username must be 3-64 letters, numbers, dot, underscore or dash')
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters')
 
-  const data = await readUsers()
-  if (data.users[username]) return fail(res, 409, 'User already exists', 'user_exists')
+  const result = await mutateUsers((data) => {
+    if (data.users[username]) return { exists: true, user: data.users[username] }
 
-  const passwordInfo = hashPassword(password)
-  const user = {
-    id: userId(username),
-    username,
-    passwordHash: passwordInfo.hash,
-    passwordSalt: passwordInfo.salt,
-    passwordIterations: passwordInfo.iterations,
-    createdAt: now(),
-    updatedAt: now(),
-  }
+    const passwordInfo = hashPassword(password)
+    const user = {
+      id: userId(username),
+      username,
+      passwordHash: passwordInfo.hash,
+      passwordSalt: passwordInfo.salt,
+      passwordIterations: passwordInfo.iterations,
+      createdAt: now(),
+      updatedAt: now(),
+    }
 
-  data.users[username] = user
-  await writeUsers(data)
+    data.users[username] = user
+    return { exists: false, user }
+  })
+
+  if (result.exists) return fail(res, 409, 'User already exists', 'user_exists')
+
+  const user = result.user
   await mkdir(path.join(DATA_DIR, 'users', user.id), { recursive: true })
   jsonResponse(res, 201, { user: publicUser(user) })
+}
+
+function backupMeta(payload) {
+  if (!payload) return null
+  return {
+    updatedAt: payload.updatedAt,
+    clientCreatedAt: payload.clientCreatedAt,
+    itemCount: payload.itemCount,
+    device: payload.device || '',
+  }
 }
 
 async function handleBackupPut(req, res, user) {
   const body = await parseBody(req, MAX_BACKUP_BYTES)
   const backup = body.backup
   if (!isBackup(backup)) return fail(res, 400, 'Invalid backup payload')
+  const backupFile = userFile(user, 'backup.json')
 
-  const payload = {
-    schema: 'ratio.cloud-backup.v1',
-    updatedAt: now(),
-    clientCreatedAt: backup.createdAt,
-    device: typeof body.device === 'string' ? body.device.slice(0, 120) : '',
-    itemCount: Object.keys(backup.items).length,
-    backup,
+  const result = await runQueuedMutation(backupFile, async () => {
+    const current = await readJsonFile(backupFile, null)
+    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : ''
+    const force = body.force === true
+    const remoteUpdatedAt = typeof current?.updatedAt === 'string' ? current.updatedAt : ''
+
+    if (!force && remoteUpdatedAt !== expectedUpdatedAt) {
+      return { conflict: true, meta: backupMeta(current) }
+    }
+
+    const payload = {
+      schema: 'ratio.cloud-backup.v1',
+      updatedAt: now(),
+      clientCreatedAt: backup.createdAt,
+      device: typeof body.device === 'string' ? body.device.slice(0, 120) : '',
+      itemCount: Object.keys(backup.items).length,
+      backup,
+    }
+
+    await writeJsonFile(backupFile, payload)
+    return { conflict: false, meta: backupMeta(payload) }
+  })
+
+  if (result.conflict) {
+    return fail(res, 409, 'Cloud backup has changed; confirm before overwriting', 'backup_conflict', {
+      meta: result.meta,
+    })
   }
 
-  await writeJsonFile(userFile(user, 'backup.json'), payload)
-  jsonResponse(res, 200, {
-    updatedAt: payload.updatedAt,
-    clientCreatedAt: payload.clientCreatedAt,
-    itemCount: payload.itemCount,
-  })
+  jsonResponse(res, 200, result.meta)
 }
 
 async function handleBackupGet(res, user) {
@@ -277,12 +336,7 @@ async function handleBackupGet(res, user) {
   if (!payload) return jsonResponse(res, 200, { backup: null, meta: null })
   jsonResponse(res, 200, {
     backup: payload.backup,
-    meta: {
-      updatedAt: payload.updatedAt,
-      clientCreatedAt: payload.clientCreatedAt,
-      itemCount: payload.itemCount,
-      device: payload.device || '',
-    },
+    meta: backupMeta(payload),
   })
 }
 

@@ -15,6 +15,7 @@ let initialized = false
 let syncTimer: number | null = null
 let lastAutoSyncAt = 0
 let syncInFlight = false
+let pendingReason: string | null = null
 
 function getWriteDetail(event: Event): StorageWriteDetail | null {
   if (!(event instanceof CustomEvent)) return null
@@ -34,31 +35,48 @@ function shouldAutoSyncKey(key: string) {
 async function runAutoSync(reason: string) {
   const settings = getCloudSyncSettings()
   if (!settings.autoSync || !hasCloudCredentials(settings)) return
-  if (syncInFlight) return
+  if (syncInFlight) {
+    pendingReason = reason
+    return
+  }
 
   const now = Date.now()
-  if (now - lastAutoSyncAt < AUTO_SYNC_MIN_INTERVAL_MS) return
+  const elapsed = now - lastAutoSyncAt
+  if (elapsed < AUTO_SYNC_MIN_INTERVAL_MS) {
+    scheduleAutoSync(reason, AUTO_SYNC_MIN_INTERVAL_MS - elapsed)
+    return
+  }
+
   lastAutoSyncAt = now
   syncInFlight = true
+  pendingReason = null
 
   try {
-    await uploadCloudBackup(settings, buildRatioBackup())
-    writeCloudSyncSettingsPatch({ lastBackupAt: new Date().toISOString() })
-    window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: true, reason } }))
+    const meta = await uploadCloudBackup(settings, buildRatioBackup(), { expectedUpdatedAt: settings.lastBackupAt })
+    writeCloudSyncSettingsPatch({ lastBackupAt: meta.updatedAt })
+    window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: true, reason, itemCount: meta.itemCount } }))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Cloud sync failed'
     window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: false, reason, message } }))
   } finally {
     syncInFlight = false
+    if (pendingReason) {
+      const nextReason = pendingReason
+      pendingReason = null
+      scheduleAutoSync(nextReason)
+    }
   }
 }
 
-function scheduleAutoSync(reason: string) {
+function scheduleAutoSync(reason: string, delay = AUTO_SYNC_DELAY_MS) {
+  pendingReason = reason
   if (syncTimer !== null) window.clearTimeout(syncTimer)
   syncTimer = window.setTimeout(() => {
     syncTimer = null
-    void runAutoSync(reason)
-  }, AUTO_SYNC_DELAY_MS)
+    const nextReason = pendingReason ?? reason
+    pendingReason = null
+    void runAutoSync(nextReason)
+  }, delay)
 }
 
 export function initCloudAutoSync() {
