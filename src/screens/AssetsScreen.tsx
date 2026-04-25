@@ -136,11 +136,164 @@ function isSameRectMap(a: Partial<Record<GroupId, Rect>>, b: Partial<Record<Grou
   return LIST_GROUP_ORDER.every((id) => isSameRect(a[id], b[id]))
 }
 
+function OverlayBlockLabels(props: {
+  block: OverlayBlockModel
+  kind: CornerKind
+  ratio: Rect
+  displayHeight?: number
+  scrollIdx: MotionValue<number>
+  labelsOpacity: MotionValue<number>
+}) {
+  const { block, kind, ratio, displayHeight, scrollIdx, labelsOpacity } = props
+  const textColor = pickForegroundColor(block.tone)
+  const isDebt = kind === 'debt'
+  const basePercentSize = 36
+  const basePercentSymbolSize = 15
+  const baseLabelSize = 16
+  const baseLabelMargin = 4
+  const normalPadding = 16
+  const adaptivePaddingValue = 4
+  const verticalMinHeight = basePercentSize + baseLabelMargin + baseLabelSize + normalPadding * 2
+  const horizontalMinHeight = basePercentSize + adaptivePaddingValue * 2
+  const actualHeight = displayHeight ?? ratio.h
+  const useHorizontalLayout = !isDebt && actualHeight < verticalMinHeight
+
+  let fontScale = 1
+  if (!isDebt && actualHeight < horizontalMinHeight) {
+    const availableHeight = Math.max(0, actualHeight - adaptivePaddingValue * 2)
+    fontScale = Math.max(1 / 3, availableHeight / basePercentSize)
+  }
+
+  const needsScaling = fontScale < 1
+  const percentSize = needsScaling ? Math.round(basePercentSize * fontScale) : basePercentSize
+  const percentSymbolSize = needsScaling ? percentSize : basePercentSymbolSize
+  const labelSize = needsScaling ? Math.min(percentSize, baseLabelSize) : baseLabelSize
+
+  const paddingX = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return 0
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return lerp(0, normalPadding, t)
+  })
+  const paddingYTarget = useHorizontalLayout ? adaptivePaddingValue : normalPadding
+  const paddingY = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return 0
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return lerp(0, paddingYTarget, t)
+  })
+  const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
+  const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
+  const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1])
+  const amountOpacity = useTransform(scrollIdx, [0, 0.35, 0.55], [1, 1, 0])
+  const percentOpacity = useTransform(scrollIdx, [0.45, 0.65, 1], [0, 1, 1])
+
+  const ratioPercentSize = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return basePercentSize
+    if (!needsScaling) return basePercentSize
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return Math.round(lerp(basePercentSize, percentSize, t))
+  })
+  const ratioPercentSymbolSize = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return basePercentSymbolSize
+    if (!needsScaling) return basePercentSymbolSize
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return Math.round(lerp(basePercentSymbolSize, percentSymbolSize, t))
+  })
+  const ratioLabelSize = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return baseLabelSize
+    if (!needsScaling) return baseLabelSize
+    const t = Math.min(1, (idx - 0.5) * 2)
+    return Math.round(lerp(baseLabelSize, labelSize, t))
+  })
+  const ratioFlexDirection = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 'column'
+    return useHorizontalLayout ? 'row' : 'column'
+  })
+  const ratioAlignItems = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.5) return 'center'
+    if (idx < 0.8) return 'flex-start'
+    return useHorizontalLayout ? 'center' : 'flex-start'
+  })
+  const ratioLabelMarginTop = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 4
+    return useHorizontalLayout ? 0 : 4
+  })
+  const ratioLabelMarginLeft = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 0
+    return useHorizontalLayout ? 6 : 0
+  })
+  const extendedHeight = displayHeight ? ratio.h - displayHeight : 0
+  const ratioContentPaddingBottom = useTransform(scrollIdx, (idx) => {
+    if (idx < 0.8) return 0
+    if (useHorizontalLayout && extendedHeight > 0) return extendedHeight
+    return 0
+  })
+
+  return (
+    <motion.div
+      style={{
+        opacity: labelsOpacity,
+        color: textColor,
+        paddingLeft: paddingX,
+        paddingRight: paddingX,
+        paddingTop: paddingY,
+        paddingBottom: paddingY,
+      }}
+      className="w-full h-full flex flex-col relative z-10"
+    >
+      <motion.div
+        className="w-full h-full flex flex-col relative"
+        style={{
+          justifyContent: kind === 'debt' ? 'center' : flexJustify,
+          alignItems: flexAlign,
+          scale: contentScale,
+        }}
+      >
+        <motion.div
+          className="absolute inset-0 flex flex-col justify-center"
+          style={{ opacity: amountOpacity, alignItems: flexAlign }}
+        >
+          <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
+          <div className="text-[20px] font-bold tracking-tight leading-none">{formatCny(block.amount)}</div>
+        </motion.div>
+
+        <motion.div
+          className="absolute inset-0 flex"
+          style={{
+            paddingBottom: ratioContentPaddingBottom,
+            opacity: percentOpacity,
+            justifyContent: isDebt ? 'center' : 'flex-start',
+            alignItems: isDebt ? 'flex-start' : ratioAlignItems,
+            flexDirection: ratioFlexDirection,
+          }}
+        >
+          <motion.div className="font-semibold tracking-tight leading-none" style={{ fontSize: ratioPercentSize }}>
+            {block.percent}
+            <motion.span className="ml-0.5" style={{ fontSize: ratioPercentSymbolSize }}>
+              %
+            </motion.span>
+          </motion.div>
+          <motion.div
+            className="font-medium opacity-85"
+            style={{
+              fontSize: ratioLabelSize,
+              marginTop: ratioLabelMarginTop,
+              marginLeft: ratioLabelMarginLeft,
+            }}
+          >
+            {block.name}
+          </motion.div>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 function OverlayBlock(props: {
   geometry: HomeBlockGeometry
   scrollIdx: MotionValue<number>
   overlayFade: MotionValue<number>
   labelsOpacity: MotionValue<number>
+  showLabels: boolean
   isReturning?: boolean
   isInitialLoad?: boolean
   isReturningFromDetail?: boolean
@@ -152,6 +305,7 @@ function OverlayBlock(props: {
     scrollIdx,
     overlayFade,
     labelsOpacity,
+    showLabels,
     isReturning = false,
     isInitialLoad = false,
     isReturningFromDetail = false,
@@ -273,139 +427,9 @@ function OverlayBlock(props: {
     return lerp(ratioCorner.br, listCorner.br, Math.min(1, Math.max(0, idx - 1)))
   })
 
-  const textColor = pickForegroundColor(block.tone)
-
-  const isDebt = kind === 'debt'
-
-  // 计算文字布局和字体缩放
-  // 基础字体大小
-  const basePercentSize = 36 // 百分比数字的基础字体大小
-  const basePercentSymbolSize = 15 // %符号的基础字体大小
-  const baseLabelSize = 16 // Ratio 图中资产/负债标签字号（非自适应时）
-  const baseLabelMargin = 4 // 文字标签的上边距
-  const normalPadding = 16 // 正常模式的上下 padding
-  const adaptivePaddingValue = 4 // 自适应模式的上下 padding
-
-  // 垂直布局的最小高度：百分比数字(34px) + 间距(4px) + 文字(12px) + padding(16px*2)
-  const verticalMinHeight = basePercentSize + baseLabelMargin + baseLabelSize + normalPadding * 2
-
-  // 水平布局的最小高度：百分比数字(34px) + padding(4px*2)（自适应模式使用更小的 padding）
-  const horizontalMinHeight = basePercentSize + adaptivePaddingValue * 2
-
-  // 根据可用高度计算布局和字体缩放
-  const actualHeight = displayHeight ?? ratio.h
-
-  // 负债块不需要动态调整
-  const useHorizontalLayout = !isDebt && actualHeight < verticalMinHeight
-
-  // 计算字体缩放比例（最小为1/3）
-  let fontScale = 1
-  if (!isDebt && actualHeight < horizontalMinHeight) {
-    // 可用高度减去 padding 后的空间（自适应模式使用更小的 padding）
-    const availableHeight = Math.max(0, actualHeight - adaptivePaddingValue * 2)
-    // 计算缩放比例
-    fontScale = Math.max(1 / 3, availableHeight / basePercentSize)
-  }
-
-  // 计算实际字体大小
-  // 只有当 fontScale < 1 时才缩放，否则保持基础大小
-  const needsScaling = fontScale < 1
-  // 动态缩放时，百分比和文字使用相同的字体大小
-  const percentSize = needsScaling ? Math.round(basePercentSize * fontScale) : basePercentSize
-  const percentSymbolSize = needsScaling ? percentSize : basePercentSymbolSize
-  // Keep label size consistent with non-adaptive sizing; only shrink if the block is too small.
-  const labelSize = needsScaling ? Math.min(percentSize, baseLabelSize) : baseLabelSize
-
-  // Padding: keep horizontal padding consistent so % stays left-aligned across blocks,
-  // while allowing vertical padding to shrink in adaptive layouts.
-  const paddingX = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return 0 // Bubble 阶段无 padding
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return lerp(0, normalPadding, t)
-  })
-  const paddingYTarget = useHorizontalLayout ? adaptivePaddingValue : normalPadding
-  const paddingY = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return 0
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return lerp(0, paddingYTarget, t)
-  })
-  const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
-  const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start')) // For debt col layout
-  const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1]) // Slight scale up in bubble
-
   // Sphere visual effects (fade out as we scroll to ratio)
   const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.5], [1, 0])
   const surfaceHighlightOpacity = useTransform(scrollIdx, [0, 0.7, 1.6, 2], [0.18, 0.13, 0.1, 0.06])
-
-  // Text Crossfade
-  // 0 -> 0.5: Show Amount (Bubble)
-  // 0.5 -> 1: Show Percent (Ratio)
-  const amountOpacity = useTransform(scrollIdx, [0, 0.35, 0.55], [1, 1, 0])
-  const percentOpacity = useTransform(scrollIdx, [0.45, 0.65, 1], [0, 1, 1])
-
-  // 动态计算 Percent View 的样式，确保在 Bubble 阶段保持正常显示
-  // 使用 useTransform 让布局在过渡时平滑变化
-  // 只有需要缩放时才进行过渡，否则保持基础大小
-  const ratioPercentSize = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return basePercentSize // Bubble 阶段使用基础大小
-    if (!needsScaling) return basePercentSize // 不需要缩放时保持基础大小
-    const t = Math.min(1, (idx - 0.5) * 2) // 0.5 -> 1 映射到 0 -> 1
-    return Math.round(lerp(basePercentSize, percentSize, t))
-  })
-
-  const ratioPercentSymbolSize = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return basePercentSymbolSize
-    if (!needsScaling) return basePercentSymbolSize // 不需要缩放时保持基础大小
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return Math.round(lerp(basePercentSymbolSize, percentSymbolSize, t))
-  })
-
-  const ratioLabelSize = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return baseLabelSize
-    if (!needsScaling) return baseLabelSize // 不需要缩放时保持基础大小
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return Math.round(lerp(baseLabelSize, labelSize, t))
-  })
-
-  // 布局方向过渡
-  const ratioFlexDirection = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 'column' // Bubble 到 Ratio 前期保持垂直布局
-    return useHorizontalLayout ? 'row' : 'column'
-  })
-
-  // 水平布局时整体上下居中
-  const ratioAlignItems = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return 'center' // Bubble 阶段居中
-    if (idx < 0.8) return 'flex-start' // Ratio 前期左上对齐
-    return useHorizontalLayout ? 'center' : 'flex-start' // 水平布局时上下居中
-  })
-
-  const ratioLabelMarginTop = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 4
-    return useHorizontalLayout ? 0 : 4
-  })
-
-  const ratioLabelMarginLeft = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 0
-    return useHorizontalLayout ? 6 : 0
-  })
-
-  // 计算被遮挡的延伸高度（用于调整内容居中位置）
-  // ratio.h 是色块总高度（含延伸），displayHeight 是实际显示高度
-  const extendedHeight = displayHeight ? ratio.h - displayHeight : 0
-
-  // 内容区域底部 padding，用于将内容"推"到可见区域内居中
-  const ratioContentPaddingBottom = useTransform(scrollIdx, (idx) => {
-    // Bubble 阶段和非水平布局时不需要调整
-    if (idx < 0.8) return 0
-    // 水平布局时，添加底部 padding 等于被遮挡的延伸高度
-    if (useHorizontalLayout && extendedHeight > 0) {
-      return extendedHeight
-    }
-    return 0
-  })
-  
-  // Pointer events for text to avoid overlap issues during fade? (pointer-events-none is on parent anyway)
 
   // 是否需要入场动画（首次加载、从其他页面返回、或从详情页返回）
   const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
@@ -478,71 +502,16 @@ function OverlayBlock(props: {
           }}
         />
 
-        <motion.div
-          style={{
-            opacity: labelsOpacity,
-            color: textColor,
-            paddingLeft: paddingX,
-            paddingRight: paddingX,
-            paddingTop: paddingY,
-            paddingBottom: paddingY,
-          }}
-          className="w-full h-full flex flex-col relative z-10"
-        >
-          <motion.div
-              className="w-full h-full flex flex-col relative"
-              style={{
-                  justifyContent: kind === 'debt' ? 'center' : flexJustify,
-                  alignItems: flexAlign,
-                  scale: contentScale
-              }}
-          >
-              {/* Amount View (Bubble) */}
-              <motion.div
-                  className="absolute inset-0 flex flex-col justify-center"
-                  style={{ opacity: amountOpacity, alignItems: flexAlign }}
-              >
-                  <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
-                  <div className="text-[20px] font-bold tracking-tight leading-none">
-                      {formatCny(block.amount)}
-                  </div>
-              </motion.div>
-
-              {/* Percent View (Ratio) */}
-              <motion.div
-                   className="absolute inset-0 flex"
-                   style={{
-                       paddingBottom: ratioContentPaddingBottom,
-                       opacity: percentOpacity,
-                       justifyContent: isDebt ? 'center' : 'flex-start',
-                       alignItems: isDebt ? 'flex-start' : ratioAlignItems,
-                       flexDirection: ratioFlexDirection,
-                   }}
-              >
-                   <motion.div
-                     className="font-semibold tracking-tight leading-none"
-                     style={{ fontSize: ratioPercentSize }}
-                   >
-                      {block.percent}
-                      <motion.span
-                        className="ml-0.5"
-                        style={{ fontSize: ratioPercentSymbolSize }}
-                      >%</motion.span>
-                  </motion.div>
-                  <motion.div
-                    className="font-medium opacity-85"
-                    style={{
-                      fontSize: ratioLabelSize,
-                      marginTop: ratioLabelMarginTop,
-                      marginLeft: ratioLabelMarginLeft,
-                    }}
-                  >
-                    {block.name}
-                  </motion.div>
-              </motion.div>
-
-          </motion.div>
-        </motion.div>
+        {showLabels ? (
+          <OverlayBlockLabels
+            block={block}
+            kind={kind}
+            ratio={ratio}
+            displayHeight={displayHeight}
+            scrollIdx={scrollIdx}
+            labelsOpacity={labelsOpacity}
+          />
+        ) : null}
       </motion.div>
     </motion.div>
   )
@@ -584,14 +553,15 @@ export function AssetsScreen(props: {
   const [isReturningFromDetail, setIsReturningFromDetail] = useState(false)
   // 动画触发计数器，用于强制重新挂载组件以触发入场动画
   const [animationKey, setAnimationKey] = useState(0)
+  const [detailPageMounted, setDetailPageMounted] = useState(false)
+  const [showOverlayLabels, setShowOverlayLabels] = useState(true)
 
   const didInitRef = useRef(false)
+  const detailUnmountTimerRef = useRef<number | null>(null)
+  const showOverlayLabelsRef = useRef(true)
 
   // 初始值设为一个大数，确保初始时不会显示动画（会被 useEffect 立即修正）
   const scrollLeft = useMotionValue(99999)
-  const edgeLockRef = useRef(false)
-  const edgePointerDownRef = useRef(false)
-  const edgePullTargetX = useMotionValue(0)
 
   const accounts = useMemo(() => grouped.groupCards.flatMap((g) => g.accounts), [grouped.groupCards])
 
@@ -657,6 +627,18 @@ export function AssetsScreen(props: {
     const [o, fade] = values as [number, number]
     return o < 0.2 || fade < 0.05 ? 'none' : 'auto'
   })
+
+  useEffect(() => {
+    const syncLabels = (value: number) => {
+      const next = value < 0.58
+      if (showOverlayLabelsRef.current === next) return
+      showOverlayLabelsRef.current = next
+      setShowOverlayLabels(next)
+    }
+
+    syncLabels(ratioProgress.get())
+    return ratioProgress.on('change', syncLabels)
+  }, [ratioProgress])
 
   const chartRadius = 32
   const listRadius = 30
@@ -787,8 +769,13 @@ export function AssetsScreen(props: {
   const goToListPage = useCallback(() => scrollToPage(2), [scrollToPage])
   const handlePickType = useCallback(
     (type: AccountTypeId) => {
+      if (detailUnmountTimerRef.current !== null) {
+        window.clearTimeout(detailUnmountTimerRef.current)
+        detailUnmountTimerRef.current = null
+      }
       setSelectedType(type)
-      scrollToPage(3)
+      setDetailPageMounted(true)
+      window.requestAnimationFrame(() => scrollToPage(3))
     },
     [scrollToPage],
   )
@@ -796,10 +783,15 @@ export function AssetsScreen(props: {
     setExpandedGroup((current) => (current === id ? null : id))
   }, [])
   const handleDetailBack = useCallback(() => {
+    if (detailUnmountTimerRef.current !== null) window.clearTimeout(detailUnmountTimerRef.current)
     setIsReturningFromDetail(true)
     setAnimationKey((k) => k + 1)
     scrollToPage(2)
-    setSelectedType(null)
+    detailUnmountTimerRef.current = window.setTimeout(() => {
+      setSelectedType(null)
+      setDetailPageMounted(false)
+      detailUnmountTimerRef.current = null
+    }, 260)
   }, [scrollToPage])
 
   const ratioLayout = useMemo(() => {
@@ -990,7 +982,7 @@ export function AssetsScreen(props: {
     const pageW = scroller?.clientWidth || scrollerWidth || root.clientWidth || 0
     if (pageW <= 0) return
     const currentScrollLeft = scroller?.scrollLeft ?? scrollLeft.get()
-    const listPageOffsetX = pageW * 2 - currentScrollLeft
+    const listPageFinalOffsetX = pageW * INITIAL_HOME_PAGE_INDEX - currentScrollLeft
 
     const rootRect = root.getBoundingClientRect()
     const maxBlockWidth = Math.max(0, Math.round(rootRect.width))
@@ -1053,7 +1045,7 @@ export function AssetsScreen(props: {
       if (!item) continue
       const nextItem = items[i + 1]
 
-      const cardLeftOnListPage = item.cardLeft - listPageOffsetX
+      const cardLeftOnListPage = item.cardLeft - listPageFinalOffsetX
       const blockWidth = Math.min(maxBlockWidth, Math.max(0, Math.round(cardLeftOnListPage - blockGap)))
       const baseHeight = nextItem ? Math.max(0, nextItem.top - item.top) : Math.max(0, item.height)
       const blockHeight = nextItem ? baseHeight + overlap : baseHeight
@@ -1162,6 +1154,14 @@ export function AssetsScreen(props: {
   }, [isReturningFromDetail])
 
   useEffect(() => {
+    return () => {
+      if (detailUnmountTimerRef.current === null) return
+      window.clearTimeout(detailUnmountTimerRef.current)
+      detailUnmountTimerRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
 
     const ro = new ResizeObserver(() => scheduleMeasure())
@@ -1192,120 +1192,38 @@ export function AssetsScreen(props: {
     return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true })
   }, [moreOpen])
 
-  const edgePointerXRef = useRef<number | null>(null)
-
   useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
 
     let raf = 0
-    const cancelPendingScrollFrame = () => {
-      if (!raf) return
-      cancelAnimationFrame(raf)
-      raf = 0
-    }
     const commitScrollLeft = (value: number) => {
       if (scrollLeft.get() !== value) scrollLeft.set(value)
     }
+    const maxScroll = () => (el.clientWidth || 1) * (detailPageMounted ? 3 : 2)
+    const clampToAvailablePages = () => {
+      const max = maxScroll()
+      if (el.scrollLeft <= max) return false
+      el.scrollLeft = max
+      commitScrollLeft(max)
+      return true
+    }
     const onScroll = () => {
-      if (!selectedType) {
-        const w = el.clientWidth || 1
-        const maxScroll = w * 2
-        const current = el.scrollLeft
-
-        // 核心修正：无论是否有手势，只要不是 selectedType 状态，都强制不允许超过 maxScroll
-        if (current > maxScroll) {
-          // 如果用户正在按住并拖动，计算阻尼偏移
-          if (edgePointerDownRef.current && edgePointerXRef.current !== null) {
-            edgeLockRef.current = true
-            // 使用 pointer 位置来计算 delta，避免 scrollLeft 抖动影响
-            // 需要记录按下时的初始 pointerX，但这里简化处理：
-            // 我们通过计算当前 scrollLeft 超出多少来映射阻尼，但强制重置 scrollLeft
-
-            // 为了避免抖动，这里我们使用 current 超过 maxScroll 的部分
-            edgePullTargetX.set(0)
-          }
-
-          // 强制重置滚动位置，防止看到空白页
-          cancelPendingScrollFrame()
-          if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-          commitScrollLeft(maxScroll)
-          return
-        }
-      }
-
-      cancelPendingScrollFrame()
+      if (clampToAvailablePages()) return
+      if (raf) cancelAnimationFrame(raf)
       raf = requestAnimationFrame(() => {
         raf = 0
-        const w = el.clientWidth || 1
-        const currentScroll = el.scrollLeft
-        const maxScroll = w * 2
-
-        if (!selectedType) {
-          // 如果在锁定状态
-          if (edgeLockRef.current) {
-             // 如果用户已经松手，或者是回弹过程中
-             if (!edgePointerDownRef.current) {
-               edgeLockRef.current = false
-               edgePullTargetX.set(0)
-             } else if (currentScroll <= maxScroll) {
-               // 还没松手但滚回了范围内
-               edgeLockRef.current = false
-               edgePullTargetX.set(0)
-             } else {
-               // 还在拖动且在边界外，强制锁住
-               if (el.scrollLeft !== maxScroll) el.scrollLeft = maxScroll
-               commitScrollLeft(maxScroll)
-               return
-             }
-          }
-
-          // 正常滚动情况
-          commitScrollLeft(currentScroll)
-          return
-        }
-
-        // selectedType 状态（详情页），允许正常滚动
-        edgeLockRef.current = false
-        edgePullTargetX.set(0)
-        commitScrollLeft(currentScroll)
+        if (!clampToAvailablePages()) commitScrollLeft(el.scrollLeft)
       })
     }
 
-    const onPointerDown = (e: PointerEvent) => {
-      edgePointerDownRef.current = true
-      edgePointerXRef.current = e.clientX
-    }
-    const onPointerMove = (e: PointerEvent) => {
-      if (edgePointerDownRef.current) {
-        edgePointerXRef.current = e.clientX
-      }
-    }
-    const onPointerEnd = () => {
-      edgePointerDownRef.current = false
-      edgePointerXRef.current = null
-      edgeLockRef.current = false
-      edgePullTargetX.set(0)
-    }
-
-    el.addEventListener('pointerdown', onPointerDown, { passive: true })
-    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    clampToAvailablePages()
     el.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('pointerup', onPointerEnd, { passive: true })
-    window.addEventListener('pointercancel', onPointerEnd, { passive: true })
-    window.addEventListener('touchend', onPointerEnd, { passive: true })
-    window.addEventListener('touchcancel', onPointerEnd, { passive: true })
     return () => {
-      cancelPendingScrollFrame()
-      el.removeEventListener('pointerdown', onPointerDown)
-      window.removeEventListener('pointermove', onPointerMove)
+      if (raf) cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
-      window.removeEventListener('pointerup', onPointerEnd)
-      window.removeEventListener('pointercancel', onPointerEnd)
-      window.removeEventListener('touchend', onPointerEnd)
-      window.removeEventListener('touchcancel', onPointerEnd)
     }
-  }, [edgePullTargetX, scrollLeft, selectedType])
+  }, [detailPageMounted, scrollLeft])
 
   useEffect(() => {
     const el = scrollerRef.current
@@ -1332,7 +1250,7 @@ export function AssetsScreen(props: {
     }
 
     const onTouchMove = (e: TouchEvent) => {
-      if (selectedType || !touchStart) return
+      if (detailPageMounted || !touchStart) return
 
       const touch = e.touches[0]
       if (!touch) return
@@ -1365,7 +1283,7 @@ export function AssetsScreen(props: {
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [scrollLeft, selectedType])
+  }, [detailPageMounted, scrollLeft])
 
   useEffect(() => {
     const el = listScrollRef.current
@@ -1578,6 +1496,7 @@ export function AssetsScreen(props: {
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
+            showLabels={showOverlayLabels}
             isReturning={isReturning}
             isInitialLoad={isInitialLoad}
             isReturningFromDetail={isReturningFromDetail}
@@ -1766,18 +1685,20 @@ export function AssetsScreen(props: {
           </div>
         </div>
 
-        <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto" style={containedPageStyle}>
-          <AssetsTypeDetailPage
-            type={selectedType}
-            accounts={accounts}
-            getIcon={getIcon}
-            hideAmounts={hideAmounts}
-            themeColor={selectedThemeColor}
-            activeAccountId={activeAccountId}
-            onBack={handleDetailBack}
-            onEditAccount={onEditAccount}
-          />
-        </div>
+        {detailPageMounted ? (
+          <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-auto" style={containedPageStyle}>
+            <AssetsTypeDetailPage
+              type={selectedType}
+              accounts={accounts}
+              getIcon={getIcon}
+              hideAmounts={hideAmounts}
+              themeColor={selectedThemeColor}
+              activeAccountId={activeAccountId}
+              onBack={handleDetailBack}
+              onEditAccount={onEditAccount}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   )
