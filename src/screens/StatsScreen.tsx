@@ -161,7 +161,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [range, snapshots])
 
   return (
-    <div className="stack" style={{ padding: '0 16px' }}>
+    <div className="stack" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
         <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
           {view ? (
