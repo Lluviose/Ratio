@@ -294,7 +294,6 @@ function OverlayBlock(props: {
   overlayFade: MotionValue<number>
   labelsOpacity: MotionValue<number>
   showLabels: boolean
-  isReturning?: boolean
   isInitialLoad?: boolean
   blockIndex?: number
   viewportWidth?: number
@@ -305,7 +304,6 @@ function OverlayBlock(props: {
     overlayFade,
     labelsOpacity,
     showLabels,
-    isReturning = false,
     isInitialLoad = false,
     blockIndex = 0,
     viewportWidth = 400,
@@ -429,8 +427,8 @@ function OverlayBlock(props: {
   const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.5], [1, 0])
   const surfaceHighlightOpacity = useTransform(scrollIdx, [0, 0.7, 1.6, 2], [0.18, 0.13, 0.1, 0.06])
 
-  // 是否需要入场动画（首次加载、或从其他页面返回）
-  const needsEnterAnimation = isInitialLoad || isReturning
+  // 是否需要入场动画（首次加载）
+  const needsEnterAnimation = isInitialLoad
 
   // 入场动画的 translateX 偏移（从左侧飞入）
   const enterTranslateX = needsEnterAnimation ? -viewportWidth : 0
@@ -545,13 +543,12 @@ export function AssetsScreen(props: {
   // 当 skipInitialAnimation 为 true 时，initialized 直接为 true，但仍需等待 viewport 测量完成
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
-  // 是否是从其他页面返回（用于控制入场动画方向）
-  const [isReturning, setIsReturning] = useState(false)
   const [detailPageMounted, setDetailPageMounted] = useState(false)
   const [showOverlayLabels, setShowOverlayLabels] = useState(true)
 
   const didInitRef = useRef(false)
-  const detailUnmountTimerRef = useRef<number | null>(null)
+  const detailCloseFallbackTimerRef = useRef<number | null>(null)
+  const detailClosePendingRef = useRef(false)
   const detailPageReachedRef = useRef(false)
   const showOverlayLabelsRef = useRef(true)
 
@@ -764,46 +761,68 @@ export function AssetsScreen(props: {
   const goToListPage = useCallback(() => scrollToPage(2), [scrollToPage])
   const handlePickType = useCallback(
     (type: AccountTypeId) => {
-      if (detailUnmountTimerRef.current !== null) {
-        window.clearTimeout(detailUnmountTimerRef.current)
-        detailUnmountTimerRef.current = null
+      if (detailCloseFallbackTimerRef.current !== null) {
+        window.clearTimeout(detailCloseFallbackTimerRef.current)
+        detailCloseFallbackTimerRef.current = null
       }
+      detailClosePendingRef.current = false
       detailPageReachedRef.current = false
       setSelectedType(type)
       setDetailPageMounted(true)
-      window.requestAnimationFrame(() => scrollToPage(3))
     },
-    [scrollToPage],
+    [],
   )
   const handleToggleGroup = useCallback((id: GroupId) => {
     setExpandedGroup((current) => (current === id ? null : id))
   }, [])
+  const clearDetailCloseFallback = useCallback(() => {
+    if (detailCloseFallbackTimerRef.current === null) return
+    window.clearTimeout(detailCloseFallbackTimerRef.current)
+    detailCloseFallbackTimerRef.current = null
+  }, [])
+  const finishDetailClose = useCallback(() => {
+    clearDetailCloseFallback()
+    detailClosePendingRef.current = false
+    detailPageReachedRef.current = false
+
+    const el = scrollerRef.current
+    const listScrollLeft = (el?.clientWidth || 1) * 2
+    if (el && el.scrollLeft > listScrollLeft) {
+      el.scrollLeft = listScrollLeft
+      if (scrollLeft.get() !== listScrollLeft) scrollLeft.set(listScrollLeft)
+    }
+
+    setSelectedType(null)
+    setDetailPageMounted(false)
+  }, [clearDetailCloseFallback, scrollLeft])
+  const scheduleDetailCloseFallback = useCallback(() => {
+    clearDetailCloseFallback()
+    detailCloseFallbackTimerRef.current = window.setTimeout(finishDetailClose, 900)
+  }, [clearDetailCloseFallback, finishDetailClose])
   const closeDetailPage = useCallback(
     (shouldScrollToList: boolean) => {
-      if (detailUnmountTimerRef.current !== null) return
+      if (detailClosePendingRef.current) return
 
+      detailClosePendingRef.current = true
       detailPageReachedRef.current = false
-      if (shouldScrollToList) scrollToPage(2)
-      else {
-        const el = scrollerRef.current
-        const listScrollLeft = (el?.clientWidth || 1) * 2
-        if (el && el.scrollLeft > listScrollLeft) {
-          el.scrollLeft = listScrollLeft
-          if (scrollLeft.get() !== listScrollLeft) scrollLeft.set(listScrollLeft)
-        }
+      if (!shouldScrollToList) {
+        finishDetailClose()
+        return
       }
 
-      detailUnmountTimerRef.current = window.setTimeout(() => {
-        setSelectedType(null)
-        setDetailPageMounted(false)
-        detailUnmountTimerRef.current = null
-      }, 260)
+      scrollToPage(2)
+      scheduleDetailCloseFallback()
     },
-    [scrollLeft, scrollToPage],
+    [finishDetailClose, scheduleDetailCloseFallback, scrollToPage],
   )
   const handleDetailBack = useCallback(() => {
     closeDetailPage(true)
   }, [closeDetailPage])
+
+  useLayoutEffect(() => {
+    if (!detailPageMounted || !selectedType || detailClosePendingRef.current) return
+    scrollToPage(3)
+  }, [detailPageMounted, scrollerWidth, scrollToPage, selectedType])
 
   const ratioLayout = useMemo(() => {
     const top = 64
@@ -1150,20 +1169,12 @@ export function AssetsScreen(props: {
     return () => window.clearTimeout(timer)
   }, [initialized, skipInitialAnimation])
 
-  // 返回动画完成后重置 isReturning 状态
-  useEffect(() => {
-    if (!initialized || !isReturning) return
-    const timer = window.setTimeout(() => setIsReturning(false), 600)
-    return () => window.clearTimeout(timer)
-  }, [initialized, isReturning])
-
   useEffect(() => {
     return () => {
-      if (detailUnmountTimerRef.current === null) return
-      window.clearTimeout(detailUnmountTimerRef.current)
-      detailUnmountTimerRef.current = null
+      clearDetailCloseFallback()
+      detailClosePendingRef.current = false
     }
-  }, [])
+  }, [clearDetailCloseFallback])
 
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
@@ -1213,13 +1224,18 @@ export function AssetsScreen(props: {
       return true
     }
     const syncDetailReturn = () => {
-      if (!detailPageMounted || detailUnmountTimerRef.current !== null) return
+      if (!detailPageMounted) return
 
       const w = el.clientWidth || 1
       const listScrollLeft = w * 2
       const detailScrollLeft = w * 3
       const reachedTolerance = Math.max(12, w * 0.04)
       const returnedTolerance = Math.max(8, w * 0.03)
+
+      if (detailClosePendingRef.current) {
+        if (el.scrollLeft <= listScrollLeft + returnedTolerance) finishDetailClose()
+        return
+      }
 
       if (el.scrollLeft >= detailScrollLeft - reachedTolerance) detailPageReachedRef.current = true
       if (detailPageReachedRef.current && el.scrollLeft <= listScrollLeft + returnedTolerance) {
@@ -1246,7 +1262,7 @@ export function AssetsScreen(props: {
       if (raf) cancelAnimationFrame(raf)
       el.removeEventListener('scroll', onScroll)
     }
-  }, [closeDetailPage, detailPageMounted, scrollLeft])
+  }, [closeDetailPage, detailPageMounted, finishDetailClose, scrollLeft])
 
   useEffect(() => {
     const el = scrollerRef.current
@@ -1281,8 +1297,8 @@ export function AssetsScreen(props: {
       const maxScroll = getListMaxScroll()
       const listPageTolerance = Math.max(4, (el.clientWidth || 1) * 0.01)
       const startedOnListPage = Math.abs(touchStart.scrollLeft - maxScroll) <= listPageTolerance
-      const isReturningFromDetailPage = detailUnmountTimerRef.current !== null && touchStart.scrollLeft >= maxScroll - listPageTolerance
-      if (!startedOnListPage && !isReturningFromDetailPage) return
+      const detailCloseStartedFromDetailPage = detailClosePendingRef.current && touchStart.scrollLeft >= maxScroll - listPageTolerance
+      if (!startedOnListPage && !detailCloseStartedFromDetailPage) return
 
       const dx = touch.clientX - touchStart.x
       const dy = touch.clientY - touchStart.y
@@ -1522,7 +1538,6 @@ export function AssetsScreen(props: {
             overlayFade={overlayFade}
             labelsOpacity={labelsOpacity}
             showLabels={showOverlayLabels}
-            isReturning={isReturning}
             isInitialLoad={isInitialLoad}
             blockIndex={i}
             viewportWidth={viewport.w}
@@ -1576,9 +1591,9 @@ export function AssetsScreen(props: {
           {/* 净资产标题 - 从上滑入 */}
           <motion.div
             className="min-w-0"
-            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
+            initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: isReturning ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
@@ -1603,9 +1618,9 @@ export function AssetsScreen(props: {
             className="iconBtn iconBtnPrimary shadow-sm"
             style={addButtonStyle}
             aria-label="add"
-            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
+            initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: isReturning ? 0.15 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <Plus size={22} strokeWidth={2.75} />
           </motion.button>
@@ -1700,7 +1715,6 @@ export function AssetsScreen(props: {
               scrollRef={listScrollRef}
               onGroupEl={onGroupEl}
               isInitialLoad={isInitialLoad}
-              isReturning={isReturning}
             />
           </div>
         </div>

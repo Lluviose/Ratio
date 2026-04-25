@@ -59,9 +59,8 @@ function AssetsListPageComponent(props: {
   scrollRef?: Ref<HTMLDivElement>
   onGroupEl?: (id: GroupId, el: HTMLDivElement | null) => void
   isInitialLoad?: boolean
-  isReturning?: boolean
 }) {
-  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad, isReturning } = props
+  const { grouped, getIcon, onPickType, expandedGroup, onToggleGroup, hideAmounts, scrollRef, onGroupEl, isInitialLoad } = props
 
   const [accountSortMode] = useLocalStorageState<AccountSortMode>(ACCOUNT_SORT_MODE_KEY, 'balance')
   const [manualTypeOrderByGroup, setManualTypeOrderByGroup] = useLocalStorageState<ManualTypeOrderByGroup>(
@@ -156,7 +155,7 @@ function AssetsListPageComponent(props: {
 
 
             // 是否需要入场动画
-            const needsEnterAnimation = isInitialLoad || isReturning
+            const needsEnterAnimation = isInitialLoad
 
             return (
               <motion.div
