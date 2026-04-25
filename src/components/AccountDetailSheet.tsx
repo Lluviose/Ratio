@@ -56,58 +56,106 @@ function normalizeNoteValue(value: string) {
 function MoneyExpressionPreview(props: { show: boolean; result: MoneyExpressionResult }) {
   const { show, result } = props
   if (!show) return null
+  const resultKey = result.ok ? `ok-${result.value}` : `error-${result.reason}`
 
   return (
-    <div className="mt-2 flex min-h-9 items-center justify-between rounded-[18px] border border-white/80 bg-white/70 px-3 py-2 shadow-sm">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -3, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+      className="mt-2 flex min-h-10 items-center justify-between rounded-[18px] border border-white/80 px-3.5 py-2 shadow-sm"
+      style={{
+        background: 'linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,252,0.72))',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.86), 0 10px 26px -24px rgba(15,23,42,0.55)',
+      }}
+    >
       <div className="text-[13px] font-black text-slate-400">=</div>
       {result.ok ? (
-        <div className={`text-[13px] font-semibold ${result.value < 0 ? 'text-rose-500' : 'text-slate-700'}`}>
+        <motion.div
+          key={resultKey}
+          initial={{ opacity: 0, y: 2 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          className={`text-[13px] font-semibold ${result.value < 0 ? 'text-rose-500' : 'text-slate-700'}`}
+        >
           {formatCny(result.value)}
-        </div>
+        </motion.div>
       ) : (
-        <div className="text-[12px] font-semibold text-slate-400">
+        <motion.div
+          key={resultKey}
+          initial={{ opacity: 0, y: 2 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+          className="text-[12px] font-semibold text-slate-400"
+        >
           {result.reason === 'invalid' ? '无法计算' : '继续输入金额'}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   )
 }
 
 function MoneyExpressionKeypad(props: { onOperator: (operator: MoneyExpressionOperator) => void; onClear: () => void }) {
   const { onOperator, onClear } = props
   const keyClass =
-    'h-11 rounded-full border border-white/80 bg-white/80 text-slate-800 text-[18px] font-black shadow-sm transition-colors'
+    'relative h-12 overflow-hidden rounded-[18px] border text-[18px] font-black outline-none transition-colors focus-visible:ring-4 focus-visible:ring-[rgb(var(--primary-rgb)/0.16)]'
+  const keyStyle = {
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))',
+    borderColor: 'rgba(255,255,255,0.9)',
+    boxShadow:
+      'inset 0 1px 0 rgba(255,255,255,0.98), inset 0 -1px 0 rgba(15,23,42,0.035), 0 10px 20px -16px rgba(15,23,42,0.7)',
+  } as const
+  const tapMotion = {
+    y: 1,
+    scale: 0.985,
+    boxShadow:
+      'inset 0 1px 1px rgba(15,23,42,0.06), inset 0 -1px 0 rgba(255,255,255,0.8), 0 4px 10px -14px rgba(15,23,42,0.6)',
+  }
 
   return (
-    <div className="mt-3 grid grid-cols-3 gap-2">
+    <div className="mt-2.5 grid grid-cols-3 gap-2.5">
       <motion.button
         type="button"
         onPointerDown={(e) => e.preventDefault()}
         onClick={() => onOperator('+')}
-        whileTap={{ scale: 0.96 }}
+        whileTap={tapMotion}
+        transition={{ type: 'spring', stiffness: 700, damping: 36, mass: 0.55 }}
         className={keyClass}
+        style={{ ...keyStyle, color: 'var(--primary)' }}
         aria-label="add"
       >
+        <span className="pointer-events-none absolute inset-x-3 top-1 h-px rounded-full bg-white/90" />
         +
       </motion.button>
       <motion.button
         type="button"
         onPointerDown={(e) => e.preventDefault()}
         onClick={() => onOperator('-')}
-        whileTap={{ scale: 0.96 }}
+        whileTap={tapMotion}
+        transition={{ type: 'spring', stiffness: 700, damping: 36, mass: 0.55 }}
         className={keyClass}
+        style={{ ...keyStyle, color: 'var(--primary)' }}
         aria-label="subtract"
       >
+        <span className="pointer-events-none absolute inset-x-3 top-1 h-px rounded-full bg-white/90" />
         -
       </motion.button>
       <motion.button
         type="button"
         onPointerDown={(e) => e.preventDefault()}
         onClick={onClear}
-        whileTap={{ scale: 0.96 }}
-        className={`${keyClass} text-[14px] text-slate-500`}
+        whileTap={tapMotion}
+        transition={{ type: 'spring', stiffness: 700, damping: 36, mass: 0.55 }}
+        className={`${keyClass} text-[14px]`}
+        style={{
+          ...keyStyle,
+          color: '#9f1239',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,241,242,0.9))',
+        }}
         aria-label="clear"
       >
+        <span className="pointer-events-none absolute inset-x-3 top-1 h-px rounded-full bg-white/90" />
         AC
       </motion.button>
     </div>
