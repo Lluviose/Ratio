@@ -296,7 +296,6 @@ function OverlayBlock(props: {
   showLabels: boolean
   isReturning?: boolean
   isInitialLoad?: boolean
-  isReturningFromDetail?: boolean
   blockIndex?: number
   viewportWidth?: number
 }) {
@@ -308,7 +307,6 @@ function OverlayBlock(props: {
     showLabels,
     isReturning = false,
     isInitialLoad = false,
-    isReturningFromDetail = false,
     blockIndex = 0,
     viewportWidth = 400,
   } = props
@@ -431,8 +429,8 @@ function OverlayBlock(props: {
   const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.5], [1, 0])
   const surfaceHighlightOpacity = useTransform(scrollIdx, [0, 0.7, 1.6, 2], [0.18, 0.13, 0.1, 0.06])
 
-  // 是否需要入场动画（首次加载、从其他页面返回、或从详情页返回）
-  const needsEnterAnimation = isInitialLoad || isReturning || isReturningFromDetail
+  // 是否需要入场动画（首次加载、或从其他页面返回）
+  const needsEnterAnimation = isInitialLoad || isReturning
 
   // 入场动画的 translateX 偏移（从左侧飞入）
   const enterTranslateX = needsEnterAnimation ? -viewportWidth : 0
@@ -549,10 +547,6 @@ export function AssetsScreen(props: {
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
   // 是否是从其他页面返回（用于控制入场动画方向）
   const [isReturning, setIsReturning] = useState(false)
-  // 是否从详情页返回到列表页（用于触发入场动画）
-  const [isReturningFromDetail, setIsReturningFromDetail] = useState(false)
-  // 动画触发计数器，用于强制重新挂载组件以触发入场动画
-  const [animationKey, setAnimationKey] = useState(0)
   const [detailPageMounted, setDetailPageMounted] = useState(false)
   const [showOverlayLabels, setShowOverlayLabels] = useState(true)
 
@@ -799,8 +793,6 @@ export function AssetsScreen(props: {
         }
       }
 
-      setIsReturningFromDetail(true)
-      setAnimationKey((k) => k + 1)
       detailUnmountTimerRef.current = window.setTimeout(() => {
         setSelectedType(null)
         setDetailPageMounted(false)
@@ -1165,13 +1157,6 @@ export function AssetsScreen(props: {
     return () => window.clearTimeout(timer)
   }, [initialized, isReturning])
 
-  // 从详情页返回动画完成后重置 isReturningFromDetail 状态
-  useEffect(() => {
-    if (!isReturningFromDetail) return
-    const timer = window.setTimeout(() => setIsReturningFromDetail(false), 600)
-    return () => window.clearTimeout(timer)
-  }, [isReturningFromDetail])
-
   useEffect(() => {
     return () => {
       if (detailUnmountTimerRef.current === null) return
@@ -1531,7 +1516,7 @@ export function AssetsScreen(props: {
          */}
         {homeBlockGeometries.map((geometry, i) => (
           <OverlayBlock
-            key={`${geometry.block.id}-${animationKey}`}
+            key={geometry.block.id}
             geometry={geometry}
             scrollIdx={scrollIdx}
             overlayFade={overlayFade}
@@ -1539,7 +1524,6 @@ export function AssetsScreen(props: {
             showLabels={showOverlayLabels}
             isReturning={isReturning}
             isInitialLoad={isInitialLoad}
-            isReturningFromDetail={isReturningFromDetail}
             blockIndex={i}
             viewportWidth={viewport.w}
           />
@@ -1591,11 +1575,10 @@ export function AssetsScreen(props: {
         >
           {/* 净资产标题 - 从上滑入 */}
           <motion.div
-            key={`title-${animationKey}`}
             className="min-w-0"
-            initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
+            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: (isReturning || isReturningFromDetail) ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: isReturning ? 0.1 : 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
@@ -1615,15 +1598,14 @@ export function AssetsScreen(props: {
 
           {/* 添加按钮 - 从上滑入，稍微延迟 */}
           <motion.button
-            key={`add-${animationKey}`}
             type="button"
             onClick={onAddAccount}
             className="iconBtn iconBtnPrimary shadow-sm"
             style={addButtonStyle}
             aria-label="add"
-            initial={(isInitialLoad || isReturning || isReturningFromDetail) ? { y: -50, opacity: 0 } : false}
+            initial={(isInitialLoad || isReturning) ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: (isReturning || isReturningFromDetail) ? 0.15 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: isReturning ? 0.15 : 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <Plus size={22} strokeWidth={2.75} />
           </motion.button>
@@ -1709,7 +1691,6 @@ export function AssetsScreen(props: {
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={containedPageStyle}>
           <div className="w-full h-full">
             <AssetsListPage
-              key={`list-${animationKey}`}
               grouped={grouped}
               getIcon={getIcon}
               onPickType={handlePickType}
@@ -1720,7 +1701,6 @@ export function AssetsScreen(props: {
               onGroupEl={onGroupEl}
               isInitialLoad={isInitialLoad}
               isReturning={isReturning}
-              isReturningFromDetail={isReturningFromDetail}
             />
           </div>
         </div>
