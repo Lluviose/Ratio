@@ -121,9 +121,9 @@ function safeEqualConfiguredSecret(input, expected) {
   return safeEqualString(input, expected)
 }
 
-function adminUnauthorized(res) {
+function adminUnauthorized(res, challenge = false) {
   textResponse(res, 401, JSON.stringify({ error: { code: 'admin_auth_required', message: 'Admin credentials required' } }), 'application/json; charset=utf-8', {
-    'WWW-Authenticate': 'Basic realm="Ratio Admin Console", charset="UTF-8"',
+    ...(challenge ? { 'WWW-Authenticate': 'Basic realm="Ratio Admin Console", charset="UTF-8"' } : {}),
     ...corsHeaders(),
   })
 }
@@ -147,7 +147,7 @@ function requireAdmin(req, res, html = false) {
     !safeEqualConfiguredSecret(auth.username, ADMIN_USERNAME) ||
     !safeEqualConfiguredSecret(auth.password, ADMIN_PASSWORD)
   ) {
-    adminUnauthorized(res)
+    adminUnauthorized(res, html)
     return false
   }
 
@@ -1039,9 +1039,9 @@ function adminAssetHeaders() {
 
 function handleAdminAsset(req, res, pathname) {
   if (req.method !== 'GET') return textResponse(res, 405, 'Method not allowed')
-  if (!requireAdmin(req, res, true)) return
 
   if (pathname === '/admin') {
+    if (!isAdminConfigured()) return adminDisabled(res, true)
     return textResponse(res, 200, adminHtml, 'text/html; charset=utf-8', adminAssetHeaders())
   }
   if (pathname === '/admin/styles.css') {

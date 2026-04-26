@@ -11,6 +11,7 @@ export type CloudSyncSettings = {
   telemetryEnabled: boolean
   useCloudAi: boolean
   registrationInvite: string
+  lastConnectionAt?: string
   lastBackupAt?: string
   lastRestoreAt?: string
   lastSyncAt?: string
@@ -80,6 +81,7 @@ export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
     telemetryEnabled: value.telemetryEnabled === true,
     useCloudAi: value.useCloudAi === true,
     registrationInvite: asString(value.registrationInvite),
+    lastConnectionAt: typeof value.lastConnectionAt === 'string' ? value.lastConnectionAt : undefined,
     lastBackupAt: typeof value.lastBackupAt === 'string' ? value.lastBackupAt : undefined,
     lastRestoreAt: typeof value.lastRestoreAt === 'string' ? value.lastRestoreAt : undefined,
     lastSyncAt: typeof value.lastSyncAt === 'string' ? value.lastSyncAt : undefined,

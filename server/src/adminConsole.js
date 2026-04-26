@@ -14,12 +14,33 @@ export const adminHtml = `<!doctype html>
           <h1>云端后台控制台</h1>
         </div>
         <div class="actions">
+          <span id="authState" class="muted">未登录</span>
           <span id="lastUpdated" class="muted">未刷新</span>
           <button id="refreshBtn" type="button">刷新</button>
+          <button id="logoutBtn" class="secondary isHidden" type="button">退出</button>
         </div>
       </header>
 
-      <main>
+      <section id="loginPanel" class="loginPanel">
+        <form id="loginForm" class="loginBox">
+          <div>
+            <h2>管理员登录</h2>
+            <p>输入后端环境变量中配置的管理员账号和密码。</p>
+          </div>
+          <label>
+            <span>账号</span>
+            <input id="adminUsername" name="username" autocomplete="username" required />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="adminPassword" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <div id="loginError" class="loginError" aria-live="polite"></div>
+          <button type="submit">进入控制台</button>
+        </form>
+      </section>
+
+      <main id="adminMain" class="isHidden">
         <section id="statusStrip" class="statusStrip" aria-live="polite"></section>
 
         <section class="metricsGrid" aria-label="核心指标">
@@ -160,6 +181,11 @@ button {
   cursor: pointer;
 }
 button:disabled { opacity: 0.62; cursor: progress; }
+button.secondary {
+  border-color: var(--line);
+  background: #fff;
+  color: var(--text);
+}
 select {
   height: 34px;
   border: 1px solid var(--line);
@@ -177,6 +203,39 @@ h1 { margin: 4px 0 0; font-size: clamp(24px, 4vw, 34px); line-height: 1.05; lett
 h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
 .muted { color: var(--muted); font-size: 12px; font-weight: 750; }
+.isHidden { display: none !important; }
+
+.loginPanel {
+  display: grid;
+  place-items: center;
+  min-height: 58vh;
+}
+
+.loginBox {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.loginBox h2 { font-size: 18px; }
+.loginBox p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; font-weight: 750; }
+.loginBox label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 850; }
+.loginBox input {
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  padding: 0 10px;
+  font: inherit;
+  font-weight: 800;
+}
+.loginError { min-height: 18px; color: var(--red); font-size: 12px; font-weight: 850; }
 
 .statusStrip {
   min-height: 38px;
@@ -266,6 +325,14 @@ pre {
 }`
 
 export const adminJs = `const els = {
+  adminMain: document.getElementById('adminMain'),
+  loginPanel: document.getElementById('loginPanel'),
+  loginForm: document.getElementById('loginForm'),
+  adminUsername: document.getElementById('adminUsername'),
+  adminPassword: document.getElementById('adminPassword'),
+  loginError: document.getElementById('loginError'),
+  authState: document.getElementById('authState'),
+  logoutBtn: document.getElementById('logoutBtn'),
   refreshBtn: document.getElementById('refreshBtn'),
   lastUpdated: document.getElementById('lastUpdated'),
   statusStrip: document.getElementById('statusStrip'),
@@ -288,7 +355,32 @@ export const adminJs = `const els = {
   telemetryList: document.getElementById('telemetryList'),
 }
 
-const state = { users: [], selectedUser: '' }
+const AUTH_STORAGE_KEY = 'ratio.admin.basicAuth'
+const state = { users: [], selectedUser: '', auth: sessionStorage.getItem(AUTH_STORAGE_KEY) || '' }
+
+function toBase64Utf8(value) {
+  const bytes = new TextEncoder().encode(value)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+function setLoggedIn(loggedIn) {
+  els.loginPanel.classList.toggle('isHidden', loggedIn)
+  els.adminMain.classList.toggle('isHidden', !loggedIn)
+  els.refreshBtn.disabled = !loggedIn
+  els.logoutBtn.classList.toggle('isHidden', !loggedIn)
+  els.authState.textContent = loggedIn ? '已登录' : '未登录'
+  if (!loggedIn) els.lastUpdated.textContent = '未刷新'
+}
+
+function clearAuth(message = '') {
+  state.auth = ''
+  sessionStorage.removeItem(AUTH_STORAGE_KEY)
+  setLoggedIn(false)
+  els.loginError.textContent = message
+  window.setTimeout(() => els.adminUsername.focus(), 0)
+}
 
 function fmtBytes(value) {
   const bytes = Number(value || 0)
@@ -326,13 +418,22 @@ function escapeHtml(value) {
 }
 
 async function api(path) {
-  const res = await fetch(path, { credentials: 'same-origin', cache: 'no-store' })
+  if (!state.auth) throw new Error('请先登录')
+  const res = await fetch(path, {
+    credentials: 'omit',
+    cache: 'no-store',
+    headers: { Authorization: state.auth },
+  })
   if (!res.ok) {
     let message = res.status + ' ' + res.statusText
     try {
       const body = await res.json()
       message = body?.error?.message || message
     } catch {}
+    if (res.status === 401) {
+      clearAuth('账号或密码不正确')
+      throw new Error('账号或密码不正确')
+    }
     throw new Error(message)
   }
   return res.json()
@@ -439,6 +540,10 @@ async function loadTelemetry() {
 }
 
 async function loadAll() {
+  if (!state.auth) {
+    setLoggedIn(false)
+    return
+  }
   els.refreshBtn.disabled = true
   setStatus('warn', '正在刷新控制台数据')
   try {
@@ -456,8 +561,29 @@ async function loadAll() {
   }
 }
 
+els.loginForm.addEventListener('submit', (event) => {
+  event.preventDefault()
+  const username = els.adminUsername.value.trim()
+  const password = els.adminPassword.value
+  if (!username || !password) {
+    els.loginError.textContent = '请输入账号和密码'
+    return
+  }
+  state.auth = 'Basic ' + toBase64Utf8(username + ':' + password)
+  sessionStorage.setItem(AUTH_STORAGE_KEY, state.auth)
+  els.loginError.textContent = ''
+  setLoggedIn(true)
+  void loadAll()
+})
+
+els.logoutBtn.addEventListener('click', () => {
+  els.adminPassword.value = ''
+  clearAuth('')
+})
+
 els.refreshBtn.addEventListener('click', () => void loadAll())
 els.telemetryUser.addEventListener('change', () => void loadTelemetry())
 els.telemetryLimit.addEventListener('change', () => void loadTelemetry())
 
+setLoggedIn(Boolean(state.auth))
 void loadAll()`

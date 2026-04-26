@@ -1,12 +1,14 @@
 import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
-import { BarChart3, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
+import { BarChart3, Cloud, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
 import { type ComponentType, type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { pickForegroundColor } from '../lib/themes'
 import { allocateIntegerPercents } from '../lib/percent'
 import { addMoney } from '../lib/money'
+import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSettings, hasCloudCredentials } from '../lib/cloud'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
+import { quickFade } from '../lib/motionPresets'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
@@ -539,6 +541,9 @@ export function AssetsScreen(props: {
   const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
   const [hideAmounts, setHideAmounts] = useLocalStorageState<boolean>(HIDE_AMOUNTS_KEY, false)
+  const [cloudSync] = useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
+    coerce: coerceCloudSyncSettings,
+  })
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [scrollerWidth, setScrollerWidth] = useState(0)
@@ -561,6 +566,7 @@ export function AssetsScreen(props: {
 
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
+  const cloudConnected = hasCloudCredentials(cloudSync) && Boolean(cloudSync.lastConnectionAt)
 
   const addButtonStyle = useMemo(() => {
     if (!addButtonTone) return undefined
@@ -1607,6 +1613,18 @@ export function AssetsScreen(props: {
               >
                 {hideAmounts ? <EyeOff size={14} /> : <Eye size={14} />}
               </button>
+              {cloudConnected ? (
+                <motion.span
+                  className="w-6 h-6 -m-1 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-[0_8px_18px_-12px_rgba(16,185,129,0.95)]"
+                  initial={{ opacity: 0, scale: 0.72, y: -2 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={quickFade}
+                  aria-label="cloud connected"
+                  title="云端已连接"
+                >
+                  <Cloud size={14} strokeWidth={2.6} />
+                </motion.span>
+              ) : null}
             </div>
             <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">
               {hideAmounts ? <span className={maskedClass}>{maskedText}</span> : formatCny(grouped.netWorth)}

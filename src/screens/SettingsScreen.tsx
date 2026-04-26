@@ -160,6 +160,7 @@ export function SettingsScreen(props: {
       return {
         ...current,
         ...patch,
+        lastConnectionAt: undefined,
         lastBackupAt: undefined,
         lastRestoreAt: undefined,
         lastSyncAt: undefined,
@@ -235,7 +236,7 @@ export function SettingsScreen(props: {
         notifyCloudTargetChanged()
         return
       }
-      writeCloudSyncSettingsPatch({ registrationInvite: '' })
+      writeCloudSyncSettingsPatch({ registrationInvite: '', lastConnectionAt: new Date().toISOString() })
       toast(`云账号已创建：${res.user.username}`, { tone: 'success' })
       trackTelemetry('cloud_register')
     } catch (err) {
@@ -258,6 +259,7 @@ export function SettingsScreen(props: {
         notifyCloudTargetChanged()
         return
       }
+      writeCloudSyncSettingsPatch({ lastConnectionAt: new Date().toISOString() })
       toast(`已连接：${res.user.username}`, { tone: 'success' })
       trackTelemetry('cloud_connect_test')
     } catch (err) {
@@ -290,6 +292,7 @@ export function SettingsScreen(props: {
       markCloudSyncClean(dirtyToken)
       writeCloudSyncSettingsPatch({
         lastBackupAt: meta.updatedAt,
+        lastConnectionAt: syncedAt,
         lastSyncAt: syncedAt,
         lastSyncStatus: 'ok',
         lastSyncMessage: `已上传 ${meta.itemCount} 项数据`,
@@ -374,6 +377,7 @@ export function SettingsScreen(props: {
       markCloudSyncClean()
       writeCloudSyncSettingsPatch({
         lastRestoreAt: restoredAt,
+        lastConnectionAt: restoredAt,
         lastBackupAt: res.meta?.updatedAt ?? requestSettings.lastBackupAt,
         lastSyncAt: restoredAt,
         lastSyncStatus: 'ok',
