@@ -1,4 +1,4 @@
-import { Activity, Bot, Check, Cloud, Download, DownloadCloud, RefreshCw, Upload, UploadCloud } from 'lucide-react'
+import { Activity, Bot, Check, ChevronDown, Cloud, Download, DownloadCloud, RefreshCw, Upload, UploadCloud } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -72,6 +72,7 @@ export function SettingsScreen(props: {
     coerce: coerceCloudSyncSettings,
   })
   const [cloudAiStatus, setCloudAiStatus] = useState<string>('')
+  const [cloudConfigExpanded, setCloudConfigExpanded] = useState(() => !cloudSync.lastBackupAt)
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -150,7 +151,10 @@ export function SettingsScreen(props: {
     const endpointChanged =
       (patch.serverUrl !== undefined && patch.serverUrl !== cloudSync.serverUrl) ||
       (patch.username !== undefined && patch.username !== cloudSync.username)
-    if (endpointChanged) setCloudAiStatus('')
+    if (endpointChanged) {
+      setCloudAiStatus('')
+      setCloudConfigExpanded(true)
+    }
     setCloudSync((current) => {
       if (!endpointChanged) return { ...current, ...patch }
       return {
@@ -290,6 +294,7 @@ export function SettingsScreen(props: {
         lastSyncStatus: 'ok',
         lastSyncMessage: `已上传 ${meta.itemCount} 项数据`,
       })
+      setCloudConfigExpanded(false)
       toast(`已上传 ${meta.itemCount} 项数据`, { tone: 'success' })
       trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount, force })
     } catch (err) {
@@ -599,87 +604,139 @@ export function SettingsScreen(props: {
           </div>
 
           <div className="stack" style={{ marginTop: 16 }}>
-            <label className="field">
-              <div className="fieldLabel">服务器地址</div>
-              <input
-                className="input"
-                value={cloudSync.serverUrl}
-                placeholder="http://localhost:8787"
-                disabled={busy}
-                onChange={(e) => updateCloudSync({ serverUrl: e.target.value })}
-              />
-            </label>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-              <label className="field">
-                <div className="fieldLabel">账号</div>
-                <input
-                  className="input"
-                  value={cloudSync.username}
-                  autoComplete="username"
-                  disabled={busy}
-                  onChange={(e) => updateCloudSync({ username: e.target.value })}
-                />
-              </label>
-              <label className="field">
-                <div className="fieldLabel">密码</div>
-                <input
-                  className="input"
-                  type="password"
-                  value={cloudSync.password}
-                  autoComplete="current-password"
-                  disabled={busy}
-                  onChange={(e) => updateCloudSync({ password: e.target.value })}
-                />
-              </label>
-            </div>
-
-            <label className="field">
-              <div className="fieldLabel">创建账号邀请码</div>
-              <input
-                className="input"
-                type="password"
-                value={cloudSync.registrationInvite}
-                autoComplete="off"
-                placeholder="后端配置邀请码时填写"
-                disabled={busy}
-                onChange={(e) => updateCloudSync({ registrationInvite: e.target.value })}
-              />
-            </label>
-
-            <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
-              <div>
-                <div className="assetName">自动备份</div>
-                <div className="assetSub" style={{ marginTop: 4 }}>
-                  数据变更后自动上传，最短间隔 30 秒
+            <button
+              type="button"
+              className="assetItem"
+              onClick={() => setCloudConfigExpanded((value) => !value)}
+              aria-expanded={cloudConfigExpanded}
+              style={{ background: 'var(--bg)', border: 'none', padding: 14, textAlign: 'left', width: '100%' }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div className="assetName">连接配置</div>
+                <div
+                  className="assetSub"
+                  style={{ marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {cloudReady ? `${cloudSync.username.trim()} · ${cloudSync.serverUrl.trim()}` : '未完成'}
                 </div>
               </div>
-              <Toggle checked={cloudSync.autoSync} disabled={busy} onChange={(autoSync) => updateCloudSync({ autoSync })} />
-            </div>
+              <motion.span animate={{ rotate: cloudConfigExpanded ? 180 : 0 }} transition={quickFade}>
+                <ChevronDown size={18} />
+              </motion.span>
+            </button>
 
-            <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
-              <div>
-                <div className="assetName">日志遥测</div>
-                <div className="assetSub" style={{ marginTop: 4 }}>
-                  仅上传错误、页面切换和同步结果，不包含账号余额明细
-                </div>
+            <AnimatePresence initial={false}>
+              {cloudConfigExpanded ? (
+                <motion.div
+                  key="cloud-config"
+                  className="stack"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: standardEase }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <label className="field">
+                    <div className="fieldLabel">服务器地址</div>
+                    <input
+                      className="input"
+                      value={cloudSync.serverUrl}
+                      placeholder="http://localhost:8787"
+                      disabled={busy}
+                      onChange={(e) => updateCloudSync({ serverUrl: e.target.value })}
+                    />
+                  </label>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <label className="field">
+                      <div className="fieldLabel">账号</div>
+                      <input
+                        className="input"
+                        value={cloudSync.username}
+                        autoComplete="username"
+                        disabled={busy}
+                        onChange={(e) => updateCloudSync({ username: e.target.value })}
+                      />
+                    </label>
+                    <label className="field">
+                      <div className="fieldLabel">密码</div>
+                      <input
+                        className="input"
+                        type="password"
+                        value={cloudSync.password}
+                        autoComplete="current-password"
+                        disabled={busy}
+                        onChange={(e) => updateCloudSync({ password: e.target.value })}
+                      />
+                    </label>
+                  </div>
+
+                  <label className="field">
+                    <div className="fieldLabel">创建账号邀请码</div>
+                    <input
+                      className="input"
+                      type="password"
+                      value={cloudSync.registrationInvite}
+                      autoComplete="off"
+                      placeholder="后端配置邀请码时填写"
+                      disabled={busy}
+                      onChange={(e) => updateCloudSync({ registrationInvite: e.target.value })}
+                    />
+                  </label>
+
+                  <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
+                    <div>
+                      <div className="assetName">自动备份</div>
+                      <div className="assetSub" style={{ marginTop: 4 }}>
+                        数据变更后自动上传，最短间隔 30 秒
+                      </div>
+                    </div>
+                    <Toggle checked={cloudSync.autoSync} disabled={busy} onChange={(autoSync) => updateCloudSync({ autoSync })} />
+                  </div>
+
+                  <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
+                    <div>
+                      <div className="assetName">日志遥测</div>
+                      <div className="assetSub" style={{ marginTop: 4 }}>
+                        仅上传错误、页面切换和同步结果，不包含账号余额明细
+                      </div>
+                    </div>
+                    <Toggle
+                      checked={cloudSync.telemetryEnabled}
+                      disabled={busy}
+                      onChange={(telemetryEnabled) => updateCloudSync({ telemetryEnabled })}
+                    />
+                  </div>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+
+            {!cloudConfigExpanded ? (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {cloudSync.autoSync ? (
+                  <span className="badge" style={{ fontWeight: 800 }}>
+                    自动备份
+                  </span>
+                ) : null}
+                {cloudSync.telemetryEnabled ? (
+                  <span className="badge" style={{ fontWeight: 800 }}>
+                    日志遥测
+                  </span>
+                ) : null}
               </div>
-              <Toggle
-                checked={cloudSync.telemetryEnabled}
-                disabled={busy}
-                onChange={(telemetryEnabled) => updateCloudSync({ telemetryEnabled })}
-              />
-            </div>
+            ) : null}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-              <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={testCloud}>
-                <RefreshCw size={16} />
-                <span>测试连接</span>
-              </button>
-              <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={registerCloud}>
-                <span>创建账号</span>
-              </button>
-            </div>
+            {cloudConfigExpanded ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={testCloud}>
+                  <RefreshCw size={16} />
+                  <span>测试连接</span>
+                </button>
+                <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={registerCloud}>
+                  <span>创建账号</span>
+                </button>
+              </div>
+            ) : null}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
               <button type="button" className="assetItem" disabled={busy || !cloudReady} onClick={() => void uploadCloud()}>
