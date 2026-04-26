@@ -18,7 +18,7 @@ function readBooleanEnv(name, fallback = false) {
 
 const PORT = Number(process.env.PORT || 8787)
 const DATA_DIR = process.env.RATIO_DATA_DIR || path.resolve('data')
-const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || '*'
+const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || 'http://localhost:5173'
 const MAX_BACKUP_BYTES = readPositiveNumberEnv('RATIO_MAX_BACKUP_BYTES', 2 * 1024 * 1024)
 const REGISTRATION_INVITE_CODE = (process.env.RATIO_REGISTRATION_INVITE_CODE || '').trim()
 const ALLOW_OPEN_REGISTRATION = readBooleanEnv('RATIO_ALLOW_OPEN_REGISTRATION', false)
@@ -30,10 +30,18 @@ const AI_MODEL = process.env.RATIO_AI_MODEL || 'gpt-5.2'
 const AI_REASONING_EFFORT = process.env.RATIO_AI_REASONING_EFFORT || 'high'
 const AI_UPSTREAM_TIMEOUT_MS = readPositiveNumberEnv('RATIO_AI_UPSTREAM_TIMEOUT_MS', 120000)
 const AI_MAX_RESPONSE_BYTES = readPositiveNumberEnv('RATIO_AI_MAX_RESPONSE_BYTES', 2 * 1024 * 1024)
+const AI_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AI_RATE_LIMIT_PER_MINUTE', 30)
+const AI_DAILY_REQUEST_LIMIT = readPositiveNumberEnv('RATIO_AI_DAILY_REQUEST_LIMIT', 200)
+const AI_MAX_MESSAGES = readPositiveNumberEnv('RATIO_AI_MAX_MESSAGES', 30)
+const AI_MAX_MESSAGE_CHARS = readPositiveNumberEnv('RATIO_AI_MAX_MESSAGE_CHARS', 12000)
+const AI_MAX_TOTAL_MESSAGE_CHARS = readPositiveNumberEnv('RATIO_AI_MAX_TOTAL_MESSAGE_CHARS', 60000)
+const AI_ALLOW_HTTP_UPSTREAM = readBooleanEnv('RATIO_AI_ALLOW_HTTP_UPSTREAM', false)
+const AI_ALLOW_PRIVATE_UPSTREAM = readBooleanEnv('RATIO_AI_ALLOW_PRIVATE_UPSTREAM', false)
 const TELEMETRY_MAX_DAILY_BYTES = readPositiveNumberEnv('RATIO_TELEMETRY_MAX_DAILY_BYTES', 5 * 1024 * 1024)
 const AUTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AUTH_RATE_LIMIT_PER_MINUTE', 600)
 const REGISTER_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_REGISTER_RATE_LIMIT_PER_MINUTE', 30)
 const ADMIN_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_ADMIN_RATE_LIMIT_PER_MINUTE', 300)
+const MAX_PASSWORD_CHARS = readPositiveNumberEnv('RATIO_MAX_PASSWORD_CHARS', 256)
 const ADMIN_USERNAME = (process.env.RATIO_ADMIN_USERNAME || '').trim()
 const ADMIN_PASSWORD = process.env.RATIO_ADMIN_PASSWORD || ''
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
@@ -41,10 +49,19 @@ const BACKUP_SCHEMA = 'ratio.backup.v1'
 
 const mutationQueues = new Map()
 const rateLimitBuckets = new Map()
+const aiDailyUsage = new Map()
 const pbkdf2Async = promisify(pbkdf2)
 
 function now() {
   return new Date().toISOString()
+}
+
+function securityHeaders() {
+  return {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+  }
 }
 
 function jsonResponse(res, status, body) {
@@ -53,6 +70,7 @@ function jsonResponse(res, status, body) {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(text),
     'Cache-Control': 'no-store',
+    ...securityHeaders(),
     ...corsHeaders(),
   })
   res.end(text)
@@ -63,15 +81,14 @@ function textResponse(res, status, text, contentType = 'text/plain; charset=utf-
     'Content-Type': contentType,
     'Content-Length': Buffer.byteLength(text),
     'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-    'Referrer-Policy': 'no-referrer',
+    ...securityHeaders(),
     ...headers,
   })
   res.end(text)
 }
 
 function emptyResponse(res, status = 204) {
-  res.writeHead(status, corsHeaders())
+  res.writeHead(status, { ...securityHeaders(), ...corsHeaders() })
   res.end()
 }
 
@@ -81,6 +98,7 @@ function corsHeaders() {
     'Access-Control-Allow-Headers': 'content-type, authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   }
 }
 
@@ -98,9 +116,15 @@ function safeEqualString(left, right) {
   return timingSafeEqual(a, b)
 }
 
+function safeEqualConfiguredSecret(input, expected) {
+  if (!expected) return false
+  return safeEqualString(input, expected)
+}
+
 function adminUnauthorized(res) {
   textResponse(res, 401, JSON.stringify({ error: { code: 'admin_auth_required', message: 'Admin credentials required' } }), 'application/json; charset=utf-8', {
     'WWW-Authenticate': 'Basic realm="Ratio Admin Console", charset="UTF-8"',
+    ...corsHeaders(),
   })
 }
 
@@ -120,8 +144,8 @@ function requireAdmin(req, res, html = false) {
   const auth = readBasicAuth(req)
   if (
     !auth ||
-    !safeEqualString(auth.username, ADMIN_USERNAME) ||
-    !safeEqualString(auth.password, ADMIN_PASSWORD)
+    !safeEqualConfiguredSecret(auth.username, ADMIN_USERNAME) ||
+    !safeEqualConfiguredSecret(auth.password, ADMIN_PASSWORD)
   ) {
     adminUnauthorized(res)
     return false
@@ -154,6 +178,82 @@ function requestRateLimit(req, res, scope, maxRequests) {
   if (checkRateLimit(scope, key, maxRequests)) return true
   fail(res, 429, 'Too many requests; try again later', 'rate_limited')
   return false
+}
+
+function checkDailyLimit(scope, key, maxRequests) {
+  const day = new Date().toISOString().slice(0, 10)
+  const usageKey = `${scope}:${day}:${key}`
+  if (aiDailyUsage.size > 10000) {
+    for (const bucketKey of aiDailyUsage.keys()) {
+      if (!bucketKey.includes(`:${day}:`)) aiDailyUsage.delete(bucketKey)
+    }
+  }
+
+  const current = aiDailyUsage.get(usageKey) || 0
+  if (current >= maxRequests) return false
+  aiDailyUsage.set(usageKey, current + 1)
+  return true
+}
+
+function isIpLiteral(hostname) {
+  return /^[\d.]+$/.test(hostname) || hostname.includes(':')
+}
+
+function parseIpv4Parts(value) {
+  const parts = value.split('.').map((part) => Number(part))
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return null
+  return parts
+}
+
+function isPrivateIpv4Parts(parts) {
+  const [a, b] = parts
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  )
+}
+
+function parseMappedIpv4Parts(normalizedIpv6) {
+  if (!normalizedIpv6.startsWith('::ffff:')) return null
+  const suffix = normalizedIpv6.slice('::ffff:'.length)
+  if (suffix.includes('.')) return parseIpv4Parts(suffix)
+
+  const hextets = suffix.split(':').filter(Boolean)
+  if (hextets.length < 1 || hextets.length > 2) return null
+  const high = hextets.length === 2 ? Number.parseInt(hextets[0], 16) : 0
+  const low = Number.parseInt(hextets[hextets.length - 1], 16)
+  if ([high, low].some((part) => !Number.isInteger(part) || part < 0 || part > 0xffff)) return null
+  return [high >> 8, high & 255, low >> 8, low & 255]
+}
+
+function isPrivateHostname(hostname) {
+  const lower = hostname.toLowerCase()
+  if (lower === 'localhost' || lower.endsWith('.localhost')) return true
+  if (lower === 'metadata.google.internal') return true
+  if (!isIpLiteral(lower)) return false
+
+  if (lower.includes(':')) {
+    const normalized = lower.replace(/^\[|\]$/g, '')
+    const mappedIpv4 = parseMappedIpv4Parts(normalized)
+    if (mappedIpv4) return isPrivateIpv4Parts(mappedIpv4)
+    return (
+      normalized === '::1' ||
+      normalized === '::' ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      normalized.startsWith('fe80:')
+    )
+  }
+
+  const parts = parseIpv4Parts(lower)
+  return parts ? isPrivateIpv4Parts(parts) : false
 }
 
 function userId(username) {
@@ -257,6 +357,7 @@ async function parseBody(req, maxBytes = 1024 * 1024) {
     if (total > maxBytes) {
       const error = new Error('Request body too large')
       error.status = 413
+      error.code = 'request_too_large'
       throw error
     }
     chunks.push(chunk)
@@ -269,6 +370,7 @@ async function parseBody(req, maxBytes = 1024 * 1024) {
   } catch {
     const error = new Error('Invalid JSON body')
     error.status = 400
+    error.code = 'invalid_json'
     throw error
   }
 }
@@ -370,6 +472,10 @@ function getAiConfigIssue(config) {
   try {
     const url = new URL(config.chatUrl)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'AI chat URL must use http or https'
+    if (url.protocol === 'http:' && !AI_ALLOW_HTTP_UPSTREAM) return 'AI chat URL must use https unless RATIO_AI_ALLOW_HTTP_UPSTREAM=true'
+    if (isPrivateHostname(url.hostname) && !AI_ALLOW_PRIVATE_UPSTREAM) {
+      return 'AI chat URL cannot target private or localhost addresses unless RATIO_AI_ALLOW_PRIVATE_UPSTREAM=true'
+    }
     if (url.hostname === 'example.com') return 'AI chat URL is still the example value'
   } catch {
     return 'AI chat URL is invalid'
@@ -387,6 +493,7 @@ async function handleRegister(req, res) {
   const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : ''
   if (!/^[\w.@-]{3,64}$/.test(username)) return fail(res, 400, 'Username must be 3-64 letters, numbers, dot, underscore or dash')
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters')
+  if (password.length > MAX_PASSWORD_CHARS) return fail(res, 400, `Password must be at most ${MAX_PASSWORD_CHARS} characters`, 'password_too_long')
   if (!REGISTRATION_INVITE_CODE && !ALLOW_OPEN_REGISTRATION) {
     return fail(
       res,
@@ -395,7 +502,7 @@ async function handleRegister(req, res) {
       'registration_closed',
     )
   }
-  if (REGISTRATION_INVITE_CODE && inviteCode !== REGISTRATION_INVITE_CODE) {
+  if (REGISTRATION_INVITE_CODE && !safeEqualConfiguredSecret(inviteCode, REGISTRATION_INVITE_CODE)) {
     return fail(res, 403, 'Invalid invite code', 'invite_invalid')
   }
 
@@ -488,6 +595,53 @@ function httpError(message, status, code) {
   return error
 }
 
+function validateAiMessages(value) {
+  if (!Array.isArray(value)) throw httpError('messages must be an array', 400, 'ai_messages_invalid')
+  if (value.length === 0) throw httpError('messages must not be empty', 400, 'ai_messages_empty')
+  if (value.length > AI_MAX_MESSAGES) throw httpError(`messages must contain at most ${AI_MAX_MESSAGES} items`, 400, 'ai_messages_too_many')
+
+  let totalChars = 0
+  return value.map((message) => {
+    if (!message || typeof message !== 'object' || Array.isArray(message)) {
+      throw httpError('each message must be an object', 400, 'ai_message_invalid')
+    }
+
+    const role = message.role
+    const content = message.content
+    if (role !== 'system' && role !== 'user' && role !== 'assistant') {
+      throw httpError('message role must be system, user or assistant', 400, 'ai_message_role_invalid')
+    }
+    if (typeof content !== 'string') throw httpError('message content must be a string', 400, 'ai_message_content_invalid')
+    if (content.length > AI_MAX_MESSAGE_CHARS) {
+      throw httpError(`message content must be at most ${AI_MAX_MESSAGE_CHARS} characters`, 400, 'ai_message_too_large')
+    }
+
+    totalChars += content.length
+    if (totalChars > AI_MAX_TOTAL_MESSAGE_CHARS) {
+      throw httpError(`messages must contain at most ${AI_MAX_TOTAL_MESSAGE_CHARS} characters`, 400, 'ai_messages_too_large')
+    }
+
+    return { role, content }
+  })
+}
+
+function checkAiLimits(req, res, user) {
+  const ip = req.socket?.remoteAddress || 'unknown'
+  if (!checkRateLimit('ai-ip', ip, AI_RATE_LIMIT_PER_MINUTE)) {
+    fail(res, 429, 'Too many AI requests from this network; try again later', 'ai_rate_limited')
+    return false
+  }
+  if (!checkRateLimit('ai-user', user.id, AI_RATE_LIMIT_PER_MINUTE)) {
+    fail(res, 429, 'Too many AI requests for this account; try again later', 'ai_rate_limited')
+    return false
+  }
+  if (!checkDailyLimit('ai-user', user.id, AI_DAILY_REQUEST_LIMIT)) {
+    fail(res, 429, 'Daily AI request limit reached', 'ai_daily_limit_reached')
+    return false
+  }
+  return true
+}
+
 async function readUpstreamTextLimited(upstream, maxBytes) {
   const contentLength = Number(upstream.headers.get('content-length') || 0)
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
@@ -536,13 +690,19 @@ function handleAiStatus(res) {
   })
 }
 
-async function handleAiChat(req, res) {
+async function handleAiChat(req, res, user) {
   const config = readAiConfig()
   const issue = getAiConfigIssue(config)
   if (issue) return fail(res, 503, issue, 'ai_config_missing')
+  if (!checkAiLimits(req, res, user)) return
 
   const body = await parseBody(req, 1024 * 1024)
-  if (!Array.isArray(body.messages)) return fail(res, 400, 'messages must be an array')
+  let messages
+  try {
+    messages = validateAiMessages(body.messages)
+  } catch (error) {
+    return fail(res, error.status || 400, error.message, error.code || 'ai_messages_invalid')
+  }
 
   const controller = new AbortController()
   let timedOut = false
@@ -568,7 +728,7 @@ async function handleAiChat(req, res) {
       },
       body: JSON.stringify({
         model: config.model,
-        messages: body.messages,
+        messages,
         reasoning_effort: config.reasoningEffort,
       }),
     })
@@ -588,6 +748,7 @@ async function handleAiChat(req, res) {
     res.writeHead(upstream.status, {
       'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
       'Cache-Control': 'no-store',
+      ...securityHeaders(),
       ...corsHeaders(),
     })
     res.end(text)
@@ -618,17 +779,20 @@ async function handleTelemetry(req, res, user) {
   await mkdir(path.dirname(file), { recursive: true })
   const text = `${safeEvents.map((event) => JSON.stringify(event)).join('\n')}\n`
   const incomingBytes = Buffer.byteLength(text)
-  let currentBytes = 0
-  try {
-    currentBytes = (await stat(file)).size
-  } catch (error) {
-    if (error && error.code !== 'ENOENT') throw error
-  }
-  if (currentBytes + incomingBytes > TELEMETRY_MAX_DAILY_BYTES) {
-    return jsonResponse(res, 200, { accepted: 0, dropped: safeEvents.length, reason: 'telemetry_log_full' })
-  }
-  await appendFile(file, text, 'utf8')
-  jsonResponse(res, 200, { accepted: safeEvents.length })
+  const result = await runQueuedMutation(file, async () => {
+    let currentBytes = 0
+    try {
+      currentBytes = (await stat(file)).size
+    } catch (error) {
+      if (error && error.code !== 'ENOENT') throw error
+    }
+    if (currentBytes + incomingBytes > TELEMETRY_MAX_DAILY_BYTES) {
+      return { accepted: 0, dropped: safeEvents.length, reason: 'telemetry_log_full' }
+    }
+    await appendFile(file, text, 'utf8')
+    return { accepted: safeEvents.length }
+  })
+  jsonResponse(res, 200, result)
 }
 
 async function readFileTail(file, maxBytes) {
@@ -869,7 +1033,7 @@ async function handleAdminTelemetryRecent(req, res) {
 
 function adminAssetHeaders() {
   return {
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'",
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
   }
 }
 
@@ -944,7 +1108,7 @@ async function route(req, res) {
   if (req.method === 'GET' && pathname === '/api/backup') return handleBackupGet(res, user)
   if (req.method === 'PUT' && pathname === '/api/backup') return handleBackupPut(req, res, user)
   if (req.method === 'GET' && pathname === '/api/ai/status') return handleAiStatus(res)
-  if (req.method === 'POST' && pathname === '/api/ai/chat') return handleAiChat(req, res)
+  if (req.method === 'POST' && pathname === '/api/ai/chat') return handleAiChat(req, res, user)
   if (req.method === 'POST' && pathname === '/api/telemetry') return handleTelemetry(req, res, user)
   if (req.method === 'GET' && pathname === '/api/telemetry/recent') return handleTelemetryRecent(req, res, user)
 
@@ -958,7 +1122,7 @@ const server = http.createServer((req, res) => {
     const status = error && Number.isFinite(error.status) ? error.status : 500
     const message = status >= 500 ? 'Internal server error' : error.message
     if (status >= 500) console.error(error)
-    fail(res, status, message)
+    fail(res, status, message, error?.code || 'error')
   })
 })
 

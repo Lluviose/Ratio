@@ -48,6 +48,10 @@ function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
+function isAbortError(err: unknown) {
+  return typeof err === 'object' && err !== null && 'name' in err && Reflect.get(err, 'name') === 'AbortError'
+}
+
 export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
   theme: ThemeId
@@ -72,12 +76,21 @@ export function SettingsScreen(props: {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cloudSyncRef = useRef(cloudSync)
+  const mountedRef = useRef(true)
+  const cloudAbortRef = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState(false)
   const { toast, confirm } = useOverlay()
 
   useEffect(() => {
     cloudSyncRef.current = cloudSync
   }, [cloudSync])
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      cloudAbortRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     if (monthStartDayRaw !== monthStartDay) setMonthStartDayRaw(monthStartDay)
@@ -164,8 +177,25 @@ export function SettingsScreen(props: {
   }
 
   const notifyCloudTargetChanged = () => {
+    if (!mountedRef.current) return
     toast('云同步配置已变更，请重新操作', { tone: 'neutral' })
   }
+
+  const startCloudOperation = () => {
+    cloudAbortRef.current?.abort()
+    const controller = new AbortController()
+    cloudAbortRef.current = controller
+    if (mountedRef.current) setBusy(true)
+    return controller
+  }
+
+  const finishCloudOperation = (controller: AbortController) => {
+    if (cloudAbortRef.current !== controller) return
+    cloudAbortRef.current = null
+    if (mountedRef.current) setBusy(false)
+  }
+
+  const canUseCloudResult = (controller: AbortController) => mountedRef.current && !controller.signal.aborted
 
   const cloudSyncStatusLabel =
     cloudSync.lastSyncStatus === 'ok'
@@ -193,29 +223,33 @@ export function SettingsScreen(props: {
 
   const registerCloud = async () => {
     const requestSettings = cloudSyncRef.current
-    setBusy(true)
+    const controller = startCloudOperation()
     try {
-      const res = await createCloudUser(requestSettings)
+      const res = await createCloudUser(requestSettings, { signal: controller.signal })
+      if (!canUseCloudResult(controller)) return
       if (!isSameCloudTarget(requestSettings)) {
         notifyCloudTargetChanged()
         return
       }
-      updateCloudSync({ registrationInvite: '' })
+      writeCloudSyncSettingsPatch({ registrationInvite: '' })
       toast(`云账号已创建：${res.user.username}`, { tone: 'success' })
       trackTelemetry('cloud_register')
     } catch (err) {
+      if (isAbortError(err)) return
+      if (!mountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Cloud register failed'
       toast(msg, { tone: 'danger' })
     } finally {
-      setBusy(false)
+      finishCloudOperation(controller)
     }
   }
 
   const testCloud = async () => {
     const requestSettings = cloudSyncRef.current
-    setBusy(true)
+    const controller = startCloudOperation()
     try {
-      const res = await fetchCloudMe(requestSettings)
+      const res = await fetchCloudMe(requestSettings, { signal: controller.signal })
+      if (!canUseCloudResult(controller)) return
       if (!isSameCloudTarget(requestSettings)) {
         notifyCloudTargetChanged()
         return
@@ -223,40 +257,55 @@ export function SettingsScreen(props: {
       toast(`已连接：${res.user.username}`, { tone: 'success' })
       trackTelemetry('cloud_connect_test')
     } catch (err) {
+      if (isAbortError(err)) return
+      if (!mountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Cloud connection failed'
       toast(msg, { tone: 'danger' })
     } finally {
-      setBusy(false)
+      finishCloudOperation(controller)
     }
   }
 
   const uploadCloud = async (force = false, requestSettings: CloudSyncSettings = cloudSyncRef.current): Promise<void> => {
     let retrying = false
-    setBusy(true)
+    const controller = startCloudOperation()
     try {
       const dirtyToken = readCloudSyncDirtyToken()
       const backup = buildRatioBackup()
       const meta = await uploadCloudBackup(requestSettings, backup, {
         expectedUpdatedAt: requestSettings.lastBackupAt,
         force,
+        signal: controller.signal,
       })
+      if (!canUseCloudResult(controller)) return
       if (!isSameCloudTarget(requestSettings)) {
         notifyCloudTargetChanged()
         return
       }
+      const syncedAt = new Date().toISOString()
       markCloudSyncClean(dirtyToken)
-      updateCloudSync({
+      writeCloudSyncSettingsPatch({
         lastBackupAt: meta.updatedAt,
-        lastSyncAt: new Date().toISOString(),
+        lastSyncAt: syncedAt,
         lastSyncStatus: 'ok',
         lastSyncMessage: `已上传 ${meta.itemCount} 项数据`,
       })
       toast(`已上传 ${meta.itemCount} 项数据`, { tone: 'success' })
       trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount, force })
     } catch (err) {
+      if (isAbortError(err)) return
       const conflictMeta = readConflictMeta(err)
       if (err instanceof CloudRequestError && err.code === 'backup_conflict' && !force) {
-        setBusy(false)
+        if (!canUseCloudResult(controller)) return
+        const conflictMessage = conflictMeta ? `云端备份已更新：${conflictMeta.updatedAt}` : '云端备份状态已变化'
+        if (isSameCloudTarget(requestSettings)) {
+          writeCloudSyncSettingsPatch({
+            lastSyncAt: new Date().toISOString(),
+            lastSyncStatus: 'conflict',
+            lastSyncMessage: conflictMessage,
+          })
+        }
+        if (mountedRef.current) setBusy(false)
         const ok = await confirm({
           title: '云端备份已更新',
           message: conflictMeta
@@ -266,6 +315,7 @@ export function SettingsScreen(props: {
           cancelText: '取消',
           tone: 'danger',
         })
+        if (!canUseCloudResult(controller)) return
         if (ok) {
           if (!isSameCloudTarget(requestSettings)) {
             notifyCloudTargetChanged()
@@ -276,10 +326,18 @@ export function SettingsScreen(props: {
         }
         return
       }
+      if (!mountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Cloud upload failed'
+      if (isSameCloudTarget(requestSettings)) {
+        writeCloudSyncSettingsPatch({
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: 'error',
+          lastSyncMessage: msg,
+        })
+      }
       toast(msg, { tone: 'danger' })
     } finally {
-      if (!retrying) setBusy(false)
+      if (!retrying) finishCloudOperation(controller)
     }
   }
 
@@ -291,12 +349,13 @@ export function SettingsScreen(props: {
       cancelText: '取消',
       tone: 'danger',
     })
-    if (!ok) return
+    if (!ok || !mountedRef.current) return
 
     const requestSettings = cloudSyncRef.current
-    setBusy(true)
+    const controller = startCloudOperation()
     try {
-      const res = await downloadCloudBackup(requestSettings)
+      const res = await downloadCloudBackup(requestSettings, { signal: controller.signal })
+      if (!canUseCloudResult(controller)) return
       if (!isSameCloudTarget(requestSettings)) {
         notifyCloudTargetChanged()
         return
@@ -319,40 +378,52 @@ export function SettingsScreen(props: {
       queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
       window.location.reload()
     } catch (err) {
+      if (isAbortError(err)) return
+      if (!mountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Cloud restore failed'
+      if (isSameCloudTarget(requestSettings)) {
+        writeCloudSyncSettingsPatch({
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: 'error',
+          lastSyncMessage: msg,
+        })
+      }
       toast(msg, { tone: 'danger' })
     } finally {
-      setBusy(false)
+      finishCloudOperation(controller)
     }
   }
 
   const checkCloudAiStatus = async () => {
     const requestSettings = cloudSyncRef.current
-    setBusy(true)
+    const controller = startCloudOperation()
     try {
-      const res = await fetchCloudAiStatus(requestSettings)
+      const res = await fetchCloudAiStatus(requestSettings, { signal: controller.signal })
+      if (!canUseCloudResult(controller)) return
       if (!isSameCloudTarget(requestSettings)) {
         notifyCloudTargetChanged()
         return
       }
       if (!res.ai.configured) {
-        const message = res.ai.issue ? `云端 AI 未就绪：${res.ai.issue}` : '云端 AI 未就绪'
+        const message = res.ai.issue ? `云端 AI 配置不完整：${res.ai.issue}` : '云端 AI 未配置'
         setCloudAiStatus(message)
         toast(message, { tone: 'neutral' })
         return
       }
       setCloudAiStatus(
-        `云端 AI 已就绪：${res.ai.model} / reasoning ${res.ai.reasoningEffort}${
+        `云端 AI 配置完整：${res.ai.model} / reasoning ${res.ai.reasoningEffort}${
           res.ai.hasApiKey ? ` / key ${res.ai.apiKeyMasked}` : ''
         }`,
       )
-      toast('云端 AI 已就绪', { tone: 'success' })
+      toast('云端 AI 配置完整', { tone: 'success' })
       trackTelemetry('cloud_ai_status_check', { configured: true })
     } catch (err) {
+      if (isAbortError(err)) return
+      if (!mountedRef.current) return
       const msg = err instanceof Error ? err.message : 'Check AI status failed'
       toast(msg, { tone: 'danger' })
     } finally {
-      setBusy(false)
+      finishCloudOperation(controller)
     }
   }
 

@@ -48,6 +48,10 @@ export class CloudRequestError extends Error {
   }
 }
 
+type CloudRequestOptions = {
+  signal?: AbortSignal
+}
+
 export const DEFAULT_CLOUD_SYNC_SETTINGS: CloudSyncSettings = {
   serverUrl: 'http://localhost:8787',
   username: '',
@@ -172,9 +176,10 @@ export async function cloudRequest<T>(
   return (await res.json()) as T
 }
 
-export async function createCloudUser(settings: CloudSyncSettings) {
+export async function createCloudUser(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
   const res = await fetch(cloudUrl(settings, '/api/users'), {
     method: 'POST',
+    signal: options.signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: settings.username.trim(),
@@ -186,17 +191,20 @@ export async function createCloudUser(settings: CloudSyncSettings) {
   return (await res.json()) as { user: { username: string; createdAt: string } }
 }
 
-export function fetchCloudMe(settings: CloudSyncSettings) {
-  return cloudRequest<{ user: { username: string; createdAt: string } }>(settings, '/api/me')
+export function fetchCloudMe(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
+  return cloudRequest<{ user: { username: string; createdAt: string } }>(settings, '/api/me', {
+    signal: options.signal,
+  })
 }
 
 export function uploadCloudBackup(
   settings: CloudSyncSettings,
   backup: RatioBackupFile,
-  options: { expectedUpdatedAt?: string; force?: boolean } = {},
+  options: { expectedUpdatedAt?: string; force?: boolean; signal?: AbortSignal } = {},
 ) {
   return cloudRequest<CloudBackupMeta>(settings, '/api/backup', {
     method: 'PUT',
+    signal: options.signal,
     body: JSON.stringify({
       backup,
       expectedUpdatedAt: options.expectedUpdatedAt ?? '',
@@ -206,16 +214,20 @@ export function uploadCloudBackup(
   })
 }
 
-export async function downloadCloudBackup(settings: CloudSyncSettings) {
-  const res = await cloudRequest<{ backup: unknown; meta: CloudBackupMeta | null }>(settings, '/api/backup')
+export async function downloadCloudBackup(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
+  const res = await cloudRequest<{ backup: unknown; meta: CloudBackupMeta | null }>(settings, '/api/backup', {
+    signal: options.signal,
+  })
   return {
     backup: res.backup ? coerceRatioBackup(res.backup) : null,
     meta: res.meta,
   }
 }
 
-export function fetchCloudAiStatus(settings: CloudSyncSettings) {
-  return cloudRequest<{ ai: CloudAiStatus }>(settings, '/api/ai/status')
+export function fetchCloudAiStatus(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
+  return cloudRequest<{ ai: CloudAiStatus }>(settings, '/api/ai/status', {
+    signal: options.signal,
+  })
 }
 
 export function fetchCloudAiChat(settings: CloudSyncSettings, body: { messages: unknown[]; signal?: AbortSignal }) {
@@ -226,9 +238,10 @@ export function fetchCloudAiChat(settings: CloudSyncSettings, body: { messages: 
   })
 }
 
-export function sendCloudTelemetry(settings: CloudSyncSettings, events: unknown[]) {
+export function sendCloudTelemetry(settings: CloudSyncSettings, events: unknown[], options: CloudRequestOptions = {}) {
   return cloudRequest<{ accepted: number }>(settings, '/api/telemetry', {
     method: 'POST',
+    signal: options.signal,
     body: JSON.stringify({ events }),
   })
 }

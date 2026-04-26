@@ -1,7 +1,7 @@
 import { clsx } from 'clsx'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { ChevronDown, GripVertical, MoreHorizontal } from 'lucide-react'
-import { memo, type ComponentType, type Ref, useEffect, useMemo, useState } from 'react'
+import { memo, type ComponentType, type Ref, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomSheet } from '../components/BottomSheet'
 import {
   ACCOUNT_SORT_MODE_KEY,
@@ -71,10 +71,22 @@ function AssetsListPageComponent(props: {
   const [typeMenuOpenGroup, setTypeMenuOpenGroup] = useState<GroupId | null>(null)
   const [typeSortGroup, setTypeSortGroup] = useState<GroupId | null>(null)
   const [typeSortDraft, setTypeSortDraft] = useState<AccountTypeId[]>([])
+  const typeMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setTypeMenuOpenGroup(null)
   }, [expandedGroup])
+
+  useEffect(() => {
+    if (!typeMenuOpenGroup) return
+    const onPointerDown = (event: PointerEvent) => {
+      const root = typeMenuRef.current
+      if (root && event.target instanceof Node && root.contains(event.target)) return
+      setTypeMenuOpenGroup(null)
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    return () => window.removeEventListener('pointerdown', onPointerDown)
+  }, [typeMenuOpenGroup])
 
   const groups = useMemo(() => {
     return grouped.groupCards
@@ -253,7 +265,7 @@ function AssetsListPageComponent(props: {
                       <div className="px-3 pt-2 pb-3">
                         {accountSortMode === 'manual' ? (
                           <div className="flex justify-end px-1 pb-2">
-                            <div className="relative">
+                            <div ref={typeMenuOpenGroup === id ? typeMenuRef : undefined} className="relative">
                               <button
                                 type="button"
                                 className="w-9 h-9 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"

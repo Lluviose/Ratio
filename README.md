@@ -42,13 +42,17 @@ docker compose up -d --build
 - `RATIO_ALLOW_OPEN_REGISTRATION`：显式设为 `true` 才允许无邀请码开放注册，不建议公网使用
 - `RATIO_AI_UPSTREAM_TIMEOUT_MS`：AI 上游请求超时时间，默认 120000
 - `RATIO_AI_MAX_RESPONSE_BYTES`：AI 上游响应最大字节数，默认 2097152
+- `RATIO_AI_RATE_LIMIT_PER_MINUTE` / `RATIO_AI_DAILY_REQUEST_LIMIT`：AI 代理按账号和来源网络限流
+- `RATIO_AI_MAX_MESSAGES` / `RATIO_AI_MAX_MESSAGE_CHARS` / `RATIO_AI_MAX_TOTAL_MESSAGE_CHARS`：AI 对话请求体限制
+- `RATIO_AI_ALLOW_HTTP_UPSTREAM` / `RATIO_AI_ALLOW_PRIVATE_UPSTREAM`：默认禁止明文 HTTP、localhost 和私网 AI 上游；只建议本地调试时开启
 - `RATIO_TELEMETRY_MAX_DAILY_BYTES`：单用户单日 telemetry 日志上限，默认 5242880
 - `RATIO_AUTH_RATE_LIMIT_PER_MINUTE` / `RATIO_REGISTER_RATE_LIMIT_PER_MINUTE`：认证与注册限流
+- `RATIO_MAX_PASSWORD_CHARS`：注册密码最大长度，默认 256
 - `RATIO_ADMIN_USERNAME` / `RATIO_ADMIN_PASSWORD`：启用后端可视化控制台 `/admin`
 - `RATIO_ADMIN_RATE_LIMIT_PER_MINUTE`：控制台请求限流，默认 300
 - `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
 
-启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。配置管理员账号后，可打开 `http://localhost:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
+启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。公网部署时请放在 HTTPS 反向代理后，并把 `RATIO_CORS_ORIGIN` 改成前端实际域名。配置管理员账号后，可打开 `http://localhost:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
 
 ### 常用命令
 

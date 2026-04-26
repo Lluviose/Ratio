@@ -361,7 +361,7 @@ function renderOverview(data) {
   renderMetric(els.storageBytes, fmtBytes(data.storage.totalBytes), null)
   els.storageFiles.textContent = data.storage.files + ' 个文件 · ' + data.storage.directories + ' 个目录'
 
-  renderMetric(els.aiState, data.ai.configured ? '已配置' : '未就绪', data.ai.configured ? 'ok' : 'warn')
+  renderMetric(els.aiState, data.ai.configured ? '已配置' : '未配置', data.ai.configured ? 'ok' : 'warn')
   els.aiMeta.textContent = data.ai.issue || (data.ai.model + ' · ' + data.ai.reasoningEffort)
 
   els.configBadge.textContent = data.registration.inviteRequired ? '邀请码注册' : '开放注册'

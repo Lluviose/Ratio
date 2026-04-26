@@ -1,4 +1,4 @@
-import { type ComponentType, createElement, useEffect, useMemo, useState } from 'react'
+import { type ComponentType, createElement, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, GripVertical, MoreHorizontal } from 'lucide-react'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
 import { BottomSheet } from '../components/BottomSheet'
@@ -39,6 +39,7 @@ export function AssetsTypeDetailPage(props: {
   const [moreOpen, setMoreOpen] = useState(false)
   const [sortOpen, setSortOpen] = useState(false)
   const [sortDraft, setSortDraft] = useState<string[]>([])
+  const moreRef = useRef<HTMLDivElement | null>(null)
 
   const info = useMemo(() => {
     if (!type) return null
@@ -70,6 +71,17 @@ export function AssetsTypeDetailPage(props: {
     setSortOpen(false)
     setSortDraft([])
   }, [type])
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const root = moreRef.current
+      if (root && event.target instanceof Node && root.contains(event.target)) return
+      setMoreOpen(false)
+    }
+    window.addEventListener('pointerdown', onPointerDown)
+    return () => window.removeEventListener('pointerdown', onPointerDown)
+  }, [moreOpen])
 
   if (!type || !info) {
     return <div className="h-full" style={{ background: 'var(--bg)' }} />       
@@ -108,7 +120,7 @@ export function AssetsTypeDetailPage(props: {
           </div>
 
           {accountSortMode === 'manual' ? (
-            <div className="relative">
+            <div ref={moreRef} className="relative">
               <button
                 type="button"
                 className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"

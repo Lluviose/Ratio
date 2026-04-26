@@ -6,6 +6,7 @@ import { formatCny } from '../lib/format'
 import { pickForegroundColor } from '../lib/themes'
 import { allocateIntegerPercents } from '../lib/percent'
 import { addMoney } from '../lib/money'
+import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
@@ -36,6 +37,7 @@ const BUBBLE_PHYSICS_ENABLE_MAX = 0.24
 const BUBBLE_PHYSICS_DISABLE_MAX = 0.34
 const BUBBLE_BURSTS_ENABLE_MAX = 0.62
 const BUBBLE_BURSTS_DISABLE_MAX = 0.72
+const HIDE_AMOUNTS_KEY = 'ratio.hideAmounts'
 
 const horizontalPageStyle: CSSProperties = {
   touchAction: 'pan-x',
@@ -536,7 +538,7 @@ export function AssetsScreen(props: {
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
   const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [hideAmounts, setHideAmounts] = useState(false)
+  const [hideAmounts, setHideAmounts] = useLocalStorageState<boolean>(HIDE_AMOUNTS_KEY, false)
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [scrollerWidth, setScrollerWidth] = useState(0)
