@@ -44,9 +44,11 @@ docker compose up -d --build
 - `RATIO_AI_MAX_RESPONSE_BYTES`：AI 上游响应最大字节数，默认 2097152
 - `RATIO_TELEMETRY_MAX_DAILY_BYTES`：单用户单日 telemetry 日志上限，默认 5242880
 - `RATIO_AUTH_RATE_LIMIT_PER_MINUTE` / `RATIO_REGISTER_RATE_LIMIT_PER_MINUTE`：认证与注册限流
+- `RATIO_ADMIN_USERNAME` / `RATIO_ADMIN_PASSWORD`：启用后端可视化控制台 `/admin`
+- `RATIO_ADMIN_RATE_LIMIT_PER_MINUTE`：控制台请求限流，默认 300
 - `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
 
-启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。
+启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。配置管理员账号后，可打开 `http://localhost:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
 
 ### 常用命令
 

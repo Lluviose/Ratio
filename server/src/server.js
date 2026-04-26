@@ -1,8 +1,9 @@
 import http from 'node:http'
-import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink, open } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink, open, readdir } from 'node:fs/promises'
 import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { adminCss, adminDisabledHtml, adminHtml, adminJs } from './adminConsole.js'
 
 function readPositiveNumberEnv(name, fallback) {
   const value = Number(process.env[name])
@@ -32,6 +33,9 @@ const AI_MAX_RESPONSE_BYTES = readPositiveNumberEnv('RATIO_AI_MAX_RESPONSE_BYTES
 const TELEMETRY_MAX_DAILY_BYTES = readPositiveNumberEnv('RATIO_TELEMETRY_MAX_DAILY_BYTES', 5 * 1024 * 1024)
 const AUTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AUTH_RATE_LIMIT_PER_MINUTE', 600)
 const REGISTER_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_REGISTER_RATE_LIMIT_PER_MINUTE', 30)
+const ADMIN_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_ADMIN_RATE_LIMIT_PER_MINUTE', 300)
+const ADMIN_USERNAME = (process.env.RATIO_ADMIN_USERNAME || '').trim()
+const ADMIN_PASSWORD = process.env.RATIO_ADMIN_PASSWORD || ''
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 const BACKUP_SCHEMA = 'ratio.backup.v1'
 
@@ -54,6 +58,18 @@ function jsonResponse(res, status, body) {
   res.end(text)
 }
 
+function textResponse(res, status, text, contentType = 'text/plain; charset=utf-8', headers = {}) {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Content-Length': Buffer.byteLength(text),
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    ...headers,
+  })
+  res.end(text)
+}
+
 function emptyResponse(res, status = 204) {
   res.writeHead(status, corsHeaders())
   res.end()
@@ -70,6 +86,48 @@ function corsHeaders() {
 
 function fail(res, status, message, code = 'error', details = undefined) {
   jsonResponse(res, status, { error: { code, message, ...(details && typeof details === 'object' ? details : {}) } })
+}
+
+function isAdminConfigured() {
+  return Boolean(ADMIN_USERNAME && ADMIN_PASSWORD)
+}
+
+function safeEqualString(left, right) {
+  const a = createHash('sha256').update(left, 'utf8').digest()
+  const b = createHash('sha256').update(right, 'utf8').digest()
+  return timingSafeEqual(a, b)
+}
+
+function adminUnauthorized(res) {
+  textResponse(res, 401, JSON.stringify({ error: { code: 'admin_auth_required', message: 'Admin credentials required' } }), 'application/json; charset=utf-8', {
+    'WWW-Authenticate': 'Basic realm="Ratio Admin Console", charset="UTF-8"',
+  })
+}
+
+function adminDisabled(res, html = false) {
+  if (html) return textResponse(res, 503, adminDisabledHtml, 'text/html; charset=utf-8')
+  return fail(res, 503, 'Admin console is disabled; configure RATIO_ADMIN_USERNAME and RATIO_ADMIN_PASSWORD', 'admin_disabled')
+}
+
+function requireAdmin(req, res, html = false) {
+  if (!isAdminConfigured()) {
+    adminDisabled(res, html)
+    return false
+  }
+
+  if (!requestRateLimit(req, res, 'admin', ADMIN_RATE_LIMIT_PER_MINUTE)) return false
+
+  const auth = readBasicAuth(req)
+  if (
+    !auth ||
+    !safeEqualString(auth.username, ADMIN_USERNAME) ||
+    !safeEqualString(auth.password, ADMIN_PASSWORD)
+  ) {
+    adminUnauthorized(res)
+    return false
+  }
+
+  return true
 }
 
 function checkRateLimit(scope, key, maxRequests, windowMs = 60_000) {
@@ -600,6 +658,249 @@ async function readFileTail(file, maxBytes) {
   }
 }
 
+async function readJsonFileSafe(file, fallback) {
+  try {
+    return await readJsonFile(file, fallback)
+  } catch {
+    return fallback
+  }
+}
+
+async function fileSize(file) {
+  try {
+    return (await stat(file)).size
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return 0
+    throw error
+  }
+}
+
+async function directoryUsage(dir) {
+  const usage = { totalBytes: 0, files: 0, directories: 0 }
+
+  async function walk(current) {
+    let entries
+    try {
+      entries = await readdir(current, { withFileTypes: true })
+    } catch (error) {
+      if (error && error.code === 'ENOENT') return
+      throw error
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name)
+      if (entry.isDirectory()) {
+        usage.directories += 1
+        await walk(fullPath)
+        continue
+      }
+
+      if (!entry.isFile()) continue
+      try {
+        const info = await stat(fullPath)
+        usage.files += 1
+        usage.totalBytes += info.size
+      } catch (error) {
+        if (!error || error.code !== 'ENOENT') throw error
+      }
+    }
+  }
+
+  await walk(dir)
+  return usage
+}
+
+function telemetryFileForToday(user) {
+  return userFile(user, `telemetry-${new Date().toISOString().slice(0, 10)}.ndjson`)
+}
+
+function summarizeUrl(value) {
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    return `${url.protocol}//${url.host}${url.pathname}`
+  } catch {
+    return 'invalid'
+  }
+}
+
+async function getAdminUsers() {
+  const data = await readUsers()
+  const users = Object.values(data.users)
+    .filter((user) => user && typeof user === 'object' && typeof user.username === 'string')
+    .sort((left, right) => left.username.localeCompare(right.username))
+
+  return Promise.all(users.map(async (user) => {
+    const backupFile = userFile(user, 'backup.json')
+    const backupPayload = await readJsonFileSafe(backupFile, null)
+    const backup = backupMeta(backupPayload)
+    const userDir = path.join(DATA_DIR, 'users', user.id)
+    const usage = await directoryUsage(userDir)
+
+    return {
+      ...publicUser(user),
+      backup,
+      backupBytes: await fileSize(backupFile),
+      telemetryTodayBytes: await fileSize(telemetryFileForToday(user)),
+      directoryBytes: usage.totalBytes,
+      directoryFiles: usage.files,
+    }
+  }))
+}
+
+async function readTelemetryEventsForUser(user, limit) {
+  const text = await readFileTail(telemetryFileForToday(user), Math.min(TELEMETRY_MAX_DAILY_BYTES, 512 * 1024))
+  if (!text.trim()) return []
+
+  return text.trim().split('\n').slice(-limit).flatMap((line) => {
+    try {
+      const entry = JSON.parse(line)
+      return [{ ...entry, username: user.username }]
+    } catch {
+      return []
+    }
+  })
+}
+
+async function getAdminTelemetryEvents(username, limit) {
+  const data = await readUsers()
+  const users = Object.values(data.users)
+    .filter((user) => user && typeof user === 'object' && typeof user.username === 'string')
+    .filter((user) => !username || user.username === username)
+
+  if (username && users.length === 0) {
+    const error = new Error('User not found')
+    error.status = 404
+    error.code = 'user_not_found'
+    throw error
+  }
+
+  const perUserLimit = username ? limit : Math.max(10, Math.ceil(limit / Math.max(users.length, 1)) + 10)
+  const events = (await Promise.all(users.map((user) => readTelemetryEventsForUser(user, perUserLimit)))).flat()
+  events.sort((left, right) => {
+    const a = Date.parse(left.receivedAt || left.at || '')
+    const b = Date.parse(right.receivedAt || right.at || '')
+    return (Number.isNaN(b) ? 0 : b) - (Number.isNaN(a) ? 0 : a)
+  })
+  return events.slice(0, limit)
+}
+
+async function handleAdminOverview(res) {
+  let healthOk = true
+  try {
+    await checkDataWritable()
+  } catch {
+    healthOk = false
+  }
+
+  const users = await getAdminUsers()
+  const aiConfig = readAiConfig()
+  const aiIssue = getAiConfigIssue(aiConfig)
+  const storage = await directoryUsage(DATA_DIR)
+  const telemetryTodayBytes = users.reduce((sum, user) => sum + user.telemetryTodayBytes, 0)
+  const recentEvents = await getAdminTelemetryEvents('', 100)
+
+  jsonResponse(res, 200, {
+    service: {
+      ok: healthOk,
+      name: 'ratio-server',
+      time: now(),
+      uptimeSeconds: process.uptime(),
+      node: process.version,
+    },
+    config: {
+      corsOrigin: CORS_ORIGIN,
+      maxBackupBytes: MAX_BACKUP_BYTES,
+    },
+    registration: {
+      inviteRequired: Boolean(REGISTRATION_INVITE_CODE),
+      openRegistration: ALLOW_OPEN_REGISTRATION && !REGISTRATION_INVITE_CODE,
+    },
+    ai: {
+      configured: aiIssue === null,
+      issue: aiIssue,
+      model: aiConfig.model,
+      reasoningEffort: aiConfig.reasoningEffort,
+      hasApiKey: Boolean(aiConfig.apiKey),
+      apiKeyMasked: maskSecret(aiConfig.apiKey),
+      chatUrl: summarizeUrl(aiConfig.chatUrl),
+      timeoutMs: AI_UPSTREAM_TIMEOUT_MS,
+      maxResponseBytes: AI_MAX_RESPONSE_BYTES,
+    },
+    telemetry: {
+      todayBytes: telemetryTodayBytes,
+      maxDailyBytes: TELEMETRY_MAX_DAILY_BYTES,
+      recentEvents: recentEvents.length,
+    },
+    limits: {
+      authPerMinute: AUTH_RATE_LIMIT_PER_MINUTE,
+      registerPerMinute: REGISTER_RATE_LIMIT_PER_MINUTE,
+      adminPerMinute: ADMIN_RATE_LIMIT_PER_MINUTE,
+      activeBuckets: rateLimitBuckets.size,
+    },
+    users: {
+      total: users.length,
+      withBackup: users.filter((user) => user.backup).length,
+    },
+    storage: {
+      dataDir: DATA_DIR,
+      totalBytes: storage.totalBytes,
+      files: storage.files,
+      directories: storage.directories,
+    },
+  })
+}
+
+async function handleAdminUsers(res) {
+  jsonResponse(res, 200, { users: await getAdminUsers() })
+}
+
+async function handleAdminTelemetryRecent(req, res) {
+  const url = new URL(req.url, 'http://localhost')
+  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)))
+  const username = (url.searchParams.get('username') || '').trim()
+  try {
+    jsonResponse(res, 200, { events: await getAdminTelemetryEvents(username, limit) })
+  } catch (error) {
+    if (error && error.status === 404) return fail(res, 404, error.message, error.code || 'not_found')
+    throw error
+  }
+}
+
+function adminAssetHeaders() {
+  return {
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'",
+  }
+}
+
+function handleAdminAsset(req, res, pathname) {
+  if (req.method !== 'GET') return textResponse(res, 405, 'Method not allowed')
+  if (!requireAdmin(req, res, true)) return
+
+  if (pathname === '/admin') {
+    return textResponse(res, 200, adminHtml, 'text/html; charset=utf-8', adminAssetHeaders())
+  }
+  if (pathname === '/admin/styles.css') {
+    return textResponse(res, 200, adminCss, 'text/css; charset=utf-8', adminAssetHeaders())
+  }
+  if (pathname === '/admin/app.js') {
+    return textResponse(res, 200, adminJs, 'text/javascript; charset=utf-8', adminAssetHeaders())
+  }
+
+  return textResponse(res, 404, 'Not found')
+}
+
+async function handleAdminApi(req, res, pathname) {
+  if (req.method !== 'GET') return fail(res, 405, 'Method not allowed', 'method_not_allowed')
+  if (!requireAdmin(req, res)) return
+
+  if (pathname === '/api/admin' || pathname === '/api/admin/overview') return handleAdminOverview(res)
+  if (pathname === '/api/admin/users') return handleAdminUsers(res)
+  if (pathname === '/api/admin/telemetry/recent') return handleAdminTelemetryRecent(req, res)
+
+  return fail(res, 404, 'Not found', 'not_found')
+}
+
 async function handleTelemetryRecent(req, res, user) {
   const file = userFile(user, `telemetry-${new Date().toISOString().slice(0, 10)}.ndjson`)
   const text = await readFileTail(file, Math.min(TELEMETRY_MAX_DAILY_BYTES, 512 * 1024))
@@ -630,6 +931,9 @@ async function route(req, res) {
     }
     return jsonResponse(res, writable ? 200 : 503, { ok: writable, service: 'ratio-server', time: now(), writable })
   }
+
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) return handleAdminAsset(req, res, pathname)
+  if (pathname === '/api/admin' || pathname.startsWith('/api/admin/')) return handleAdminApi(req, res, pathname)
 
   if (req.method === 'POST' && pathname === '/api/users') return handleRegister(req, res)
 
