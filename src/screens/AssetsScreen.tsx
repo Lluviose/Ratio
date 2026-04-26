@@ -566,7 +566,14 @@ export function AssetsScreen(props: {
 
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
-  const cloudConnected = hasCloudCredentials(cloudSync) && Boolean(cloudSync.lastConnectionAt)
+  const cloudConnected =
+    hasCloudCredentials(cloudSync) &&
+    Boolean(
+      cloudSync.lastConnectionAt ||
+        cloudSync.lastBackupAt ||
+        cloudSync.lastRestoreAt ||
+        cloudSync.lastSyncStatus === 'ok',
+    )
 
   const addButtonStyle = useMemo(() => {
     if (!addButtonTone) return undefined
