@@ -11,6 +11,7 @@ import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from './storageEvents'
 
 const AUTO_SYNC_DELAY_MS = 2500
 const AUTO_SYNC_MIN_INTERVAL_MS = 30000
+const CLOUD_SYNC_DIRTY_KEY = 'ratio.cloudSyncDirty'
 
 let initialized = false
 let syncTimer: number | null = null
@@ -29,13 +30,52 @@ function getWriteDetail(event: Event): StorageWriteDetail | null {
 
 function shouldAutoSyncKey(key: string) {
   if (!key.startsWith('ratio.')) return false
-  if (key === CLOUD_SYNC_SETTINGS_KEY) return false
+  if (key.startsWith(CLOUD_SYNC_SETTINGS_KEY)) return false
   return true
+}
+
+export function readCloudSyncDirtyToken() {
+  try {
+    return localStorage.getItem(CLOUD_SYNC_DIRTY_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function isCloudSyncDirty() {
+  return readCloudSyncDirtyToken().length > 0
+}
+
+function setCloudSyncDirty() {
+  try {
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+  } catch {
+    // Auto-sync bookkeeping must not block the primary local write.
+  }
+}
+
+function shouldScheduleSyncForSettings() {
+  const settings = getCloudSyncSettings()
+  if (!settings.autoSync || !hasCloudCredentials(settings)) return false
+  if (settings.lastSyncStatus === 'conflict') return false
+  return isCloudSyncDirty() || !settings.lastBackupAt || settings.lastSyncStatus === 'error'
+}
+
+export function markCloudSyncClean(expectedDirtyToken?: string) {
+  if (typeof window === 'undefined') return
+  try {
+    if (expectedDirtyToken !== undefined && readCloudSyncDirtyToken() !== expectedDirtyToken) return
+    localStorage.removeItem(CLOUD_SYNC_DIRTY_KEY)
+  } catch {
+    // Auto-sync bookkeeping must not block the primary local write.
+  }
 }
 
 async function runAutoSync(reason: string) {
   const settings = getCloudSyncSettings()
   if (!settings.autoSync || !hasCloudCredentials(settings)) return
+  if (settings.lastSyncStatus === 'conflict') return
+  if (!isCloudSyncDirty() && settings.lastBackupAt && settings.lastSyncStatus !== 'error') return
   if (syncInFlight) {
     pendingReason = reason
     return
@@ -53,7 +93,10 @@ async function runAutoSync(reason: string) {
   pendingReason = null
 
   try {
-    const meta = await uploadCloudBackup(settings, buildRatioBackup(), { expectedUpdatedAt: settings.lastBackupAt })
+    const dirtyToken = readCloudSyncDirtyToken()
+    const backup = buildRatioBackup()
+    const meta = await uploadCloudBackup(settings, backup, { expectedUpdatedAt: settings.lastBackupAt })
+    markCloudSyncClean(dirtyToken)
     writeCloudSyncSettingsPatch({
       lastBackupAt: meta.updatedAt,
       lastSyncAt: new Date().toISOString(),
@@ -98,9 +141,25 @@ export function initCloudAutoSync() {
 
   window.addEventListener(STORAGE_WRITE_EVENT, (event) => {
     const detail = getWriteDetail(event)
-    if (!detail || !shouldAutoSyncKey(detail.key)) return
+    if (!detail) return
+    if (detail.key === CLOUD_SYNC_SETTINGS_KEY) {
+      if (!syncInFlight && shouldScheduleSyncForSettings()) scheduleAutoSync('settings')
+      return
+    }
+    if (!shouldAutoSyncKey(detail.key)) return
+    setCloudSyncDirty()
     scheduleAutoSync(`storage:${detail.key}`)
   })
 
-  window.addEventListener('online', () => scheduleAutoSync('online'))
+  window.addEventListener('online', () => {
+    if (shouldScheduleSyncForSettings()) scheduleAutoSync('online')
+  })
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && shouldScheduleSyncForSettings()) {
+      scheduleAutoSync('visible', 800)
+    }
+  })
+
+  if (shouldScheduleSyncForSettings()) scheduleAutoSync('startup', 800)
 }

@@ -39,6 +39,8 @@ async function flushTelemetry() {
     await sendCloudTelemetry(getCloudSyncSettings(), batch)
   } catch {
     // Telemetry must never affect app behavior.
+  } finally {
+    if (queue.length > 0) scheduleFlush()
   }
 }
 

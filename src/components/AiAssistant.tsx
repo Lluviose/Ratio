@@ -95,6 +95,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  const mountedRef = useRef(true)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const lastAssistantMessageRef = useRef<HTMLDivElement | null>(null)
@@ -121,8 +122,17 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
 
   useEffect(() => {
     if (!open) return
+    if (transportIssue) return
     if (!privacyAccepted) setPrivacyOpen(true)
-  }, [open, privacyAccepted])
+  }, [open, privacyAccepted, transportIssue])
+
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -232,15 +242,20 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
       for (const m of history) apiMessages.push({ role: m.role, content: m.content })
 
       const content = await fetchAiChatCompletion({ messages: apiMessages, signal: controller.signal })
+      if (!mountedRef.current || abortRef.current !== controller) return
       setMessages((prev) => [...prev, { role: 'assistant', content }])
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return
+      if (!mountedRef.current || abortRef.current !== controller) return
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: `请求失败：${prettyError(err)}` },
       ])
     } finally {
-      setSending(false)
+      if (mountedRef.current && abortRef.current === controller) {
+        abortRef.current = null
+        setSending(false)
+      }
     }
   }
 

@@ -16,7 +16,9 @@ import {
   uploadCloudBackup,
   writeCloudSyncSettingsPatch,
   type CloudBackupMeta,
+  type CloudSyncSettings,
 } from '../lib/cloud'
+import { markCloudSyncClean, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
@@ -69,8 +71,13 @@ export function SettingsScreen(props: {
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const cloudSyncRef = useRef(cloudSync)
   const [busy, setBusy] = useState(false)
   const { toast, confirm } = useOverlay()
+
+  useEffect(() => {
+    cloudSyncRef.current = cloudSync
+  }, [cloudSync])
 
   useEffect(() => {
     if (monthStartDayRaw !== monthStartDay) setMonthStartDayRaw(monthStartDay)
@@ -127,10 +134,38 @@ export function SettingsScreen(props: {
   }
 
   const updateCloudSync = (patch: Partial<typeof cloudSync>) => {
-    setCloudSync((current) => ({ ...current, ...patch }))
+    const endpointChanged =
+      (patch.serverUrl !== undefined && patch.serverUrl !== cloudSync.serverUrl) ||
+      (patch.username !== undefined && patch.username !== cloudSync.username)
+    if (endpointChanged) setCloudAiStatus('')
+    setCloudSync((current) => {
+      if (!endpointChanged) return { ...current, ...patch }
+      return {
+        ...current,
+        ...patch,
+        lastBackupAt: undefined,
+        lastRestoreAt: undefined,
+        lastSyncAt: undefined,
+        lastSyncStatus: undefined,
+        lastSyncMessage: undefined,
+      }
+    })
   }
 
   const cloudReady = Boolean(cloudSync.serverUrl.trim() && cloudSync.username.trim() && cloudSync.password)
+
+  const isSameCloudTarget = (settings: CloudSyncSettings) => {
+    const current = cloudSyncRef.current
+    return (
+      current.serverUrl.trim() === settings.serverUrl.trim() &&
+      current.username.trim() === settings.username.trim() &&
+      current.password === settings.password
+    )
+  }
+
+  const notifyCloudTargetChanged = () => {
+    toast('云同步配置已变更，请重新操作', { tone: 'neutral' })
+  }
 
   const cloudSyncStatusLabel =
     cloudSync.lastSyncStatus === 'ok'
@@ -157,9 +192,15 @@ export function SettingsScreen(props: {
   }
 
   const registerCloud = async () => {
+    const requestSettings = cloudSyncRef.current
     setBusy(true)
     try {
-      const res = await createCloudUser(cloudSync)
+      const res = await createCloudUser(requestSettings)
+      if (!isSameCloudTarget(requestSettings)) {
+        notifyCloudTargetChanged()
+        return
+      }
+      updateCloudSync({ registrationInvite: '' })
       toast(`云账号已创建：${res.user.username}`, { tone: 'success' })
       trackTelemetry('cloud_register')
     } catch (err) {
@@ -171,9 +212,14 @@ export function SettingsScreen(props: {
   }
 
   const testCloud = async () => {
+    const requestSettings = cloudSyncRef.current
     setBusy(true)
     try {
-      const res = await fetchCloudMe(cloudSync)
+      const res = await fetchCloudMe(requestSettings)
+      if (!isSameCloudTarget(requestSettings)) {
+        notifyCloudTargetChanged()
+        return
+      }
       toast(`已连接：${res.user.username}`, { tone: 'success' })
       trackTelemetry('cloud_connect_test')
     } catch (err) {
@@ -184,15 +230,27 @@ export function SettingsScreen(props: {
     }
   }
 
-  const uploadCloud = async (force = false): Promise<void> => {
+  const uploadCloud = async (force = false, requestSettings: CloudSyncSettings = cloudSyncRef.current): Promise<void> => {
     let retrying = false
     setBusy(true)
     try {
-      const meta = await uploadCloudBackup(cloudSync, buildRatioBackup(), {
-        expectedUpdatedAt: cloudSync.lastBackupAt,
+      const dirtyToken = readCloudSyncDirtyToken()
+      const backup = buildRatioBackup()
+      const meta = await uploadCloudBackup(requestSettings, backup, {
+        expectedUpdatedAt: requestSettings.lastBackupAt,
         force,
       })
-      updateCloudSync({ lastBackupAt: meta.updatedAt })
+      if (!isSameCloudTarget(requestSettings)) {
+        notifyCloudTargetChanged()
+        return
+      }
+      markCloudSyncClean(dirtyToken)
+      updateCloudSync({
+        lastBackupAt: meta.updatedAt,
+        lastSyncAt: new Date().toISOString(),
+        lastSyncStatus: 'ok',
+        lastSyncMessage: `已上传 ${meta.itemCount} 项数据`,
+      })
       toast(`已上传 ${meta.itemCount} 项数据`, { tone: 'success' })
       trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount, force })
     } catch (err) {
@@ -209,8 +267,12 @@ export function SettingsScreen(props: {
           tone: 'danger',
         })
         if (ok) {
+          if (!isSameCloudTarget(requestSettings)) {
+            notifyCloudTargetChanged()
+            return
+          }
           retrying = true
-          return uploadCloud(true)
+          return uploadCloud(true, requestSettings)
         }
         return
       }
@@ -231,16 +293,28 @@ export function SettingsScreen(props: {
     })
     if (!ok) return
 
+    const requestSettings = cloudSyncRef.current
     setBusy(true)
     try {
-      const res = await downloadCloudBackup(cloudSync)
+      const res = await downloadCloudBackup(requestSettings)
+      if (!isSameCloudTarget(requestSettings)) {
+        notifyCloudTargetChanged()
+        return
+      }
       if (!res.backup) {
         toast('云端还没有备份', { tone: 'neutral' })
         return
       }
       const restore = restoreRatioBackup(res.backup)
       const restoredAt = new Date().toISOString()
-      writeCloudSyncSettingsPatch({ lastRestoreAt: restoredAt, lastBackupAt: res.meta?.updatedAt ?? cloudSync.lastBackupAt })
+      markCloudSyncClean()
+      writeCloudSyncSettingsPatch({
+        lastRestoreAt: restoredAt,
+        lastBackupAt: res.meta?.updatedAt ?? requestSettings.lastBackupAt,
+        lastSyncAt: restoredAt,
+        lastSyncStatus: 'ok',
+        lastSyncMessage: `已从云端恢复 ${restore.restoredKeys.length} 项数据`,
+      })
       trackTelemetry('cloud_backup_restore', { restoredKeys: restore.restoredKeys.length })
       queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
       window.location.reload()
@@ -253,9 +327,14 @@ export function SettingsScreen(props: {
   }
 
   const checkCloudAiStatus = async () => {
+    const requestSettings = cloudSyncRef.current
     setBusy(true)
     try {
-      const res = await fetchCloudAiStatus(cloudSync)
+      const res = await fetchCloudAiStatus(requestSettings)
+      if (!isSameCloudTarget(requestSettings)) {
+        notifyCloudTargetChanged()
+        return
+      }
       if (!res.ai.configured) {
         const message = res.ai.issue ? `云端 AI 未就绪：${res.ai.issue}` : '云端 AI 未就绪'
         setCloudAiStatus(message)
@@ -455,6 +534,7 @@ export function SettingsScreen(props: {
                 className="input"
                 value={cloudSync.serverUrl}
                 placeholder="http://localhost:8787"
+                disabled={busy}
                 onChange={(e) => updateCloudSync({ serverUrl: e.target.value })}
               />
             </label>
@@ -466,6 +546,7 @@ export function SettingsScreen(props: {
                   className="input"
                   value={cloudSync.username}
                   autoComplete="username"
+                  disabled={busy}
                   onChange={(e) => updateCloudSync({ username: e.target.value })}
                 />
               </label>
@@ -476,6 +557,7 @@ export function SettingsScreen(props: {
                   type="password"
                   value={cloudSync.password}
                   autoComplete="current-password"
+                  disabled={busy}
                   onChange={(e) => updateCloudSync({ password: e.target.value })}
                 />
               </label>
@@ -489,6 +571,7 @@ export function SettingsScreen(props: {
                 value={cloudSync.registrationInvite}
                 autoComplete="off"
                 placeholder="后端配置邀请码时填写"
+                disabled={busy}
                 onChange={(e) => updateCloudSync({ registrationInvite: e.target.value })}
               />
             </label>
@@ -500,7 +583,7 @@ export function SettingsScreen(props: {
                   数据变更后自动上传，最短间隔 30 秒
                 </div>
               </div>
-              <Toggle checked={cloudSync.autoSync} onChange={(autoSync) => updateCloudSync({ autoSync })} />
+              <Toggle checked={cloudSync.autoSync} disabled={busy} onChange={(autoSync) => updateCloudSync({ autoSync })} />
             </div>
 
             <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
@@ -512,6 +595,7 @@ export function SettingsScreen(props: {
               </div>
               <Toggle
                 checked={cloudSync.telemetryEnabled}
+                disabled={busy}
                 onChange={(telemetryEnabled) => updateCloudSync({ telemetryEnabled })}
               />
             </div>
@@ -555,7 +639,7 @@ export function SettingsScreen(props: {
                   color: cloudSync.lastSyncStatus === 'conflict' || cloudSync.lastSyncStatus === 'error' ? '#b91c1c' : undefined,
                 }}
               >
-                最近自动同步：{cloudSyncStatusLabel} · {cloudSync.lastSyncAt}
+                最近同步：{cloudSyncStatusLabel} · {cloudSync.lastSyncAt}
                 {cloudSync.lastSyncMessage ? ` · ${cloudSync.lastSyncMessage}` : ''}
               </div>
             ) : null}
@@ -586,7 +670,7 @@ export function SettingsScreen(props: {
                   需要先连接云同步账号，AI 服务参数在 Docker Compose 后台配置
                 </div>
               </div>
-              <Toggle checked={cloudSync.useCloudAi} onChange={(useCloudAi) => updateCloudSync({ useCloudAi })} />
+              <Toggle checked={cloudSync.useCloudAi} disabled={busy} onChange={(useCloudAi) => updateCloudSync({ useCloudAi })} />
             </div>
 
             <button

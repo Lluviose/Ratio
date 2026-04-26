@@ -38,8 +38,12 @@ docker compose up -d --build
 - `RATIO_AI_CHAT_URL`：OpenAI-compatible `/v1/chat/completions` 完整地址；或使用 `RATIO_AI_BASE_URL` + `RATIO_AI_CHAT_PATH`
 - `RATIO_AI_API_KEY`：后台转发 AI 请求时使用的密钥
 - `RATIO_AI_MODEL` / `RATIO_AI_REASONING_EFFORT`：统一模型配置
-- `RATIO_REGISTRATION_INVITE_CODE`：设置后，创建账号必须填写同一个邀请码
+- `RATIO_REGISTRATION_INVITE_CODE`：创建账号的邀请码；默认必须配置，否则注册关闭
+- `RATIO_ALLOW_OPEN_REGISTRATION`：显式设为 `true` 才允许无邀请码开放注册，不建议公网使用
 - `RATIO_AI_UPSTREAM_TIMEOUT_MS`：AI 上游请求超时时间，默认 120000
+- `RATIO_AI_MAX_RESPONSE_BYTES`：AI 上游响应最大字节数，默认 2097152
+- `RATIO_TELEMETRY_MAX_DAILY_BYTES`：单用户单日 telemetry 日志上限，默认 5242880
+- `RATIO_AUTH_RATE_LIMIT_PER_MINUTE` / `RATIO_REGISTER_RATE_LIMIT_PER_MINUTE`：认证与注册限流
 - `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
 
 启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。

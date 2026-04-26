@@ -1,18 +1,26 @@
 import http from 'node:http'
-import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink } from 'node:fs/promises'
-import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink, open } from 'node:fs/promises'
+import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 function readPositiveNumberEnv(name, fallback) {
   const value = Number(process.env[name])
   return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
+function readBooleanEnv(name, fallback = false) {
+  const raw = process.env[name]
+  if (raw == null || raw === '') return fallback
+  return /^(1|true|yes|on)$/i.test(raw.trim())
+}
+
 const PORT = Number(process.env.PORT || 8787)
 const DATA_DIR = process.env.RATIO_DATA_DIR || path.resolve('data')
 const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || '*'
 const MAX_BACKUP_BYTES = readPositiveNumberEnv('RATIO_MAX_BACKUP_BYTES', 2 * 1024 * 1024)
-const REGISTRATION_INVITE_CODE = process.env.RATIO_REGISTRATION_INVITE_CODE || ''
+const REGISTRATION_INVITE_CODE = (process.env.RATIO_REGISTRATION_INVITE_CODE || '').trim()
+const ALLOW_OPEN_REGISTRATION = readBooleanEnv('RATIO_ALLOW_OPEN_REGISTRATION', false)
 const AI_CHAT_URL = process.env.RATIO_AI_CHAT_URL || ''
 const AI_BASE_URL = process.env.RATIO_AI_BASE_URL || ''
 const AI_CHAT_PATH = process.env.RATIO_AI_CHAT_PATH || '/v1/chat/completions'
@@ -20,10 +28,16 @@ const AI_API_KEY = process.env.RATIO_AI_API_KEY || ''
 const AI_MODEL = process.env.RATIO_AI_MODEL || 'gpt-5.2'
 const AI_REASONING_EFFORT = process.env.RATIO_AI_REASONING_EFFORT || 'high'
 const AI_UPSTREAM_TIMEOUT_MS = readPositiveNumberEnv('RATIO_AI_UPSTREAM_TIMEOUT_MS', 120000)
+const AI_MAX_RESPONSE_BYTES = readPositiveNumberEnv('RATIO_AI_MAX_RESPONSE_BYTES', 2 * 1024 * 1024)
+const TELEMETRY_MAX_DAILY_BYTES = readPositiveNumberEnv('RATIO_TELEMETRY_MAX_DAILY_BYTES', 5 * 1024 * 1024)
+const AUTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AUTH_RATE_LIMIT_PER_MINUTE', 600)
+const REGISTER_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_REGISTER_RATE_LIMIT_PER_MINUTE', 30)
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 const BACKUP_SCHEMA = 'ratio.backup.v1'
 
 const mutationQueues = new Map()
+const rateLimitBuckets = new Map()
+const pbkdf2Async = promisify(pbkdf2)
 
 function now() {
   return new Date().toISOString()
@@ -58,19 +72,45 @@ function fail(res, status, message, code = 'error', details = undefined) {
   jsonResponse(res, status, { error: { code, message, ...(details && typeof details === 'object' ? details : {}) } })
 }
 
+function checkRateLimit(scope, key, maxRequests, windowMs = 60_000) {
+  const nowMs = Date.now()
+  if (rateLimitBuckets.size > 10000) {
+    for (const [bucketKey, bucket] of rateLimitBuckets.entries()) {
+      if (bucket.resetAt <= nowMs) rateLimitBuckets.delete(bucketKey)
+    }
+  }
+
+  const bucketKey = `${scope}:${key}`
+  const current = rateLimitBuckets.get(bucketKey)
+  if (!current || current.resetAt <= nowMs) {
+    rateLimitBuckets.set(bucketKey, { count: 1, resetAt: nowMs + windowMs })
+    return true
+  }
+  if (current.count >= maxRequests) return false
+  current.count += 1
+  return true
+}
+
+function requestRateLimit(req, res, scope, maxRequests) {
+  const key = req.socket?.remoteAddress || 'unknown'
+  if (checkRateLimit(scope, key, maxRequests)) return true
+  fail(res, 429, 'Too many requests; try again later', 'rate_limited')
+  return false
+}
+
 function userId(username) {
   return createHash('sha256').update(username, 'utf8').digest('hex').slice(0, 24)
 }
 
-function hashPassword(password, salt = randomBytes(16).toString('base64'), iterations = 160000) {
-  const hash = pbkdf2Sync(password, salt, iterations, 32, 'sha256').toString('base64')
+async function hashPassword(password, salt = randomBytes(16).toString('base64'), iterations = 160000) {
+  const hash = (await pbkdf2Async(password, salt, iterations, 32, 'sha256')).toString('base64')
   return { salt, iterations, hash }
 }
 
-function verifyPassword(password, user) {
-  const next = hashPassword(password, user.passwordSalt, user.passwordIterations)
-  const a = Buffer.from(next.hash)
-  const b = Buffer.from(user.passwordHash)
+async function verifyPassword(password, user) {
+  const next = await hashPassword(password, user.passwordSalt, user.passwordIterations)
+  const a = Buffer.from(next.hash, 'base64')
+  const b = Buffer.from(user.passwordHash, 'base64')
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
@@ -96,11 +136,22 @@ async function writeJsonFile(file, value) {
   await rename(tmp, file)
 }
 
-async function checkDataWritable() {
-  await stat(DATA_DIR)
-  const probe = path.join(DATA_DIR, `.health-${process.pid}-${Date.now()}-${randomUUID()}.tmp`)
+async function checkDirWritable(dir) {
+  await stat(dir)
+  const probe = path.join(dir, `.health-${process.pid}-${Date.now()}-${randomUUID()}.tmp`)
   await writeFile(probe, 'ok', 'utf8')
   await unlink(probe)
+  return true
+}
+
+async function checkDataWritable() {
+  await ensureDataDir()
+  await checkDirWritable(DATA_DIR)
+  await checkDirWritable(path.join(DATA_DIR, 'users'))
+  const users = await readJsonFile(USERS_FILE, { users: {} })
+  if (!users || typeof users !== 'object' || !users.users || typeof users.users !== 'object' || Array.isArray(users.users)) {
+    throw new Error('Invalid users file')
+  }
   return true
 }
 
@@ -179,6 +230,8 @@ function readBasicAuth(req) {
 }
 
 async function requireUser(req, res) {
+  if (!requestRateLimit(req, res, 'auth', AUTH_RATE_LIMIT_PER_MINUTE)) return null
+
   const auth = readBasicAuth(req)
   if (!auth) {
     fail(res, 401, 'Missing credentials', 'auth_required')
@@ -187,7 +240,7 @@ async function requireUser(req, res) {
 
   const users = await readUsers()
   const user = users.users[auth.username]
-  if (!user || !verifyPassword(auth.password, user)) {
+  if (!user || !(await verifyPassword(auth.password, user))) {
     fail(res, 401, 'Invalid username or password', 'auth_invalid')
     return null
   }
@@ -259,6 +312,7 @@ function getAiConfigIssue(config) {
   try {
     const url = new URL(config.chatUrl)
     if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'AI chat URL must use http or https'
+    if (url.hostname === 'example.com') return 'AI chat URL is still the example value'
   } catch {
     return 'AI chat URL is invalid'
   }
@@ -267,20 +321,30 @@ function getAiConfigIssue(config) {
 }
 
 async function handleRegister(req, res) {
+  if (!requestRateLimit(req, res, 'register', REGISTER_RATE_LIMIT_PER_MINUTE)) return
+
   const body = await parseBody(req, 64 * 1024)
   const username = typeof body.username === 'string' ? body.username.trim() : ''
   const password = typeof body.password === 'string' ? body.password : ''
   const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : ''
   if (!/^[\w.@-]{3,64}$/.test(username)) return fail(res, 400, 'Username must be 3-64 letters, numbers, dot, underscore or dash')
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters')
+  if (!REGISTRATION_INVITE_CODE && !ALLOW_OPEN_REGISTRATION) {
+    return fail(
+      res,
+      403,
+      'Registration is closed; configure RATIO_REGISTRATION_INVITE_CODE or explicitly set RATIO_ALLOW_OPEN_REGISTRATION=true',
+      'registration_closed',
+    )
+  }
   if (REGISTRATION_INVITE_CODE && inviteCode !== REGISTRATION_INVITE_CODE) {
     return fail(res, 403, 'Invalid invite code', 'invite_invalid')
   }
 
-  const result = await mutateUsers((data) => {
+  const result = await mutateUsers(async (data) => {
     if (data.users[username]) return { exists: true, user: data.users[username] }
 
-    const passwordInfo = hashPassword(password)
+    const passwordInfo = await hashPassword(password)
     const user = {
       id: userId(username),
       username,
@@ -359,6 +423,46 @@ async function handleBackupGet(res, user) {
   })
 }
 
+function httpError(message, status, code) {
+  const error = new Error(message)
+  error.status = status
+  error.code = code
+  return error
+}
+
+async function readUpstreamTextLimited(upstream, maxBytes) {
+  const contentLength = Number(upstream.headers.get('content-length') || 0)
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw httpError('AI upstream response is too large', 502, 'ai_upstream_too_large')
+  }
+
+  if (!upstream.body) {
+    const text = await upstream.text()
+    if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+      throw httpError('AI upstream response is too large', 502, 'ai_upstream_too_large')
+    }
+    return text
+  }
+
+  const reader = upstream.body.getReader()
+  const chunks = []
+  let total = 0
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = Buffer.from(value)
+    total += chunk.length
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw httpError('AI upstream response is too large', 502, 'ai_upstream_too_large')
+    }
+    chunks.push(chunk)
+  }
+
+  return Buffer.concat(chunks, total).toString('utf8')
+}
+
 function handleAiStatus(res) {
   const config = readAiConfig()
   const issue = getAiConfigIssue(config)
@@ -419,7 +523,7 @@ async function handleAiChat(req, res) {
   }
 
   try {
-    const text = await upstream.text()
+    const text = await readUpstreamTextLimited(upstream, AI_MAX_RESPONSE_BYTES)
     responseClosed = true
     clearTimeout(timeout)
     res.off('close', onResponseClose)
@@ -429,9 +533,12 @@ async function handleAiChat(req, res) {
       ...corsHeaders(),
     })
     res.end(text)
-  } catch {
+  } catch (error) {
     clearTimeout(timeout)
     res.off('close', onResponseClose)
+    if (error && error.code === 'ai_upstream_too_large') {
+      return fail(res, error.status || 502, error.message, error.code)
+    }
     if (timedOut) return fail(res, 504, 'AI upstream response timed out', 'ai_upstream_timeout')
     if (controller.signal.aborted) return
     return fail(res, 502, 'AI upstream response failed', 'ai_upstream_failed')
@@ -447,21 +554,55 @@ async function handleTelemetry(req, res, user) {
     userAgent: req.headers['user-agent'] || '',
     event,
   }))
+  if (safeEvents.length === 0) return jsonResponse(res, 200, { accepted: 0 })
 
   const file = userFile(user, `telemetry-${new Date().toISOString().slice(0, 10)}.ndjson`)
   await mkdir(path.dirname(file), { recursive: true })
-  await appendFile(file, `${safeEvents.map((event) => JSON.stringify(event)).join('\n')}\n`, 'utf8')
+  const text = `${safeEvents.map((event) => JSON.stringify(event)).join('\n')}\n`
+  const incomingBytes = Buffer.byteLength(text)
+  let currentBytes = 0
+  try {
+    currentBytes = (await stat(file)).size
+  } catch (error) {
+    if (error && error.code !== 'ENOENT') throw error
+  }
+  if (currentBytes + incomingBytes > TELEMETRY_MAX_DAILY_BYTES) {
+    return jsonResponse(res, 200, { accepted: 0, dropped: safeEvents.length, reason: 'telemetry_log_full' })
+  }
+  await appendFile(file, text, 'utf8')
   jsonResponse(res, 200, { accepted: safeEvents.length })
+}
+
+async function readFileTail(file, maxBytes) {
+  let handle
+  try {
+    handle = await open(file, 'r')
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return ''
+    throw error
+  }
+
+  try {
+    const info = await handle.stat()
+    const length = Math.min(info.size, maxBytes)
+    if (length <= 0) return ''
+
+    const buffer = Buffer.alloc(length)
+    const { bytesRead } = await handle.read(buffer, 0, length, info.size - length)
+    let text = buffer.subarray(0, bytesRead).toString('utf8')
+    if (info.size > length) {
+      const newline = text.indexOf('\n')
+      text = newline >= 0 ? text.slice(newline + 1) : ''
+    }
+    return text
+  } finally {
+    await handle.close()
+  }
 }
 
 async function handleTelemetryRecent(req, res, user) {
   const file = userFile(user, `telemetry-${new Date().toISOString().slice(0, 10)}.ndjson`)
-  let text = ''
-  try {
-    text = await readFile(file, 'utf8')
-  } catch (error) {
-    if (error && error.code !== 'ENOENT') throw error
-  }
+  const text = await readFileTail(file, Math.min(TELEMETRY_MAX_DAILY_BYTES, 512 * 1024))
   const limit = Math.min(100, Math.max(1, Number(new URL(req.url, 'http://x').searchParams.get('limit') || 20)))
   const entries = text.trim()
     ? text.trim().split('\n').slice(-limit).flatMap((line) => {
@@ -487,7 +628,7 @@ async function route(req, res) {
     } catch {
       writable = false
     }
-    return jsonResponse(res, 200, { ok: true, service: 'ratio-server', time: now(), writable })
+    return jsonResponse(res, writable ? 200 : 503, { ok: writable, service: 'ratio-server', time: now(), writable })
   }
 
   if (req.method === 'POST' && pathname === '/api/users') return handleRegister(req, res)
