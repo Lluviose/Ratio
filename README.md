@@ -33,6 +33,16 @@ Copy-Item .env.example .env
 docker compose up -d --build
 ```
 
+Ubuntu/VPS 上使用：
+
+```bash
+cp .env.example .env
+nano .env
+docker compose up -d --build
+docker compose ps
+docker compose logs -f ratio-server
+```
+
 在 `.env` 中配置：
 
 - `RATIO_AI_CHAT_URL`：OpenAI-compatible `/v1/chat/completions` 完整地址；或使用 `RATIO_AI_BASE_URL` + `RATIO_AI_CHAT_PATH`
@@ -52,7 +62,7 @@ docker compose up -d --build
 - `RATIO_ADMIN_RATE_LIMIT_PER_MINUTE`：控制台请求限流，默认 300
 - `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
 
-启动后后台默认监听 `http://localhost:8787`，可访问 `GET /api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。公网部署时请放在 HTTPS 反向代理后，并把 `RATIO_CORS_ORIGIN` 改成前端实际域名。配置管理员账号后，可打开 `http://localhost:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
+启动后后台默认监听 `http://localhost:8787`，VPS 上可用 `http://服务器IP:8787/api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。公网部署时请放在 HTTPS 反向代理后；如果前端和后端不是同一个 origin，需要把 `RATIO_CORS_ORIGIN` 改成前端实际 origin，如果同域反代则可以保持默认。配置管理员账号后，可打开 `http://服务器IP:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
 
 ### 常用命令
 

@@ -274,6 +274,7 @@ h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .panel { padding: 14px; margin-bottom: 12px; }
 .panelHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .badge { min-height: 24px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 9px; color: var(--muted); font-size: 11px; font-weight: 850; white-space: nowrap; }
+.badge.warn { border-color: rgba(183, 121, 31, 0.35); background: rgba(245, 158, 11, 0.1); color: var(--amber); }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 .kvList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -452,6 +453,12 @@ function renderKv(container, rows) {
 }
 
 function renderOverview(data) {
+  const registrationLabel = data.registration.inviteRequired
+    ? '邀请码注册'
+    : data.registration.openRegistration
+      ? '开放注册'
+      : '注册关闭'
+  const registrationTone = data.registration.inviteRequired || data.registration.openRegistration ? '' : 'warn'
   const serviceTone = data.service.ok ? 'ok' : 'bad'
   renderMetric(els.serviceState, data.service.ok ? '正常' : '异常', serviceTone)
   els.serviceMeta.textContent = '运行 ' + Math.round(data.service.uptimeSeconds || 0) + ' 秒 · ' + fmtDate(data.service.time)
@@ -465,9 +472,10 @@ function renderOverview(data) {
   renderMetric(els.aiState, data.ai.configured ? '已配置' : '未配置', data.ai.configured ? 'ok' : 'warn')
   els.aiMeta.textContent = data.ai.issue || (data.ai.model + ' · ' + data.ai.reasoningEffort)
 
-  els.configBadge.textContent = data.registration.inviteRequired ? '邀请码注册' : '开放注册'
+  els.configBadge.textContent = registrationLabel
+  els.configBadge.classList.toggle('warn', registrationTone === 'warn')
   renderKv(els.configList, [
-    ['注册策略', data.registration.inviteRequired ? '需要邀请码' : '允许无邀请码注册'],
+    ['注册策略', registrationLabel],
     ['CORS', data.config.corsOrigin],
     ['最大备份体积', fmtBytes(data.config.maxBackupBytes)],
     ['认证限流', data.limits.authPerMinute + ' / 分钟'],
@@ -557,7 +565,7 @@ async function loadAll() {
   } catch (error) {
     setStatus('bad', error instanceof Error ? error.message : '刷新失败')
   } finally {
-    els.refreshBtn.disabled = false
+    els.refreshBtn.disabled = !state.auth
   }
 }
 

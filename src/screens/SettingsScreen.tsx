@@ -150,7 +150,8 @@ export function SettingsScreen(props: {
   const updateCloudSync = (patch: Partial<typeof cloudSync>) => {
     const endpointChanged =
       (patch.serverUrl !== undefined && patch.serverUrl !== cloudSync.serverUrl) ||
-      (patch.username !== undefined && patch.username !== cloudSync.username)
+      (patch.username !== undefined && patch.username !== cloudSync.username) ||
+      (patch.password !== undefined && patch.password !== cloudSync.password)
     if (endpointChanged) {
       setCloudAiStatus('')
       setCloudConfigExpanded(true)
