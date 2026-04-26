@@ -7,6 +7,8 @@ import { pickForegroundColor } from '../lib/themes'
 import { allocateIntegerPercents } from '../lib/percent'
 import { addMoney } from '../lib/money'
 import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSettings, hasCloudCredentials } from '../lib/cloud'
+import { CLOUD_SYNC_DIRTY_KEY, readCloudSyncDirtyToken } from '../lib/cloudSync'
+import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEvents'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { quickFade } from '../lib/motionPresets'
 import { AssetsListPage } from './AssetsListPage'
@@ -544,6 +546,7 @@ export function AssetsScreen(props: {
   const [cloudSync] = useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
     coerce: coerceCloudSyncSettings,
   })
+  const [cloudDirtyToken, setCloudDirtyToken] = useState(() => readCloudSyncDirtyToken())
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [scrollerWidth, setScrollerWidth] = useState(0)
@@ -566,14 +569,33 @@ export function AssetsScreen(props: {
 
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
+  const cloudHasSuccessfulBackup = Boolean(
+    cloudSync.lastBackupAt ||
+      cloudSync.lastRestoreAt ||
+      cloudSync.lastSyncStatus === 'ok',
+  )
   const cloudConnected =
     hasCloudCredentials(cloudSync) &&
-    Boolean(
-      cloudSync.lastConnectionAt ||
-        cloudSync.lastBackupAt ||
-        cloudSync.lastRestoreAt ||
-        cloudSync.lastSyncStatus === 'ok',
-    )
+    !cloudDirtyToken &&
+    cloudHasSuccessfulBackup
+
+  useEffect(() => {
+    const updateDirtyToken = () => setCloudDirtyToken(readCloudSyncDirtyToken())
+    const onStorageWrite = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return
+      const detail = event.detail as StorageWriteDetail | undefined
+      if (detail?.key === CLOUD_SYNC_DIRTY_KEY) updateDirtyToken()
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === CLOUD_SYNC_DIRTY_KEY) updateDirtyToken()
+    }
+    window.addEventListener(STORAGE_WRITE_EVENT, onStorageWrite)
+    window.addEventListener('storage', onStorage)
+    return () => {
+      window.removeEventListener(STORAGE_WRITE_EVENT, onStorageWrite)
+      window.removeEventListener('storage', onStorage)
+    }
+  }, [])
 
   const addButtonStyle = useMemo(() => {
     if (!addButtonTone) return undefined
@@ -1622,14 +1644,14 @@ export function AssetsScreen(props: {
               </button>
               {cloudConnected ? (
                 <motion.span
-                  className="w-6 h-6 -m-1 rounded-full flex items-center justify-center bg-emerald-500 text-white shadow-[0_8px_18px_-12px_rgba(16,185,129,0.95)]"
+                  className="w-5 h-5 -m-0.5 flex items-center justify-center text-emerald-500 drop-shadow-[0_2px_4px_rgba(16,185,129,0.28)]"
                   initial={{ opacity: 0, scale: 0.72, y: -2 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={quickFade}
                   aria-label="cloud connected"
                   title="云端已连接"
                 >
-                  <Cloud size={14} strokeWidth={2.6} />
+                  <Cloud size={16} strokeWidth={2.7} />
                 </motion.span>
               ) : null}
             </div>

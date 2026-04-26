@@ -7,11 +7,11 @@ import {
   uploadCloudBackup,
   writeCloudSyncSettingsPatch,
 } from './cloud'
-import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from './storageEvents'
+import { STORAGE_WRITE_EVENT, dispatchStorageWrite, type StorageWriteDetail } from './storageEvents'
 
 const AUTO_SYNC_DELAY_MS = 2500
 const AUTO_SYNC_MIN_INTERVAL_MS = 30000
-const CLOUD_SYNC_DIRTY_KEY = 'ratio.cloudSyncDirty'
+export const CLOUD_SYNC_DIRTY_KEY = 'ratio.cloudSyncDirty'
 
 let initialized = false
 let syncTimer: number | null = null
@@ -48,7 +48,9 @@ function isCloudSyncDirty() {
 
 function setCloudSyncDirty() {
   try {
-    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, token)
+    dispatchStorageWrite(CLOUD_SYNC_DIRTY_KEY, token)
   } catch {
     // Auto-sync bookkeeping must not block the primary local write.
   }
@@ -66,6 +68,7 @@ export function markCloudSyncClean(expectedDirtyToken?: string) {
   try {
     if (expectedDirtyToken !== undefined && readCloudSyncDirtyToken() !== expectedDirtyToken) return
     localStorage.removeItem(CLOUD_SYNC_DIRTY_KEY)
+    dispatchStorageWrite(CLOUD_SYNC_DIRTY_KEY)
   } catch {
     // Auto-sync bookkeeping must not block the primary local write.
   }
