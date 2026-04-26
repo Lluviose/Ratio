@@ -37,6 +37,7 @@ export function OverlayProvider(props: { children: ReactNode }) {
 
   const toastTimersRef = useRef<Map<string, number>>(new Map())
   const confirmQueueTimerRef = useRef<number | null>(null)
+  const lastCloudSyncConflictToastAtRef = useRef(0)
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const clearToastTimer = useCallback((id: string) => {
@@ -78,6 +79,27 @@ export function OverlayProvider(props: { children: ReactNode }) {
     const queued = takeQueuedToastAfterReload()
     if (!queued) return
     toast(queued.message, queued.options)
+  }, [toast])
+
+  useEffect(() => {
+    const onCloudSync = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return
+      const detail = event.detail
+      if (!detail || typeof detail !== 'object') return
+      if (Reflect.get(detail, 'ok') !== false) return
+      if (Reflect.get(detail, 'code') !== 'backup_conflict') return
+
+      const now = Date.now()
+      if (now - lastCloudSyncConflictToastAtRef.current < 30000) return
+      lastCloudSyncConflictToastAtRef.current = now
+      toast('自动备份暂停：云端备份已更新，请到设置中选择上传覆盖或恢复云端备份。', {
+        tone: 'danger',
+        durationMs: 5200,
+      })
+    }
+
+    window.addEventListener('ratio:cloud-sync', onCloudSync)
+    return () => window.removeEventListener('ratio:cloud-sync', onCloudSync)
   }, [toast])
 
   useEffect(() => {

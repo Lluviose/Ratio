@@ -10,8 +10,12 @@ export type CloudSyncSettings = {
   autoSync: boolean
   telemetryEnabled: boolean
   useCloudAi: boolean
+  registrationInvite: string
   lastBackupAt?: string
   lastRestoreAt?: string
+  lastSyncAt?: string
+  lastSyncStatus?: 'ok' | 'error' | 'conflict'
+  lastSyncMessage?: string
 }
 
 export type CloudBackupMeta = {
@@ -51,6 +55,7 @@ export const DEFAULT_CLOUD_SYNC_SETTINGS: CloudSyncSettings = {
   autoSync: false,
   telemetryEnabled: false,
   useCloudAi: false,
+  registrationInvite: '',
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -70,8 +75,15 @@ export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
     autoSync: value.autoSync === true,
     telemetryEnabled: value.telemetryEnabled === true,
     useCloudAi: value.useCloudAi === true,
+    registrationInvite: asString(value.registrationInvite),
     lastBackupAt: typeof value.lastBackupAt === 'string' ? value.lastBackupAt : undefined,
     lastRestoreAt: typeof value.lastRestoreAt === 'string' ? value.lastRestoreAt : undefined,
+    lastSyncAt: typeof value.lastSyncAt === 'string' ? value.lastSyncAt : undefined,
+    lastSyncStatus:
+      value.lastSyncStatus === 'ok' || value.lastSyncStatus === 'error' || value.lastSyncStatus === 'conflict'
+        ? value.lastSyncStatus
+        : undefined,
+    lastSyncMessage: typeof value.lastSyncMessage === 'string' ? value.lastSyncMessage : undefined,
   }
 }
 
@@ -164,7 +176,11 @@ export async function createCloudUser(settings: CloudSyncSettings) {
   const res = await fetch(cloudUrl(settings, '/api/users'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: settings.username.trim(), password: settings.password }),
+    body: JSON.stringify({
+      username: settings.username.trim(),
+      password: settings.password,
+      inviteCode: settings.registrationInvite.trim(),
+    }),
   })
   if (!res.ok) throw await readError(res)
   return (await res.json()) as { user: { username: string; createdAt: string } }

@@ -1,6 +1,7 @@
 import { buildRatioBackup } from './backup'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
+  CloudRequestError,
   getCloudSyncSettings,
   hasCloudCredentials,
   uploadCloudBackup,
@@ -53,11 +54,23 @@ async function runAutoSync(reason: string) {
 
   try {
     const meta = await uploadCloudBackup(settings, buildRatioBackup(), { expectedUpdatedAt: settings.lastBackupAt })
-    writeCloudSyncSettingsPatch({ lastBackupAt: meta.updatedAt })
+    writeCloudSyncSettingsPatch({
+      lastBackupAt: meta.updatedAt,
+      lastSyncAt: new Date().toISOString(),
+      lastSyncStatus: 'ok',
+      lastSyncMessage: `已自动上传 ${meta.itemCount} 项数据`,
+    })
     window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: true, reason, itemCount: meta.itemCount } }))
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Cloud sync failed'
-    window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: false, reason, message } }))
+    const code = error instanceof CloudRequestError ? error.code : undefined
+    const status = code === 'backup_conflict' ? 'conflict' : 'error'
+    writeCloudSyncSettingsPatch({
+      lastSyncAt: new Date().toISOString(),
+      lastSyncStatus: status,
+      lastSyncMessage: message.slice(0, 180),
+    })
+    window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: false, reason, message, code } }))
   } finally {
     syncInFlight = false
     if (pendingReason) {

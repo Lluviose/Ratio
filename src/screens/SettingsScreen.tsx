@@ -132,6 +132,15 @@ export function SettingsScreen(props: {
 
   const cloudReady = Boolean(cloudSync.serverUrl.trim() && cloudSync.username.trim() && cloudSync.password)
 
+  const cloudSyncStatusLabel =
+    cloudSync.lastSyncStatus === 'ok'
+      ? '正常'
+      : cloudSync.lastSyncStatus === 'conflict'
+        ? '冲突'
+        : cloudSync.lastSyncStatus === 'error'
+          ? '失败'
+          : ''
+
   const readConflictMeta = (err: unknown): CloudBackupMeta | null => {
     if (!(err instanceof CloudRequestError)) return null
     if (err.code !== 'backup_conflict') return null
@@ -472,6 +481,18 @@ export function SettingsScreen(props: {
               </label>
             </div>
 
+            <label className="field">
+              <div className="fieldLabel">创建账号邀请码</div>
+              <input
+                className="input"
+                type="password"
+                value={cloudSync.registrationInvite}
+                autoComplete="off"
+                placeholder="后端配置邀请码时填写"
+                onChange={(e) => updateCloudSync({ registrationInvite: e.target.value })}
+              />
+            </label>
+
             <div className="assetItem" style={{ background: 'var(--bg)', border: 'none', padding: 14 }}>
               <div>
                 <div className="assetName">自动备份</div>
@@ -525,6 +546,19 @@ export function SettingsScreen(props: {
             <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
               {cloudSync.lastBackupAt ? `最近上传：${cloudSync.lastBackupAt}` : '尚未上传云端备份'}
             </div>
+            {cloudSync.lastSyncAt ? (
+              <div
+                className="muted"
+                style={{
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: cloudSync.lastSyncStatus === 'conflict' || cloudSync.lastSyncStatus === 'error' ? '#b91c1c' : undefined,
+                }}
+              >
+                最近自动同步：{cloudSyncStatusLabel} · {cloudSync.lastSyncAt}
+                {cloudSync.lastSyncMessage ? ` · ${cloudSync.lastSyncMessage}` : ''}
+              </div>
+            ) : null}
           </div>
         </div>
       </motion.div>

@@ -79,8 +79,8 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
   const { initialOpen = false } = props
   const [open, setOpen] = useState(() => initialOpen)
   const [isOnline, setIsOnline] = useState(() => navigator.onLine)
-  const [privacyAccepted, setPrivacyAccepted] = useLocalStorageState<boolean>('ratio.aiPrivacyAccepted', false)
-  useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
+  const [acceptedServerUrl, setAcceptedServerUrl] = useLocalStorageState<string>('ratio.aiPrivacyAcceptedServerUrl', '')
+  const [cloudSync] = useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
     coerce: coerceCloudSyncSettings,
   })
   const [privacyOpen, setPrivacyOpen] = useState(false)
@@ -90,6 +90,8 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
 
   const transportIssue = getAiEndpointIssue()
   const aiTransportLabel = getAiTransportLabel()
+  const currentServerUrl = cloudSync.serverUrl.trim()
+  const privacyAccepted = Boolean(currentServerUrl && acceptedServerUrl === currentServerUrl)
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -434,7 +436,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                         type="button"
                         className="h-11 px-4 rounded-[18px] bg-[var(--primary)] text-[var(--primary-contrast)] font-extrabold shadow-sm"
                         onClick={() => {
-                          setPrivacyAccepted(true)
+                          setAcceptedServerUrl(currentServerUrl)
                           setPrivacyOpen(false)
                         }}
                       >

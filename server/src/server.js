@@ -1,18 +1,25 @@
 import http from 'node:http'
-import { mkdir, readFile, rename, stat, writeFile, appendFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink } from 'node:fs/promises'
 import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import path from 'node:path'
+
+function readPositiveNumberEnv(name, fallback) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
 
 const PORT = Number(process.env.PORT || 8787)
 const DATA_DIR = process.env.RATIO_DATA_DIR || path.resolve('data')
 const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || '*'
-const MAX_BACKUP_BYTES = Number(process.env.RATIO_MAX_BACKUP_BYTES || 2 * 1024 * 1024)
+const MAX_BACKUP_BYTES = readPositiveNumberEnv('RATIO_MAX_BACKUP_BYTES', 2 * 1024 * 1024)
+const REGISTRATION_INVITE_CODE = process.env.RATIO_REGISTRATION_INVITE_CODE || ''
 const AI_CHAT_URL = process.env.RATIO_AI_CHAT_URL || ''
 const AI_BASE_URL = process.env.RATIO_AI_BASE_URL || ''
 const AI_CHAT_PATH = process.env.RATIO_AI_CHAT_PATH || '/v1/chat/completions'
 const AI_API_KEY = process.env.RATIO_AI_API_KEY || ''
 const AI_MODEL = process.env.RATIO_AI_MODEL || 'gpt-5.2'
 const AI_REASONING_EFFORT = process.env.RATIO_AI_REASONING_EFFORT || 'high'
+const AI_UPSTREAM_TIMEOUT_MS = readPositiveNumberEnv('RATIO_AI_UPSTREAM_TIMEOUT_MS', 120000)
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 const BACKUP_SCHEMA = 'ratio.backup.v1'
 
@@ -87,6 +94,14 @@ async function writeJsonFile(file, value) {
   const tmp = `${file}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
   await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
   await rename(tmp, file)
+}
+
+async function checkDataWritable() {
+  await stat(DATA_DIR)
+  const probe = path.join(DATA_DIR, `.health-${process.pid}-${Date.now()}-${randomUUID()}.tmp`)
+  await writeFile(probe, 'ok', 'utf8')
+  await unlink(probe)
+  return true
 }
 
 async function readUsers() {
@@ -255,8 +270,12 @@ async function handleRegister(req, res) {
   const body = await parseBody(req, 64 * 1024)
   const username = typeof body.username === 'string' ? body.username.trim() : ''
   const password = typeof body.password === 'string' ? body.password : ''
+  const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : ''
   if (!/^[\w.@-]{3,64}$/.test(username)) return fail(res, 400, 'Username must be 3-64 letters, numbers, dot, underscore or dash')
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters')
+  if (REGISTRATION_INVITE_CODE && inviteCode !== REGISTRATION_INVITE_CODE) {
+    return fail(res, 403, 'Invalid invite code', 'invite_invalid')
+  }
 
   const result = await mutateUsers((data) => {
     if (data.users[username]) return { exists: true, user: data.users[username] }
@@ -363,10 +382,24 @@ async function handleAiChat(req, res) {
   const body = await parseBody(req, 1024 * 1024)
   if (!Array.isArray(body.messages)) return fail(res, 400, 'messages must be an array')
 
+  const controller = new AbortController()
+  let timedOut = false
+  let responseClosed = false
+  const timeout = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, AI_UPSTREAM_TIMEOUT_MS)
+  const onResponseClose = () => {
+    if (responseClosed) return
+    controller.abort()
+  }
+  res.on('close', onResponseClose)
+
   let upstream
   try {
     upstream = await fetch(config.chatUrl, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
@@ -378,16 +411,31 @@ async function handleAiChat(req, res) {
       }),
     })
   } catch {
+    clearTimeout(timeout)
+    res.off('close', onResponseClose)
+    if (timedOut) return fail(res, 504, 'AI upstream request timed out', 'ai_upstream_timeout')
+    if (controller.signal.aborted) return
     return fail(res, 502, 'AI upstream request failed', 'ai_upstream_failed')
   }
 
-  const text = await upstream.text()
-  res.writeHead(upstream.status, {
-    'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-    'Cache-Control': 'no-store',
-    ...corsHeaders(),
-  })
-  res.end(text)
+  try {
+    const text = await upstream.text()
+    responseClosed = true
+    clearTimeout(timeout)
+    res.off('close', onResponseClose)
+    res.writeHead(upstream.status, {
+      'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      ...corsHeaders(),
+    })
+    res.end(text)
+  } catch {
+    clearTimeout(timeout)
+    res.off('close', onResponseClose)
+    if (timedOut) return fail(res, 504, 'AI upstream response timed out', 'ai_upstream_timeout')
+    if (controller.signal.aborted) return
+    return fail(res, 502, 'AI upstream response failed', 'ai_upstream_failed')
+  }
 }
 
 async function handleTelemetry(req, res, user) {
@@ -435,7 +483,7 @@ async function route(req, res) {
   if (req.method === 'GET' && pathname === '/api/health') {
     let writable = true
     try {
-      await stat(DATA_DIR)
+      await checkDataWritable()
     } catch {
       writable = false
     }
