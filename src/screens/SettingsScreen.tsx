@@ -53,6 +53,19 @@ function isAbortError(err: unknown) {
   return typeof err === 'object' && err !== null && 'name' in err && Reflect.get(err, 'name') === 'AbortError'
 }
 
+function cloudSyncTelemetryPayload(settings: CloudSyncSettings) {
+  return {
+    autoSync: settings.autoSync,
+    telemetryEnabled: settings.telemetryEnabled,
+    useCloudAi: settings.useCloudAi,
+    hasLastBackupAt: Boolean(settings.lastBackupAt),
+    lastBackupAt: settings.lastBackupAt || '',
+    lastSyncStatus: settings.lastSyncStatus || '',
+    lastSyncAt: settings.lastSyncAt || '',
+    dirty: readCloudSyncDirtyToken().length > 0,
+  }
+}
+
 export function SettingsScreen(props: {
   themeOptions: ThemeOption[]
   theme: ThemeId
@@ -252,7 +265,10 @@ export function SettingsScreen(props: {
       }
       writeCloudSyncSettingsPatch({ lastConnectionAt: new Date().toISOString() })
       toast(`已连接：${res.user.username}`, { tone: 'success' })
-      trackTelemetry('cloud_connect_test')
+      trackTelemetry('cloud_connect_test', {
+        username: res.user.username,
+        ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+      })
     } catch (err) {
       if (isAbortError(err)) return
       if (!mountedRef.current) return

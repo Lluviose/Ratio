@@ -9,6 +9,7 @@ type TelemetryEvent = {
 const queue: TelemetryEvent[] = []
 let initialized = false
 let flushTimer: number | null = null
+const CLOUD_SYNC_DIRTY_KEY = 'ratio.cloudSyncDirty'
 
 function enabled() {
   const settings = getCloudSyncSettings()
@@ -56,6 +57,29 @@ function readCustomEventDetail(event: Event): Record<string, unknown> | undefine
   return detail as Record<string, unknown>
 }
 
+function readCloudSyncDirty() {
+  try {
+    return (localStorage.getItem(CLOUD_SYNC_DIRTY_KEY) || '').length > 0
+  } catch {
+    return false
+  }
+}
+
+function cloudSyncStatusPayload() {
+  const settings = getCloudSyncSettings()
+  return {
+    cloudReady: hasCloudCredentials(settings),
+    autoSync: settings.autoSync,
+    telemetryEnabled: settings.telemetryEnabled,
+    useCloudAi: settings.useCloudAi,
+    hasLastBackupAt: Boolean(settings.lastBackupAt),
+    lastBackupAt: settings.lastBackupAt || '',
+    lastSyncStatus: settings.lastSyncStatus || '',
+    lastSyncAt: settings.lastSyncAt || '',
+    dirty: readCloudSyncDirty(),
+  }
+}
+
 export function trackTelemetry(name: string, payload?: Record<string, unknown>) {
   if (typeof window === 'undefined') return
   if (!enabled()) return
@@ -93,5 +117,6 @@ export function initTelemetry() {
   trackTelemetry('app_loaded', {
     path: window.location.pathname,
     online: navigator.onLine,
+    ...cloudSyncStatusPayload(),
   })
 }
