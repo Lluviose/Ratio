@@ -132,6 +132,52 @@ describe('initCloudAutoSync', () => {
     expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
   })
 
+  it('reconciles a persisted conflict with matching remote data on startup', async () => {
+    const { buildRatioBackup } = await import('./backup')
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["wallet"]')
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, 'dirty-token')
+    const localBackup = buildRatioBackup()
+    const remoteMeta = {
+      updatedAt: '2026-04-29T13:03:54.267Z',
+      clientCreatedAt: '2026-04-29T12:49:43.758Z',
+      itemCount: Object.keys(localBackup.items).length,
+      device: 'iPhone',
+    }
+
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: { ...localBackup, createdAt: remoteMeta.clientCreatedAt },
+      meta: remoteMeta,
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-28T02:42:46.844Z',
+        lastSyncStatus: 'conflict',
+        lastSyncAt: '2026-05-07T19:28:50.197Z',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+  })
+
   it('keeps a conflict when the remote backup differs from local data', async () => {
     const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
     const { initCloudAutoSync } = await import('./cloudSync')

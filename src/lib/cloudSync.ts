@@ -63,7 +63,6 @@ function setCloudSyncDirty() {
 function shouldScheduleSyncForSettings() {
   const settings = getCloudSyncSettings()
   if (!settings.autoSync || !hasCloudCredentials(settings)) return false
-  if (settings.lastSyncStatus === 'conflict' && settings.lastBackupAt) return false
   return (
     isCloudSyncDirty() ||
     !settings.lastBackupAt ||
@@ -177,7 +176,6 @@ async function runAutoSync(reason: string) {
   const dirty = isCloudSyncDirty()
 
   if (!settings.autoSync || !hasCloudCredentials(settings)) return
-  if (settings.lastSyncStatus === 'conflict' && settings.lastBackupAt) return
   if (!dirty && settings.lastBackupAt && settings.lastSyncStatus !== 'error') return
   if (syncInFlight) {
     pendingReason = reason
@@ -208,9 +206,11 @@ async function runAutoSync(reason: string) {
   })
 
   try {
-    if (!settings.lastBackupAt) {
+    const shouldTryReconcile = !settings.lastBackupAt || settings.lastSyncStatus === 'conflict'
+    if (shouldTryReconcile) {
       const remoteState = await reconcileRemoteBackup(settings, backup, reason, dirtyToken)
       if (remoteState !== 'missing') return
+      if (settings.lastSyncStatus === 'conflict') return
     }
 
     const meta = await uploadCloudBackup(settings, backup, { expectedUpdatedAt: settings.lastBackupAt })
