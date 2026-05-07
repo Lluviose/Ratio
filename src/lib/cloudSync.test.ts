@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const cloudMocks = vi.hoisted(() => ({
   downloadCloudBackup: vi.fn(),
+  fetchCloudBackupMeta: vi.fn(),
   uploadCloudBackup: vi.fn(),
 }))
 
@@ -10,6 +11,7 @@ vi.mock('./cloud', async () => {
   return {
     ...actual,
     downloadCloudBackup: cloudMocks.downloadCloudBackup,
+    fetchCloudBackupMeta: cloudMocks.fetchCloudBackupMeta,
     uploadCloudBackup: cloudMocks.uploadCloudBackup,
   }
 })
@@ -20,6 +22,7 @@ beforeEach(() => {
   localStorage.clear()
   sessionStorage.clear()
   cloudMocks.downloadCloudBackup.mockReset()
+  cloudMocks.fetchCloudBackupMeta.mockReset()
   cloudMocks.uploadCloudBackup.mockReset()
 })
 
@@ -29,6 +32,209 @@ afterEach(() => {
 })
 
 describe('initCloudAutoSync', () => {
+  it('probes remote metadata on startup when local data is clean', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { initCloudAutoSync } = await import('./cloudSync')
+
+    const remoteMeta = {
+      updatedAt: '2026-04-29T13:03:54.267Z',
+      clientCreatedAt: '2026-04-29T12:49:43.758Z',
+      itemCount: 1,
+      device: 'iPhone',
+    }
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: remoteMeta.updatedAt,
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).not.toHaveBeenCalled()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+  })
+
+  it('reconciles clean local metadata when another device uploaded identical data', async () => {
+    const { buildRatioBackup } = await import('./backup')
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["wallet"]')
+    const localBackup = buildRatioBackup()
+    const remoteMeta = {
+      updatedAt: '2026-05-08T00:10:00.000Z',
+      clientCreatedAt: '2026-04-29T12:49:43.758Z',
+      itemCount: Object.keys(localBackup.items).length,
+      device: 'Mac',
+    }
+
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: { ...localBackup, createdAt: remoteMeta.clientCreatedAt },
+      meta: remoteMeta,
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+  })
+
+  it('marks a clean device as conflicted when remote metadata changed to different data', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["local"]')
+    const remoteMeta = {
+      updatedAt: '2026-05-08T00:10:00.000Z',
+      clientCreatedAt: '2026-05-08T00:09:00.000Z',
+      itemCount: 1,
+      device: 'Mac',
+    }
+
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: {
+        schema: 'ratio.backup.v1',
+        createdAt: remoteMeta.clientCreatedAt,
+        items: {
+          'ratio.accounts': '["remote"]',
+        },
+      },
+      meta: remoteMeta,
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe('2026-04-29T13:03:54.267Z')
+    expect(settings.lastSyncStatus).toBe('conflict')
+    expect(settings.lastSyncMessage).toContain(remoteMeta.updatedAt)
+  })
+
+  it('marks a clean device as conflicted when the known remote backup disappeared', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { initCloudAutoSync } = await import('./cloudSync')
+
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: null })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).not.toHaveBeenCalled()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe('2026-04-29T13:03:54.267Z')
+    expect(settings.lastSyncStatus).toBe('conflict')
+    expect(settings.lastSyncMessage).toContain('云端备份不存在')
+  })
+
+  it('recovers an error status without uploading when remote metadata is current', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { initCloudAutoSync } = await import('./cloudSync')
+
+    const remoteMeta = {
+      updatedAt: '2026-04-29T13:03:54.267Z',
+      clientCreatedAt: '2026-04-29T12:49:43.758Z',
+      itemCount: 1,
+      device: 'iPhone',
+    }
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: remoteMeta.updatedAt,
+        lastSyncStatus: 'error',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).not.toHaveBeenCalled()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+    expect(settings.lastSyncMessage).toContain('云端备份状态正常')
+  })
+
   it('recovers sync metadata from a matching remote backup when lastBackupAt is missing', async () => {
     const { buildRatioBackup } = await import('./backup')
     const { DEFAULT_CLOUD_SYNC_SETTINGS, CLOUD_SYNC_SETTINGS_KEY, getCloudSyncSettings } = await import('./cloud')
@@ -221,5 +427,61 @@ describe('initCloudAutoSync', () => {
     expect(settings.lastBackupAt).toBeUndefined()
     expect(settings.lastSyncStatus).toBe('conflict')
     expect(settings.lastSyncMessage).toContain('2026-04-29T13:03:54.267Z')
+  })
+
+  it('does not write an old auto-sync result into a changed cloud target', async () => {
+    const { buildRatioBackup } = await import('./backup')
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["wallet"]')
+    const localBackup = buildRatioBackup()
+    const remoteMeta = {
+      updatedAt: '2026-05-08T00:10:00.000Z',
+      clientCreatedAt: localBackup.createdAt,
+      itemCount: Object.keys(localBackup.items).length,
+      device: 'iPhone',
+    }
+
+    cloudMocks.uploadCloudBackup.mockImplementation(async () => {
+      localStorage.setItem(
+        CLOUD_SYNC_SETTINGS_KEY,
+        JSON.stringify({
+          ...DEFAULT_CLOUD_SYNC_SETTINGS,
+          serverUrl: 'https://example.com',
+          username: 'other-user',
+          password: 'secret',
+          autoSync: true,
+        }),
+      )
+      return remoteMeta
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+      }),
+    )
+
+    initCloudAutoSync()
+    window.dispatchEvent(
+      new CustomEvent('ratio:storage-write', {
+        detail: { key: 'ratio.accounts', raw: '["wallet"]' },
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(2500)
+
+    expect(cloudMocks.uploadCloudBackup).toHaveBeenCalledOnce()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.username).toBe('other-user')
+    expect(settings.lastBackupAt).toBeUndefined()
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).not.toBeNull()
   })
 })

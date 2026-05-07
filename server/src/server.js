@@ -598,6 +598,11 @@ async function handleBackupGet(res, user) {
   })
 }
 
+async function handleBackupMetaGet(res, user) {
+  const payload = await readJsonFile(userFile(user, 'backup.json'), null)
+  jsonResponse(res, 200, { meta: backupMeta(payload) })
+}
+
 function httpError(message, status, code) {
   const error = new Error(message)
   error.status = status
@@ -1115,6 +1120,7 @@ async function route(req, res) {
   if (!user) return
 
   if (req.method === 'GET' && pathname === '/api/me') return jsonResponse(res, 200, { user: publicUser(user) })
+  if (req.method === 'GET' && pathname === '/api/backup/meta') return handleBackupMetaGet(res, user)
   if (req.method === 'GET' && pathname === '/api/backup') return handleBackupGet(res, user)
   if (req.method === 'PUT' && pathname === '/api/backup') return handleBackupPut(req, res, user)
   if (req.method === 'GET' && pathname === '/api/ai/status') return handleAiStatus(res)

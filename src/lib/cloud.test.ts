@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
-import { DEFAULT_CLOUD_SYNC_SETTINGS, mergeCloudSyncSettings, type CloudSyncSettings } from './cloud'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  DEFAULT_CLOUD_SYNC_SETTINGS,
+  fetchCloudBackupMeta,
+  mergeCloudSyncSettings,
+  type CloudSyncSettings,
+} from './cloud'
 
 function withSyncState(patch: Partial<CloudSyncSettings> = {}): CloudSyncSettings {
   return {
@@ -17,6 +22,10 @@ function withSyncState(patch: Partial<CloudSyncSettings> = {}): CloudSyncSetting
     ...patch,
   }
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+})
 
 describe('mergeCloudSyncSettings', () => {
   it('keeps backup metadata when only the password changes', () => {
@@ -45,5 +54,40 @@ describe('mergeCloudSyncSettings', () => {
     expect(next.lastSyncAt).toBeUndefined()
     expect(next.lastSyncStatus).toBeUndefined()
     expect(next.lastSyncMessage).toBeUndefined()
+  })
+})
+
+describe('fetchCloudBackupMeta', () => {
+  it('falls back to the full backup endpoint when the metadata endpoint is not deployed yet', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { code: 'not_found', message: 'Not found' } }), {
+          status: 404,
+          statusText: 'Not Found',
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            backup: null,
+            meta: {
+              updatedAt: '2026-04-29T13:03:54.267Z',
+              clientCreatedAt: '2026-04-29T12:49:43.758Z',
+              itemCount: 1,
+              device: 'iPhone',
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const res = await fetchCloudBackupMeta(withSyncState())
+
+    expect(res.meta?.updatedAt).toBe('2026-04-29T13:03:54.267Z')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0][0]).toBe('https://example.com/api/backup/meta')
+    expect(fetchMock.mock.calls[1][0]).toBe('https://example.com/api/backup')
   })
 })

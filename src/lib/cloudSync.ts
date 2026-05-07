@@ -5,6 +5,7 @@ import {
   CloudRequestError,
   type CloudSyncSettings,
   downloadCloudBackup,
+  fetchCloudBackupMeta,
   getCloudSyncSettings,
   hasCloudCredentials,
   uploadCloudBackup,
@@ -22,6 +23,7 @@ let syncTimer: number | null = null
 let lastAutoSyncAt = 0
 let syncInFlight = false
 let pendingReason: string | null = null
+let suppressSettingsSchedule = false
 
 function getWriteDetail(event: Event): StorageWriteDetail | null {
   if (!(event instanceof CustomEvent)) return null
@@ -60,15 +62,18 @@ function setCloudSyncDirty() {
   }
 }
 
-function shouldScheduleSyncForSettings() {
+function shouldScheduleSync(options: { includeRemoteProbe?: boolean } = {}) {
   const settings = getCloudSyncSettings()
   if (!settings.autoSync || !hasCloudCredentials(settings)) return false
-  return (
+  if (
     isCloudSyncDirty() ||
     !settings.lastBackupAt ||
     settings.lastSyncStatus === 'error' ||
     settings.lastSyncStatus === 'conflict'
-  )
+  ) {
+    return true
+  }
+  return options.includeRemoteProbe === true
 }
 
 export function markCloudSyncClean(expectedDirtyToken?: string) {
@@ -86,15 +91,45 @@ function emitCloudSyncResult(detail: Record<string, unknown>) {
   window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail }))
 }
 
+function normalizeCloudTarget(settings: CloudSyncSettings) {
+  return {
+    serverUrl: settings.serverUrl.trim().replace(/\/+$/, ''),
+    username: settings.username.trim(),
+  }
+}
+
+function isSameCloudTarget(settings: CloudSyncSettings) {
+  const expected = normalizeCloudTarget(settings)
+  const current = normalizeCloudTarget(getCloudSyncSettings())
+  return expected.serverUrl === current.serverUrl && expected.username === current.username
+}
+
+function canApplyAutoSyncResult(settings: CloudSyncSettings, reason: string) {
+  if (isSameCloudTarget(settings)) return true
+  trackTelemetry('cloud_sync_auto_stale_result', { reason })
+  return false
+}
+
+function writeAutoSyncSettingsPatch(patch: Partial<CloudSyncSettings>) {
+  suppressSettingsSchedule = true
+  try {
+    writeCloudSyncSettingsPatch(patch)
+  } finally {
+    suppressSettingsSchedule = false
+  }
+}
+
 function writeAutoSyncSuccess(
+  settings: CloudSyncSettings,
   meta: CloudBackupMeta,
   reason: string,
   message: string,
   dirtyToken: string | undefined,
   telemetryEvent: string,
 ) {
+  if (!canApplyAutoSyncResult(settings, reason)) return false
   markCloudSyncClean(dirtyToken)
-  writeCloudSyncSettingsPatch({
+  writeAutoSyncSettingsPatch({
     lastBackupAt: meta.updatedAt,
     lastSyncAt: new Date().toISOString(),
     lastSyncStatus: 'ok',
@@ -106,9 +141,11 @@ function writeAutoSyncSuccess(
     itemCount: meta.itemCount,
     remoteUpdatedAt: meta.updatedAt,
   })
+  return true
 }
 
 function writeAutoSyncConflict(
+  settings: CloudSyncSettings,
   reason: string,
   message: string,
   payload: {
@@ -119,7 +156,8 @@ function writeAutoSyncConflict(
     hasLastBackupAt?: boolean
   } = {},
 ) {
-  writeCloudSyncSettingsPatch({
+  if (!canApplyAutoSyncResult(settings, reason)) return false
+  writeAutoSyncSettingsPatch({
     lastSyncAt: new Date().toISOString(),
     lastSyncStatus: 'conflict',
     lastSyncMessage: message.slice(0, 180),
@@ -130,6 +168,7 @@ function writeAutoSyncConflict(
     message,
     ...payload,
   })
+  return true
 }
 
 async function reconcileRemoteBackup(
@@ -137,7 +176,7 @@ async function reconcileRemoteBackup(
   backup: RatioBackupFile,
   reason: string,
   dirtyToken: string | undefined,
-): Promise<'matched' | 'conflict' | 'missing'> {
+): Promise<'matched' | 'conflict' | 'missing' | 'stale'> {
   const remote = await downloadCloudBackup(settings)
   const localItemCount = Object.keys(backup.items).length
 
@@ -151,24 +190,87 @@ async function reconcileRemoteBackup(
   }
 
   if (sameRatioBackupData(backup, remote.backup)) {
-    writeAutoSyncSuccess(
+    const applied = writeAutoSyncSuccess(
+      settings,
       remote.meta,
       reason,
       `已确认云端现有备份 ${remote.meta.itemCount} 项数据`,
       dirtyToken,
       'cloud_sync_auto_reconciled',
     )
-    return 'matched'
+    return applied ? 'matched' : 'stale'
   }
 
-  writeAutoSyncConflict(reason, `云端备份已更新：${remote.meta.updatedAt}`, {
+  const applied = writeAutoSyncConflict(settings, reason, `云端备份已更新：${remote.meta.updatedAt}`, {
     expectedUpdatedAt: settings.lastBackupAt || '',
     remoteUpdatedAt: remote.meta.updatedAt,
     localItemCount,
     remoteItemCount: remote.meta.itemCount,
     hasLastBackupAt: Boolean(settings.lastBackupAt),
   })
-  return 'conflict'
+  return applied ? 'conflict' : 'stale'
+}
+
+async function probeRemoteFreshness(
+  settings: CloudSyncSettings,
+  backup: RatioBackupFile,
+  reason: string,
+  dirtyToken: string | undefined,
+): Promise<'current' | 'matched' | 'conflict' | 'missing' | 'stale'> {
+  const localItemCount = Object.keys(backup.items).length
+  const { meta } = await fetchCloudBackupMeta(settings)
+
+  if (!meta) {
+    trackTelemetry('cloud_sync_auto_probe', {
+      reason,
+      status: 'missing',
+      expectedUpdatedAt: settings.lastBackupAt || '',
+      hasLastBackupAt: Boolean(settings.lastBackupAt),
+      localItemCount,
+    })
+    const applied = writeAutoSyncConflict(settings, reason, '云端备份不存在或已被清除', {
+      expectedUpdatedAt: settings.lastBackupAt || '',
+      localItemCount,
+      hasLastBackupAt: Boolean(settings.lastBackupAt),
+    })
+    return applied ? 'missing' : 'stale'
+  }
+
+  if (meta.updatedAt === settings.lastBackupAt) {
+    trackTelemetry('cloud_sync_auto_probe', {
+      reason,
+      status: 'current',
+      expectedUpdatedAt: settings.lastBackupAt || '',
+      remoteUpdatedAt: meta.updatedAt,
+      localItemCount,
+      remoteItemCount: meta.itemCount,
+    })
+
+    if (settings.lastSyncStatus === 'error') {
+      const applied = writeAutoSyncSuccess(
+        settings,
+        meta,
+        reason,
+        `云端备份状态正常：${meta.itemCount} 项数据`,
+        dirtyToken,
+        'cloud_sync_auto_current',
+      )
+      return applied ? 'current' : 'stale'
+    }
+
+    return 'current'
+  }
+
+  trackTelemetry('cloud_sync_auto_probe', {
+    reason,
+    status: 'changed',
+    expectedUpdatedAt: settings.lastBackupAt || '',
+    remoteUpdatedAt: meta.updatedAt,
+    localItemCount,
+    remoteItemCount: meta.itemCount,
+  })
+
+  return reconcileRemoteBackup(settings, backup, reason, dirtyToken)
 }
 
 async function runAutoSync(reason: string) {
@@ -176,7 +278,6 @@ async function runAutoSync(reason: string) {
   const dirty = isCloudSyncDirty()
 
   if (!settings.autoSync || !hasCloudCredentials(settings)) return
-  if (!dirty && settings.lastBackupAt && settings.lastSyncStatus !== 'error') return
   if (syncInFlight) {
     pendingReason = reason
     return
@@ -206,6 +307,11 @@ async function runAutoSync(reason: string) {
   })
 
   try {
+    if (!dirty && settings.lastBackupAt) {
+      await probeRemoteFreshness(settings, backup, reason, dirtyToken)
+      return
+    }
+
     const shouldTryReconcile = !settings.lastBackupAt || settings.lastSyncStatus === 'conflict'
     if (shouldTryReconcile) {
       const remoteState = await reconcileRemoteBackup(settings, backup, reason, dirtyToken)
@@ -214,7 +320,7 @@ async function runAutoSync(reason: string) {
     }
 
     const meta = await uploadCloudBackup(settings, backup, { expectedUpdatedAt: settings.lastBackupAt })
-    writeAutoSyncSuccess(meta, reason, `已自动上传 ${meta.itemCount} 项数据`, dirtyToken, 'cloud_sync_auto_upload')
+    writeAutoSyncSuccess(settings, meta, reason, `已自动上传 ${meta.itemCount} 项数据`, dirtyToken, 'cloud_sync_auto_upload')
   } catch (error) {
     if (error instanceof CloudRequestError && error.code === 'backup_conflict') {
       try {
@@ -228,12 +334,14 @@ async function runAutoSync(reason: string) {
     const message = error instanceof Error ? error.message : 'Cloud sync failed'
     const code = error instanceof CloudRequestError ? error.code : undefined
     const status = code === 'backup_conflict' ? 'conflict' : 'error'
-    writeCloudSyncSettingsPatch({
-      lastSyncAt: new Date().toISOString(),
-      lastSyncStatus: status,
-      lastSyncMessage: message.slice(0, 180),
-    })
-    emitCloudSyncResult({ ok: false, reason, message, code })
+    if (canApplyAutoSyncResult(settings, reason)) {
+      writeAutoSyncSettingsPatch({
+        lastSyncAt: new Date().toISOString(),
+        lastSyncStatus: status,
+        lastSyncMessage: message.slice(0, 180),
+      })
+      emitCloudSyncResult({ ok: false, reason, message, code })
+    }
 
     if (status === 'conflict') {
       trackTelemetry('cloud_sync_auto_conflict', {
@@ -281,7 +389,13 @@ export function initCloudAutoSync() {
     const detail = getWriteDetail(event)
     if (!detail) return
     if (detail.key === CLOUD_SYNC_SETTINGS_KEY) {
-      if (!syncInFlight && shouldScheduleSyncForSettings()) scheduleAutoSync('settings')
+      if (suppressSettingsSchedule) return
+      if (!shouldScheduleSync({ includeRemoteProbe: true })) return
+      if (syncInFlight) {
+        pendingReason = 'settings'
+        return
+      }
+      scheduleAutoSync('settings')
       return
     }
     if (!shouldAutoSyncKey(detail.key)) return
@@ -290,14 +404,22 @@ export function initCloudAutoSync() {
   })
 
   window.addEventListener('online', () => {
-    if (shouldScheduleSyncForSettings()) scheduleAutoSync('online')
+    if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('online')
+  })
+
+  window.addEventListener('focus', () => {
+    if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('focus', 800)
+  })
+
+  window.addEventListener('pageshow', () => {
+    if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('pageshow', 800)
   })
 
   window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && shouldScheduleSyncForSettings()) {
+    if (document.visibilityState === 'visible' && shouldScheduleSync({ includeRemoteProbe: true })) {
       scheduleAutoSync('visible', 800)
     }
   })
 
-  if (shouldScheduleSyncForSettings()) scheduleAutoSync('startup', 800)
+  if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('startup', 800)
 }

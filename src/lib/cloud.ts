@@ -247,6 +247,22 @@ export function uploadCloudBackup(
   })
 }
 
+export async function fetchCloudBackupMeta(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
+  try {
+    return await cloudRequest<{ meta: CloudBackupMeta | null }>(settings, '/api/backup/meta', {
+      signal: options.signal,
+    })
+  } catch (error) {
+    if (error instanceof CloudRequestError && error.status === 404) {
+      const res = await cloudRequest<{ meta: CloudBackupMeta | null }>(settings, '/api/backup', {
+        signal: options.signal,
+      })
+      return { meta: res.meta }
+    }
+    throw error
+  }
+}
+
 export async function downloadCloudBackup(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
   const res = await cloudRequest<{ backup: unknown; meta: CloudBackupMeta | null }>(settings, '/api/backup', {
     signal: options.signal,
