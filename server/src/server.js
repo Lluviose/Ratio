@@ -554,7 +554,12 @@ async function handleBackupPut(req, res, user) {
     const remoteUpdatedAt = typeof current?.updatedAt === 'string' ? current.updatedAt : ''
 
     if (!force && remoteUpdatedAt !== expectedUpdatedAt) {
-      return { conflict: true, meta: backupMeta(current) }
+      return {
+        conflict: true,
+        meta: backupMeta(current),
+        expectedUpdatedAt,
+        remoteUpdatedAt,
+      }
     }
 
     const payload = {
@@ -571,8 +576,13 @@ async function handleBackupPut(req, res, user) {
   })
 
   if (result.conflict) {
+    console.warn(
+      `[ratio-server] backup_conflict user=${user.username} expected=${result.expectedUpdatedAt || '-'} remote=${result.remoteUpdatedAt || '-'} force=false`,
+    )
     return fail(res, 409, 'Cloud backup has changed; confirm before overwriting', 'backup_conflict', {
       meta: result.meta,
+      expectedUpdatedAt: result.expectedUpdatedAt,
+      remoteUpdatedAt: result.remoteUpdatedAt,
     })
   }
 

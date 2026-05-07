@@ -13,6 +13,7 @@ import {
   downloadCloudBackup,
   fetchCloudAiStatus,
   fetchCloudMe,
+  mergeCloudSyncSettings,
   uploadCloudBackup,
   writeCloudSyncSettingsPatch,
   type CloudBackupMeta,
@@ -148,27 +149,16 @@ export function SettingsScreen(props: {
   }
 
   const updateCloudSync = (patch: Partial<typeof cloudSync>) => {
-    const endpointChanged =
+    const identityChanged =
       (patch.serverUrl !== undefined && patch.serverUrl !== cloudSync.serverUrl) ||
-      (patch.username !== undefined && patch.username !== cloudSync.username) ||
-      (patch.password !== undefined && patch.password !== cloudSync.password)
-    if (endpointChanged) {
+      (patch.username !== undefined && patch.username !== cloudSync.username)
+    const credentialsChanged = patch.password !== undefined && patch.password !== cloudSync.password
+
+    if (identityChanged || credentialsChanged) {
       setCloudAiStatus('')
       setCloudConfigExpanded(true)
     }
-    setCloudSync((current) => {
-      if (!endpointChanged) return { ...current, ...patch }
-      return {
-        ...current,
-        ...patch,
-        lastConnectionAt: undefined,
-        lastBackupAt: undefined,
-        lastRestoreAt: undefined,
-        lastSyncAt: undefined,
-        lastSyncStatus: undefined,
-        lastSyncMessage: undefined,
-      }
-    })
+    setCloudSync((current) => mergeCloudSyncSettings(current, patch))
   }
 
   const cloudReady = Boolean(cloudSync.serverUrl.trim() && cloudSync.username.trim() && cloudSync.password)

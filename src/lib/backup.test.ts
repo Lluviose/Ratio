@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { buildRatioBackup, clearRatioStorage, parseRatioBackup, RATIO_BACKUP_SCHEMA_V1, restoreRatioBackup } from './backup'
+import {
+  buildRatioBackup,
+  clearRatioStorage,
+  parseRatioBackup,
+  RATIO_BACKUP_SCHEMA_V1,
+  restoreRatioBackup,
+  sameRatioBackupData,
+} from './backup'
 
 beforeEach(() => {
   localStorage.clear()
@@ -149,5 +156,36 @@ describe('backup', () => {
       { key: 'ratio.new', raw: '2' },
       { key: 'ratio.old' },
     ])
+  })
+
+  it('sameRatioBackupData ignores createdAt while comparing synced data', () => {
+    const left = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: {
+          'ratio.accounts': '["1"]',
+          'ratio.theme': '"matisse2"',
+        },
+      }),
+    )
+    const right = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-02-01T00:00:00.000Z',
+        items: {
+          'ratio.theme': '"matisse2"',
+          'ratio.accounts': '["1"]',
+        },
+      }),
+    )
+
+    expect(sameRatioBackupData(left, right)).toBe(true)
+    expect(
+      sameRatioBackupData(left, {
+        ...right,
+        items: { ...right.items, 'ratio.accounts': '["2"]' },
+      }),
+    ).toBe(false)
   })
 })

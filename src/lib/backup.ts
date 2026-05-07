@@ -59,6 +59,21 @@ export function stringifyRatioBackup(backup: RatioBackupFile) {
   return `${JSON.stringify(backup, null, 2)}\n`
 }
 
+export function sameRatioBackupData(left: RatioBackupFile, right: RatioBackupFile) {
+  const leftKeys = Object.keys(left.items).sort((a, b) => a.localeCompare(b))
+  const rightKeys = Object.keys(right.items).sort((a, b) => a.localeCompare(b))
+  if (leftKeys.length !== rightKeys.length) return false
+
+  for (let i = 0; i < leftKeys.length; i++) {
+    const leftKey = leftKeys[i]
+    const rightKey = rightKeys[i]
+    if (leftKey !== rightKey) return false
+    if (left.items[leftKey] !== right.items[rightKey]) return false
+  }
+
+  return true
+}
+
 export function coerceRatioBackup(value: unknown): RatioBackupFile {
   if (!isPlainObject(value)) throw new Error('Invalid backup file')
   if (value.schema !== RATIO_BACKUP_SCHEMA_V1) throw new Error('Unsupported backup schema')

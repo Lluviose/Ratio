@@ -116,6 +116,37 @@ export function hasCloudCredentials(settings: CloudSyncSettings) {
   return Boolean(settings.serverUrl.trim() && settings.username.trim() && settings.password)
 }
 
+export function mergeCloudSyncSettings(current: CloudSyncSettings, patch: Partial<CloudSyncSettings>): CloudSyncSettings {
+  const next = { ...current, ...patch }
+  const serverChanged = patch.serverUrl !== undefined && patch.serverUrl !== current.serverUrl
+  const usernameChanged = patch.username !== undefined && patch.username !== current.username
+  const passwordChanged = patch.password !== undefined && patch.password !== current.password
+
+  if (serverChanged || usernameChanged) {
+    return {
+      ...next,
+      lastConnectionAt: undefined,
+      lastBackupAt: undefined,
+      lastRestoreAt: undefined,
+      lastSyncAt: undefined,
+      lastSyncStatus: undefined,
+      lastSyncMessage: undefined,
+    }
+  }
+
+  if (passwordChanged) {
+    return {
+      ...next,
+      lastConnectionAt: undefined,
+      lastSyncAt: undefined,
+      lastSyncStatus: undefined,
+      lastSyncMessage: undefined,
+    }
+  }
+
+  return next
+}
+
 function normalizeServerUrl(serverUrl: string) {
   const trimmed = serverUrl.trim().replace(/\/+$/, '')
   if (!trimmed) throw new Error('Cloud server URL is required')

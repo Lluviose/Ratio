@@ -1,13 +1,17 @@
-import { buildRatioBackup } from './backup'
+import { buildRatioBackup, sameRatioBackupData, type RatioBackupFile } from './backup'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
+  type CloudBackupMeta,
   CloudRequestError,
+  type CloudSyncSettings,
+  downloadCloudBackup,
   getCloudSyncSettings,
   hasCloudCredentials,
   uploadCloudBackup,
   writeCloudSyncSettingsPatch,
 } from './cloud'
 import { STORAGE_WRITE_EVENT, dispatchStorageWrite, type StorageWriteDetail } from './storageEvents'
+import { trackTelemetry } from './telemetry'
 
 const AUTO_SYNC_DELAY_MS = 2500
 const AUTO_SYNC_MIN_INTERVAL_MS = 30000
@@ -59,8 +63,13 @@ function setCloudSyncDirty() {
 function shouldScheduleSyncForSettings() {
   const settings = getCloudSyncSettings()
   if (!settings.autoSync || !hasCloudCredentials(settings)) return false
-  if (settings.lastSyncStatus === 'conflict') return false
-  return isCloudSyncDirty() || !settings.lastBackupAt || settings.lastSyncStatus === 'error'
+  if (settings.lastSyncStatus === 'conflict' && settings.lastBackupAt) return false
+  return (
+    isCloudSyncDirty() ||
+    !settings.lastBackupAt ||
+    settings.lastSyncStatus === 'error' ||
+    settings.lastSyncStatus === 'conflict'
+  )
 }
 
 export function markCloudSyncClean(expectedDirtyToken?: string) {
@@ -74,11 +83,102 @@ export function markCloudSyncClean(expectedDirtyToken?: string) {
   }
 }
 
+function emitCloudSyncResult(detail: Record<string, unknown>) {
+  window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail }))
+}
+
+function writeAutoSyncSuccess(
+  meta: CloudBackupMeta,
+  reason: string,
+  message: string,
+  dirtyToken: string | undefined,
+  telemetryEvent: string,
+) {
+  markCloudSyncClean(dirtyToken)
+  writeCloudSyncSettingsPatch({
+    lastBackupAt: meta.updatedAt,
+    lastSyncAt: new Date().toISOString(),
+    lastSyncStatus: 'ok',
+    lastSyncMessage: message,
+  })
+  emitCloudSyncResult({ ok: true, reason, itemCount: meta.itemCount, remoteUpdatedAt: meta.updatedAt })
+  trackTelemetry(telemetryEvent, {
+    reason,
+    itemCount: meta.itemCount,
+    remoteUpdatedAt: meta.updatedAt,
+  })
+}
+
+function writeAutoSyncConflict(
+  reason: string,
+  message: string,
+  payload: {
+    expectedUpdatedAt?: string
+    remoteUpdatedAt?: string
+    localItemCount?: number
+    remoteItemCount?: number
+    hasLastBackupAt?: boolean
+  } = {},
+) {
+  writeCloudSyncSettingsPatch({
+    lastSyncAt: new Date().toISOString(),
+    lastSyncStatus: 'conflict',
+    lastSyncMessage: message.slice(0, 180),
+  })
+  emitCloudSyncResult({ ok: false, reason, message, code: 'backup_conflict', ...payload })
+  trackTelemetry('cloud_sync_auto_conflict', {
+    reason,
+    message,
+    ...payload,
+  })
+}
+
+async function reconcileRemoteBackup(
+  settings: CloudSyncSettings,
+  backup: RatioBackupFile,
+  reason: string,
+  dirtyToken: string | undefined,
+): Promise<'matched' | 'conflict' | 'missing'> {
+  const remote = await downloadCloudBackup(settings)
+  const localItemCount = Object.keys(backup.items).length
+
+  if (!remote.meta || !remote.backup) {
+    trackTelemetry('cloud_sync_auto_remote_missing', {
+      reason,
+      localItemCount,
+      hasLastBackupAt: Boolean(settings.lastBackupAt),
+    })
+    return 'missing'
+  }
+
+  if (sameRatioBackupData(backup, remote.backup)) {
+    writeAutoSyncSuccess(
+      remote.meta,
+      reason,
+      `已确认云端现有备份 ${remote.meta.itemCount} 项数据`,
+      dirtyToken,
+      'cloud_sync_auto_reconciled',
+    )
+    return 'matched'
+  }
+
+  writeAutoSyncConflict(reason, `云端备份已更新：${remote.meta.updatedAt}`, {
+    expectedUpdatedAt: settings.lastBackupAt || '',
+    remoteUpdatedAt: remote.meta.updatedAt,
+    localItemCount,
+    remoteItemCount: remote.meta.itemCount,
+    hasLastBackupAt: Boolean(settings.lastBackupAt),
+  })
+  return 'conflict'
+}
+
 async function runAutoSync(reason: string) {
   const settings = getCloudSyncSettings()
+  const dirty = isCloudSyncDirty()
+
   if (!settings.autoSync || !hasCloudCredentials(settings)) return
-  if (settings.lastSyncStatus === 'conflict') return
-  if (!isCloudSyncDirty() && settings.lastBackupAt && settings.lastSyncStatus !== 'error') return
+  if (settings.lastSyncStatus === 'conflict' && settings.lastBackupAt) return
+  if (!dirty && settings.lastBackupAt && settings.lastSyncStatus !== 'error') return
   if (syncInFlight) {
     pendingReason = reason
     return
@@ -95,19 +195,36 @@ async function runAutoSync(reason: string) {
   syncInFlight = true
   pendingReason = null
 
+  const dirtyToken = readCloudSyncDirtyToken()
+  const backup = buildRatioBackup()
+  const localItemCount = Object.keys(backup.items).length
+
+  trackTelemetry('cloud_sync_auto_start', {
+    reason,
+    dirty,
+    hasLastBackupAt: Boolean(settings.lastBackupAt),
+    lastSyncStatus: settings.lastSyncStatus || '',
+    localItemCount,
+  })
+
   try {
-    const dirtyToken = readCloudSyncDirtyToken()
-    const backup = buildRatioBackup()
+    if (!settings.lastBackupAt) {
+      const remoteState = await reconcileRemoteBackup(settings, backup, reason, dirtyToken)
+      if (remoteState !== 'missing') return
+    }
+
     const meta = await uploadCloudBackup(settings, backup, { expectedUpdatedAt: settings.lastBackupAt })
-    markCloudSyncClean(dirtyToken)
-    writeCloudSyncSettingsPatch({
-      lastBackupAt: meta.updatedAt,
-      lastSyncAt: new Date().toISOString(),
-      lastSyncStatus: 'ok',
-      lastSyncMessage: `已自动上传 ${meta.itemCount} 项数据`,
-    })
-    window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: true, reason, itemCount: meta.itemCount } }))
+    writeAutoSyncSuccess(meta, reason, `已自动上传 ${meta.itemCount} 项数据`, dirtyToken, 'cloud_sync_auto_upload')
   } catch (error) {
+    if (error instanceof CloudRequestError && error.code === 'backup_conflict') {
+      try {
+        const remoteState = await reconcileRemoteBackup(settings, backup, reason, dirtyToken)
+        if (remoteState !== 'missing') return
+      } catch {
+        // Keep the original conflict below; auto-sync must not overwrite remote data on a failed re-check.
+      }
+    }
+
     const message = error instanceof Error ? error.message : 'Cloud sync failed'
     const code = error instanceof CloudRequestError ? error.code : undefined
     const status = code === 'backup_conflict' ? 'conflict' : 'error'
@@ -116,7 +233,25 @@ async function runAutoSync(reason: string) {
       lastSyncStatus: status,
       lastSyncMessage: message.slice(0, 180),
     })
-    window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail: { ok: false, reason, message, code } }))
+    emitCloudSyncResult({ ok: false, reason, message, code })
+
+    if (status === 'conflict') {
+      trackTelemetry('cloud_sync_auto_conflict', {
+        reason,
+        message,
+        expectedUpdatedAt: settings.lastBackupAt || '',
+        hasLastBackupAt: Boolean(settings.lastBackupAt),
+        localItemCount,
+      })
+    } else {
+      trackTelemetry('cloud_sync_auto_error', {
+        reason,
+        code: code || '',
+        message,
+        hasLastBackupAt: Boolean(settings.lastBackupAt),
+        localItemCount,
+      })
+    }
   } finally {
     syncInFlight = false
     if (pendingReason) {
