@@ -87,6 +87,15 @@ export function markCloudSyncClean(expectedDirtyToken?: string) {
   }
 }
 
+export function cancelPendingCloudAutoSync() {
+  if (typeof window === 'undefined') return
+  if (syncTimer !== null) {
+    window.clearTimeout(syncTimer)
+    syncTimer = null
+  }
+  pendingReason = null
+}
+
 function emitCloudSyncResult(detail: Record<string, unknown>) {
   window.dispatchEvent(new CustomEvent('ratio:cloud-sync', { detail }))
 }
@@ -318,7 +327,7 @@ async function runAutoSync(reason: string) {
   })
 
   try {
-    if (!dirty && settings.lastBackupAt) {
+    if (!dirty && settings.lastBackupAt && settings.lastSyncStatus !== 'conflict') {
       await probeRemoteFreshness(settings, backup, reason, dirtyToken)
       return
     }

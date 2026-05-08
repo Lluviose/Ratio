@@ -7,9 +7,9 @@ import { useDailySnapshotSync } from './useDailySnapshotSync'
 
 function SnapshotHarness() {
   const accounts = useAccounts()
-  const { snapshots, upsertFromAccounts } = useSnapshots()
+  const { snapshots, storageReady: snapshotsStorageReady, upsertFromAccounts } = useSnapshots()
 
-  useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts)
+  useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts, accounts.storageReady && snapshotsStorageReady)
 
   return <pre data-testid="snapshots">{JSON.stringify(snapshots)}</pre>
 }
@@ -56,5 +56,26 @@ describe('useDailySnapshotSync', () => {
     await waitFor(() => {
       expect(readSnapshots()).toEqual([])
     })
+  })
+
+  it('does not upsert when source storage is not ready', async () => {
+    localStorage.setItem(
+      'ratio.accounts',
+      JSON.stringify([
+        {
+          id: 'a1',
+          type: 'cash',
+          name: 'Cash',
+          balance: 10,
+          updatedAt: '2025-01-01T00:00:00.000Z',
+        },
+      ]),
+    )
+    localStorage.setItem('ratio.snapshots', '{bad json')
+
+    render(<SnapshotHarness />)
+
+    expect(localStorage.getItem('ratio.snapshots')).toBe('{bad json')
+    await waitFor(() => expect(localStorage.getItem('ratio.snapshots')).toBe('{bad json'))
   })
 })

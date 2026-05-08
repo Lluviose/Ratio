@@ -77,7 +77,7 @@ function coerceAccounts(value: unknown): Account[] {
 }
 
 export function useAccounts() {
-  const [accounts, setAccounts] = useLocalStorageState<Account[]>('ratio.accounts', initialAccounts, {
+  const [accounts, setAccounts, storageMeta] = useLocalStorageState<Account[]>('ratio.accounts', initialAccounts, {
     coerce: coerceAccounts,
   })
 
@@ -222,6 +222,7 @@ export function useAccounts() {
 
   return {
     accounts,
+    storageReady: storageMeta.canPersist,
     addAccount,
     updateBalance,
     renameAccount,

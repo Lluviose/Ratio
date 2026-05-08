@@ -8,9 +8,14 @@ export type UseLocalStorageStateOptions<T> = {
   onError?: (error: unknown, context: { key: string; phase: UseLocalStorageStateErrorPhase }) => void
 }
 
+export type UseLocalStorageStateMeta = {
+  canPersist: boolean
+}
+
 type HookState<T> = {
   key: string
   value: T
+  canPersist: boolean
 }
 
 function reportStorageError(
@@ -34,17 +39,17 @@ function readStoredValue<T>(
   initialValue: T,
   coerce?: (value: unknown) => T,
   onError?: (error: unknown, context: { key: string; phase: UseLocalStorageStateErrorPhase }) => void,
-): { value: T; raw: string | null } {
+): { value: T; raw: string | null; canPersist: boolean } {
   let raw: string | null = null
   try {
     raw = localStorage.getItem(key)
-    if (!raw) return { value: initialValue, raw: null }
+    if (!raw) return { value: initialValue, raw: null, canPersist: true }
     const parsed = JSON.parse(raw) as unknown
     const value = coerce ? coerce(parsed) : (parsed as T)
-    return { value, raw }
+    return { value, raw, canPersist: true }
   } catch (error) {
     reportStorageError(key, 'read', error, onError)
-    return { value: initialValue, raw }
+    return { value: initialValue, raw, canPersist: false }
   }
 }
 
@@ -54,14 +59,14 @@ function parseStoredValue<T>(
   initialValue: T,
   coerce?: (value: unknown) => T,
   onError?: (error: unknown, context: { key: string; phase: UseLocalStorageStateErrorPhase }) => void,
-): T {
-  if (!raw) return initialValue
+): { value: T; canPersist: boolean } {
+  if (!raw) return { value: initialValue, canPersist: true }
   try {
     const parsed = JSON.parse(raw) as unknown
-    return coerce ? coerce(parsed) : (parsed as T)
+    return { value: coerce ? coerce(parsed) : (parsed as T), canPersist: true }
   } catch (error) {
     reportStorageError(key, 'read', error, onError)
-    return initialValue
+    return { value: initialValue, canPersist: false }
   }
 }
 
@@ -86,9 +91,11 @@ function syncFromRaw<T>(
 ) {
   if (raw === lastRawRef.current) return
   lastRawRef.current = raw
+  const parsed = parseStoredValue(raw, key, initialValue, coerce, onError)
   setState({
     key,
-    value: parseStoredValue(raw, key, initialValue, coerce, onError),
+    value: parsed.value,
+    canPersist: parsed.canPersist,
   })
 }
 
@@ -102,7 +109,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
 
   const [state, setState] = useState<HookState<T>>(() => {
     const initial = readStoredValue(key, initialValue, coerce, onError)
-    return { key, value: initial.value }
+    return { key, value: initial.value, canPersist: initial.canPersist }
   })
   const value = state.key === key ? state.value : initialValue
 
@@ -126,7 +133,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
             ? prev.value
             : readStoredValue(key, initialValueRef.current, coerceRef.current, onErrorRef.current).value
         const nextValue = typeof next === 'function' ? (next as (prevState: T) => T)(baseValue) : next
-        return { key, value: nextValue }
+        return { key, value: nextValue, canPersist: true }
       })
     },
     [key],
@@ -136,8 +143,8 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
     const next = readStoredValue(key, initialValueRef.current, coerceRef.current, onErrorRef.current)
     lastRawRef.current = next.raw
     setState((prev) => {
-      if (prev.key === key && Object.is(prev.value, next.value)) return prev
-      return { key, value: next.value }
+      if (prev.key === key && Object.is(prev.value, next.value) && prev.canPersist === next.canPersist) return prev
+      return { key, value: next.value, canPersist: next.canPersist }
     })
   }, [key])
 
@@ -172,6 +179,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
 
   useEffect(() => {
     if (state.key !== key) return
+    if (!state.canPersist) return
 
     try {
       const nextRaw = JSON.stringify(state.value)
@@ -189,5 +197,5 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
     }
   }, [key, state])
 
-  return [value, setValue] as const
+  return [value, setValue, { canPersist: state.key === key ? state.canPersist : true }] as const
 }

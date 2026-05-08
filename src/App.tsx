@@ -304,7 +304,7 @@ export default function App() {
 
   const accounts = useAccounts()
   const accountOps = useAccountOps()
-  const { snapshots, upsertFromAccounts } = useSnapshots()
+  const { snapshots, storageReady: snapshotsStorageReady, upsertFromAccounts } = useSnapshots()
   const prefersReducedMotion = useReducedMotion()
 
   const resolvedTheme = theme === 'random' ? randomTheme : theme
@@ -333,7 +333,7 @@ export default function App() {
     applyDocumentTheme(resolvedTheme, themeColors)
   }, [resolvedTheme, themeColors])
 
-  useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts)
+  useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts, accounts.storageReady && snapshotsStorageReady)
 
   const title = useMemo(() => {
     switch (tab) {

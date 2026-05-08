@@ -83,6 +83,52 @@ describe('useLocalStorageState', () => {
     expect(localStorage.getItem('ratio.test.b')).toBe('2')
   })
 
+  it('does not clobber invalid stored JSON on mount', async () => {
+    const onError = vi.fn()
+    localStorage.setItem('ratio.test.invalid', '{bad json')
+
+    function Reader() {
+      const [value, , meta] = useLocalStorageState('ratio.test.invalid', 0, { onError })
+      return (
+        <>
+          <div data-testid="value">{value}</div>
+          <div data-testid="canPersist">{String(meta.canPersist)}</div>
+        </>
+      )
+    }
+
+    render(<Reader />)
+
+    expect(screen.getByTestId('value')).toHaveTextContent('0')
+    expect(screen.getByTestId('canPersist')).toHaveTextContent('false')
+    expect(onError).toHaveBeenCalledWith(expect.any(SyntaxError), { key: 'ratio.test.invalid', phase: 'read' })
+
+    await waitFor(() => expect(localStorage.getItem('ratio.test.invalid')).toBe('{bad json'))
+  })
+
+  it('persists the next explicit update after invalid stored JSON', async () => {
+    const onError = vi.fn()
+    localStorage.setItem('ratio.test.invalid-update', '{bad json')
+
+    function Writer() {
+      const [value, setValue] = useLocalStorageState('ratio.test.invalid-update', 0, { onError })
+      return (
+        <button type="button" onClick={() => setValue(value + 1)}>
+          {value}
+        </button>
+      )
+    }
+
+    render(<Writer />)
+
+    expect(screen.getByRole('button')).toHaveTextContent('0')
+    expect(localStorage.getItem('ratio.test.invalid-update')).toBe('{bad json')
+
+    fireEvent.click(screen.getByRole('button'))
+
+    await waitFor(() => expect(localStorage.getItem('ratio.test.invalid-update')).toBe('1'))
+  })
+
   it('reports write failures through onError', async () => {
     const originalSetItem = Storage.prototype.setItem
     const onError = vi.fn()

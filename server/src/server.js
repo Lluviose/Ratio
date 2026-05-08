@@ -46,6 +46,9 @@ const ADMIN_USERNAME = (process.env.RATIO_ADMIN_USERNAME || '').trim()
 const ADMIN_PASSWORD = process.env.RATIO_ADMIN_PASSWORD || ''
 const USERS_FILE = path.join(DATA_DIR, 'users.json')
 const BACKUP_SCHEMA = 'ratio.backup.v1'
+const MAX_BACKUP_ITEMS = readPositiveNumberEnv('RATIO_MAX_BACKUP_ITEMS', 1000)
+const MAX_BACKUP_ITEM_KEY_CHARS = readPositiveNumberEnv('RATIO_MAX_BACKUP_ITEM_KEY_CHARS', 160)
+const ISO_STAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 
 const mutationQueues = new Map()
 const rateLimitBuckets = new Map()
@@ -54,6 +57,27 @@ const pbkdf2Async = promisify(pbkdf2)
 
 function now() {
   return new Date().toISOString()
+}
+
+function isIsoStamp(value) {
+  return typeof value === 'string' && value.length <= 64 && ISO_STAMP_RE.test(value) && !Number.isNaN(Date.parse(value))
+}
+
+function readSyncStamp(value) {
+  return isIsoStamp(value) ? value : ''
+}
+
+function parseLimitParam(value, fallback, max) {
+  const parsed = Number.parseInt(value || '', 10)
+  const limit = Number.isInteger(parsed) ? parsed : fallback
+  return Math.min(max, Math.max(1, limit))
+}
+
+function nextBackupUpdatedAt(previousUpdatedAt) {
+  const previousMs = Date.parse(readSyncStamp(previousUpdatedAt))
+  const currentMs = Date.now()
+  const nextMs = Number.isFinite(previousMs) && currentMs <= previousMs ? previousMs + 1 : currentMs
+  return new Date(nextMs).toISOString()
 }
 
 function securityHeaders() {
@@ -422,15 +446,22 @@ function userFile(user, name) {
 }
 
 function isBackup(value) {
-  return (
-    value &&
-    typeof value === 'object' &&
-    value.schema === BACKUP_SCHEMA &&
-    typeof value.createdAt === 'string' &&
-    value.items &&
-    typeof value.items === 'object' &&
-    !Array.isArray(value.items)
-  )
+  if (!value || typeof value !== 'object') return false
+  if (value.schema !== BACKUP_SCHEMA) return false
+  if (!isIsoStamp(value.createdAt)) return false
+  if (!value.items || typeof value.items !== 'object' || Array.isArray(value.items)) return false
+
+  const entries = Object.entries(value.items)
+  if (entries.length > MAX_BACKUP_ITEMS) return false
+
+  for (const [key, item] of entries) {
+    if (key.length === 0 || key.length > MAX_BACKUP_ITEM_KEY_CHARS) return false
+    if (!key.startsWith('ratio.')) return false
+    if (key.startsWith('ratio.cloudSync')) return false
+    if (typeof item !== 'string') return false
+  }
+
+  return true
 }
 
 function maskSecret(value) {
@@ -549,9 +580,9 @@ async function handleBackupPut(req, res, user) {
 
   const result = await runQueuedMutation(backupFile, async () => {
     const current = await readJsonFile(backupFile, null)
-    const expectedUpdatedAt = typeof body.expectedUpdatedAt === 'string' ? body.expectedUpdatedAt : ''
+    const expectedUpdatedAt = readSyncStamp(body.expectedUpdatedAt)
     const force = body.force === true
-    const remoteUpdatedAt = typeof current?.updatedAt === 'string' ? current.updatedAt : ''
+    const remoteUpdatedAt = readSyncStamp(current?.updatedAt)
 
     if (!force && remoteUpdatedAt !== expectedUpdatedAt) {
       return {
@@ -564,7 +595,7 @@ async function handleBackupPut(req, res, user) {
 
     const payload = {
       schema: 'ratio.cloud-backup.v1',
-      updatedAt: now(),
+      updatedAt: nextBackupUpdatedAt(remoteUpdatedAt),
       clientCreatedAt: backup.createdAt,
       device: typeof body.device === 'string' ? body.device.slice(0, 120) : '',
       itemCount: Object.keys(backup.items).length,
@@ -1036,7 +1067,7 @@ async function handleAdminUsers(res) {
 
 async function handleAdminTelemetryRecent(req, res) {
   const url = new URL(req.url, 'http://localhost')
-  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)))
+  const limit = parseLimitParam(url.searchParams.get('limit'), 50, 200)
   const username = (url.searchParams.get('username') || '').trim()
   try {
     jsonResponse(res, 200, { events: await getAdminTelemetryEvents(username, limit) })
@@ -1083,7 +1114,7 @@ async function handleAdminApi(req, res, pathname) {
 async function handleTelemetryRecent(req, res, user) {
   const file = userFile(user, `telemetry-${new Date().toISOString().slice(0, 10)}.ndjson`)
   const text = await readFileTail(file, Math.min(TELEMETRY_MAX_DAILY_BYTES, 512 * 1024))
-  const limit = Math.min(100, Math.max(1, Number(new URL(req.url, 'http://x').searchParams.get('limit') || 20)))
+  const limit = parseLimitParam(new URL(req.url, 'http://x').searchParams.get('limit'), 20, 100)
   const entries = text.trim()
     ? text.trim().split('\n').slice(-limit).flatMap((line) => {
         try {

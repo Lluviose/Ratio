@@ -26,7 +26,7 @@ import {
   type CloudBackupMeta,
   type CloudSyncSettings,
 } from '../lib/cloud'
-import { markCloudSyncClean, readCloudSyncDirtyToken } from '../lib/cloudSync'
+import { cancelPendingCloudAutoSync, markCloudSyncClean, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
@@ -158,6 +158,16 @@ export function SettingsScreen(props: {
       const text = await file.text()
       const backup = parseRatioBackup(text)
       const res = restoreRatioBackup(backup)
+      cancelPendingCloudAutoSync()
+      markCloudSyncClean()
+      if (cloudSyncRef.current.autoSync) {
+        writeCloudSyncSettingsPatch({
+          lastBackupAt: undefined,
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: 'conflict',
+          lastSyncMessage: 'Imported a local backup; confirm before uploading to cloud',
+        })
+      }
       queueToastAfterReload(`已恢复 ${res.restoredKeys.length} 项数据`, { tone: 'success' })
       window.location.reload()
     } catch (err) {
@@ -455,6 +465,7 @@ export function SettingsScreen(props: {
       }
       const restore = restoreRatioBackup(res.backup)
       const restoredAt = new Date().toISOString()
+      cancelPendingCloudAutoSync()
       markCloudSyncClean()
       writeCloudSyncSettingsPatch({
         lastRestoreAt: restoredAt,

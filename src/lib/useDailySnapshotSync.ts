@@ -9,9 +9,11 @@ export function useDailySnapshotSync(
   accounts: readonly Account[],
   snapshotCount: number,
   upsertFromAccounts: (accounts: Account[]) => void,
+  ready = true,
 ) {
   useEffect(() => {
+    if (!ready) return
     if (!shouldUpsertDailySnapshot(accounts.length, snapshotCount)) return
     upsertFromAccounts([...accounts])
-  }, [accounts, snapshotCount, upsertFromAccounts])
+  }, [accounts, ready, snapshotCount, upsertFromAccounts])
 }

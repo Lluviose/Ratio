@@ -9,7 +9,7 @@ function coerceSnapshots(value: unknown): Snapshot[] {
 }
 
 export function useSnapshots() {
-  const [snapshots, setSnapshots] = useLocalStorageState<Snapshot[]>('ratio.snapshots', [], {
+  const [snapshots, setSnapshots, storageMeta] = useLocalStorageState<Snapshot[]>('ratio.snapshots', [], {
     coerce: coerceSnapshots,
   })
 
@@ -43,5 +43,5 @@ export function useSnapshots() {
     }, null)
   }, [normalized])
 
-  return { snapshots: normalized, latest, upsertFromAccounts }
+  return { snapshots: normalized, latest, storageReady: storageMeta.canPersist, upsertFromAccounts }
 }
