@@ -190,6 +190,56 @@ describe('backup', () => {
     ).toBe(false)
   })
 
+  it('sameRatioBackupData treats semantically equal account ops as equal across legacy id rewrites', () => {
+    const left = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: {
+          'ratio.accountOps': JSON.stringify([
+            {
+              kind: 'rename',
+              at: '2025-01-01T00:00:00.000Z',
+              accountType: 'cash',
+              accountId: 'a1',
+              beforeName: 'Cash',
+              afterName: 'Wallet',
+              note: '  ',
+            },
+          ]),
+        },
+      }),
+    )
+    const right = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-02-01T00:00:00.000Z',
+        items: {
+          'ratio.accountOps': JSON.stringify([
+            {
+              id: 'different-local-id',
+              kind: 'rename',
+              at: '2025-01-01T00:00:00.000Z',
+              accountType: 'cash',
+              accountId: 'a1',
+              beforeName: 'Cash',
+              afterName: 'Wallet',
+            },
+          ]),
+        },
+      }),
+    )
+
+    expect(sameRatioBackupData(left, right)).toBe(true)
+    expect(summarizeRatioBackupDiff(left, right)).toEqual({
+      localOnlyCount: 0,
+      remoteOnlyCount: 0,
+      changedCount: 0,
+      differentKeyCount: 0,
+      sampleKeys: [],
+    })
+  })
+
   it('summarizeRatioBackupDiff reports changed and missing keys without values', () => {
     const local = parseRatioBackup(
       JSON.stringify({

@@ -1,4 +1,5 @@
 import { dispatchStorageWrite } from './storageEvents'
+import { canonicalizeAccountOpsForBackup } from './accountOpsStorage'
 
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
@@ -76,7 +77,9 @@ export function sameRatioBackupData(left: RatioBackupFile, right: RatioBackupFil
     const leftKey = leftKeys[i]
     const rightKey = rightKeys[i]
     if (leftKey !== rightKey) return false
-    if (left.items[leftKey] !== right.items[rightKey]) return false
+    if (normalizeBackupItemForCompare(leftKey, left.items[leftKey]) !== normalizeBackupItemForCompare(rightKey, right.items[rightKey])) {
+      return false
+    }
   }
 
   return true
@@ -97,7 +100,9 @@ export function summarizeRatioBackupDiff(
       localOnly.push(key)
       continue
     }
-    if (local.items[key] !== remote.items[key]) changed.push(key)
+    if (normalizeBackupItemForCompare(key, local.items[key]) !== normalizeBackupItemForCompare(key, remote.items[key])) {
+      changed.push(key)
+    }
     remoteKeys.delete(key)
   }
 
@@ -111,6 +116,11 @@ export function summarizeRatioBackupDiff(
     differentKeyCount: localOnly.length + remoteOnly.length + changed.length,
     sampleKeys,
   }
+}
+
+function normalizeBackupItemForCompare(key: string, raw: string) {
+  if (key === 'ratio.accountOps') return canonicalizeAccountOpsForBackup(raw)
+  return raw
 }
 
 export function coerceRatioBackup(value: unknown): RatioBackupFile {

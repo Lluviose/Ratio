@@ -316,6 +316,52 @@ describe('localStorage coercion', () => {
     expect(screen.getByTestId('after')).toHaveTextContent('1.11')
   })
 
+  it('uses deterministic account op fallbacks for legacy rows without id', async () => {
+    localStorage.setItem(
+      'ratio.accountOps',
+      JSON.stringify([
+        {
+          kind: 'rename',
+          at: '2025-01-01T00:00:00.000Z',
+          accountType: 'cash',
+          accountId: 'a1',
+          beforeName: 'Cash',
+          afterName: 'Wallet',
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { ops } = useAccountOps()
+      return <div data-testid="op">{JSON.stringify(ops[0] ?? null)}</div>
+    }
+
+    render(<Reader />)
+
+    expect(JSON.parse(screen.getByTestId('op').textContent ?? 'null')).toEqual({
+      id: 'legacy-op-0-rename-2025-01-01t00-00-00-000z-cash-a1-cash-wallet',
+      kind: 'rename',
+      at: '2025-01-01T00:00:00.000Z',
+      accountType: 'cash',
+      accountId: 'a1',
+      beforeName: 'Cash',
+      afterName: 'Wallet',
+    })
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('ratio.accountOps') ?? '[]') as Array<Record<string, unknown>>
+      expect(stored[0]).toEqual({
+        id: 'legacy-op-0-rename-2025-01-01t00-00-00-000z-cash-a1-cash-wallet',
+        kind: 'rename',
+        at: '2025-01-01T00:00:00.000Z',
+        accountType: 'cash',
+        accountId: 'a1',
+        beforeName: 'Cash',
+        afterName: 'Wallet',
+      })
+    })
+  })
+
   it('keeps loading legacy account ops without note fields', async () => {
     localStorage.setItem(
       'ratio.accountOps',

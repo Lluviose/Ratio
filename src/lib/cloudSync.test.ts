@@ -115,6 +115,78 @@ describe('initCloudAutoSync', () => {
     expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
   })
 
+  it('reconciles clean local metadata when account ops differ only by legacy ids', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem(
+      'ratio.accountOps',
+      JSON.stringify([
+        {
+          id: 'local-op-id',
+          kind: 'rename',
+          at: '2025-01-01T00:00:00.000Z',
+          accountType: 'cash',
+          accountId: 'a1',
+          beforeName: 'Cash',
+          afterName: 'Wallet',
+        },
+      ]),
+    )
+    const remoteMeta = {
+      updatedAt: '2026-05-08T00:10:00.000Z',
+      clientCreatedAt: '2026-04-29T12:49:43.758Z',
+      itemCount: 1,
+      device: 'Mac',
+    }
+
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: {
+        schema: 'ratio.backup.v1',
+        createdAt: remoteMeta.clientCreatedAt,
+        items: {
+          'ratio.accountOps': JSON.stringify([
+            {
+              kind: 'rename',
+              at: '2025-01-01T00:00:00.000Z',
+              accountType: 'cash',
+              accountId: 'a1',
+              beforeName: 'Cash',
+              afterName: 'Wallet',
+              note: '  ',
+            },
+          ]),
+        },
+      },
+      meta: remoteMeta,
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+  })
+
   it('marks a clean device as conflicted when remote metadata changed to different data', async () => {
     const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
     const { initCloudAutoSync } = await import('./cloudSync')
