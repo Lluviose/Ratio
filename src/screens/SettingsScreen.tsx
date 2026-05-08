@@ -306,7 +306,12 @@ export function SettingsScreen(props: {
       })
       setCloudConfigExpanded(false)
       toast(`已上传 ${meta.itemCount} 项数据`, { tone: 'success' })
-      trackTelemetry('cloud_backup_upload', { itemCount: meta.itemCount, force })
+      trackTelemetry('cloud_backup_upload', {
+        itemCount: meta.itemCount,
+        force,
+        remoteUpdatedAt: meta.updatedAt,
+        ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+      })
     } catch (err) {
       if (isAbortError(err)) return
       const conflictMeta = readConflictMeta(err)
@@ -320,6 +325,13 @@ export function SettingsScreen(props: {
             lastSyncMessage: conflictMessage,
           })
         }
+        trackTelemetry('cloud_backup_upload_conflict', {
+          force,
+          expectedUpdatedAt: requestSettings.lastBackupAt || '',
+          remoteUpdatedAt: conflictMeta?.updatedAt || '',
+          remoteItemCount: conflictMeta?.itemCount ?? 0,
+          ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+        })
         if (mountedRef.current) setBusy(false)
         const ok = await confirm({
           title: '云端备份已更新',
@@ -350,6 +362,12 @@ export function SettingsScreen(props: {
           lastSyncMessage: msg,
         })
       }
+      trackTelemetry('cloud_backup_upload_error', {
+        force,
+        message: msg,
+        code: err instanceof CloudRequestError ? err.code : '',
+        ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+      })
       toast(msg, { tone: 'danger' })
     } finally {
       if (!retrying) finishCloudOperation(controller)
@@ -390,7 +408,11 @@ export function SettingsScreen(props: {
         lastSyncStatus: 'ok',
         lastSyncMessage: `已从云端恢复 ${restore.restoredKeys.length} 项数据`,
       })
-      trackTelemetry('cloud_backup_restore', { restoredKeys: restore.restoredKeys.length })
+      trackTelemetry('cloud_backup_restore', {
+        restoredKeys: restore.restoredKeys.length,
+        remoteUpdatedAt: res.meta?.updatedAt || '',
+        ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+      })
       queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
       window.location.reload()
     } catch (err) {
@@ -404,6 +426,11 @@ export function SettingsScreen(props: {
           lastSyncMessage: msg,
         })
       }
+      trackTelemetry('cloud_backup_restore_error', {
+        message: msg,
+        code: err instanceof CloudRequestError ? err.code : '',
+        ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+      })
       toast(msg, { tone: 'danger' })
     } finally {
       finishCloudOperation(controller)

@@ -1,4 +1,5 @@
 import { getCloudSyncSettings, hasCloudCredentials, sendCloudTelemetry } from './cloud'
+import { APP_BUILD } from './appBuild'
 
 type TelemetryEvent = {
   name: string
@@ -77,6 +78,7 @@ function cloudSyncStatusPayload() {
     lastSyncStatus: settings.lastSyncStatus || '',
     lastSyncAt: settings.lastSyncAt || '',
     dirty: readCloudSyncDirty(),
+    build: APP_BUILD,
   }
 }
 
@@ -87,7 +89,7 @@ export function trackTelemetry(name: string, payload?: Record<string, unknown>) 
   queue.push({
     name,
     at: new Date().toISOString(),
-    payload: sanitizePayload(payload),
+    payload: sanitizePayload({ build: APP_BUILD, ...payload }),
   })
   scheduleFlush()
 }
@@ -117,6 +119,7 @@ export function initTelemetry() {
   trackTelemetry('app_loaded', {
     path: window.location.pathname,
     online: navigator.onLine,
+    swControlled: Boolean(navigator.serviceWorker?.controller),
     ...cloudSyncStatusPayload(),
   })
 }

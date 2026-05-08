@@ -7,11 +7,15 @@ export default defineConfig(() => {
   const [owner, repo] = process.env.GITHUB_REPOSITORY?.split('/') ?? []
   const isUserOrOrgPagesRepo = Boolean(owner && repo && repo.toLowerCase() === `${owner.toLowerCase()}.github.io`)
   const base = repo && !isUserOrOrgPagesRepo ? `/${repo}/` : '/'
+  const buildId = process.env.GITHUB_SHA?.slice(0, 7) ?? new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
   const lazyChunkFilePattern = /(?:^|\/)(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown)-.*\.js$/i
   const lazyChunkPattern = /\/assets\/(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown)-.*\.js$/i
 
   return {
     base,
+    define: {
+      __APP_BUILD__: JSON.stringify(buildId),
+    },
     build: {
       modulePreload: {
         resolveDependencies(_filename, deps) {
