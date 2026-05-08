@@ -1,4 +1,4 @@
-import { buildRatioBackup, sameRatioBackupData, type RatioBackupFile } from './backup'
+import { buildRatioBackup, sameRatioBackupData, summarizeRatioBackupDiff, type RatioBackupFile } from './backup'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
   type CloudBackupMeta,
@@ -154,6 +154,11 @@ function writeAutoSyncConflict(
     localItemCount?: number
     remoteItemCount?: number
     hasLastBackupAt?: boolean
+    localOnlyCount?: number
+    remoteOnlyCount?: number
+    changedCount?: number
+    differentKeyCount?: number
+    diffSampleKeys?: string[]
   } = {},
 ) {
   if (!canApplyAutoSyncResult(settings, reason)) return false
@@ -201,12 +206,18 @@ async function reconcileRemoteBackup(
     return applied ? 'matched' : 'stale'
   }
 
+  const diff = summarizeRatioBackupDiff(backup, remote.backup)
   const applied = writeAutoSyncConflict(settings, reason, `云端备份已更新：${remote.meta.updatedAt}`, {
     expectedUpdatedAt: settings.lastBackupAt || '',
     remoteUpdatedAt: remote.meta.updatedAt,
     localItemCount,
     remoteItemCount: remote.meta.itemCount,
     hasLastBackupAt: Boolean(settings.lastBackupAt),
+    localOnlyCount: diff.localOnlyCount,
+    remoteOnlyCount: diff.remoteOnlyCount,
+    changedCount: diff.changedCount,
+    differentKeyCount: diff.differentKeyCount,
+    diffSampleKeys: diff.sampleKeys,
   })
   return applied ? 'conflict' : 'stale'
 }

@@ -3,7 +3,14 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { queueToastAfterReload, useOverlay } from '../lib/overlay'
-import { buildRatioBackup, parseRatioBackup, restoreRatioBackup, stringifyRatioBackup } from '../lib/backup'
+import {
+  buildRatioBackup,
+  parseRatioBackup,
+  restoreRatioBackup,
+  sameRatioBackupData,
+  stringifyRatioBackup,
+  summarizeRatioBackupDiff,
+} from '../lib/backup'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
   CloudRequestError,
@@ -282,9 +289,9 @@ export function SettingsScreen(props: {
   const uploadCloud = async (force = false, requestSettings: CloudSyncSettings = cloudSyncRef.current): Promise<void> => {
     let retrying = false
     const controller = startCloudOperation()
+    const dirtyToken = readCloudSyncDirtyToken()
+    const backup = buildRatioBackup()
     try {
-      const dirtyToken = readCloudSyncDirtyToken()
-      const backup = buildRatioBackup()
       const meta = await uploadCloudBackup(requestSettings, backup, {
         expectedUpdatedAt: requestSettings.lastBackupAt,
         force,
@@ -314,8 +321,52 @@ export function SettingsScreen(props: {
       })
     } catch (err) {
       if (isAbortError(err)) return
-      const conflictMeta = readConflictMeta(err)
+      let conflictMeta = readConflictMeta(err)
       if (err instanceof CloudRequestError && err.code === 'backup_conflict' && !force) {
+        let diffSummary:
+          | {
+              localOnlyCount: number
+              remoteOnlyCount: number
+              changedCount: number
+              differentKeyCount: number
+              sampleKeys: string[]
+            }
+          | undefined
+        try {
+          const remote = await downloadCloudBackup(requestSettings, { signal: controller.signal })
+          if (remote.meta) conflictMeta = remote.meta
+          if (remote.meta && remote.backup) {
+            if (sameRatioBackupData(backup, remote.backup)) {
+              if (!canUseCloudResult(controller)) return
+              if (!isSameCloudTarget(requestSettings)) {
+                notifyCloudTargetChanged()
+                return
+              }
+              const syncedAt = new Date().toISOString()
+              markCloudSyncClean(dirtyToken)
+              writeCloudSyncSettingsPatch({
+                lastBackupAt: remote.meta.updatedAt,
+                lastConnectionAt: syncedAt,
+                lastSyncAt: syncedAt,
+                lastSyncStatus: 'ok',
+                lastSyncMessage: `已确认云端现有备份 ${remote.meta.itemCount} 项数据`,
+              })
+              setCloudConfigExpanded(false)
+              toast(`已确认云端现有备份 ${remote.meta.itemCount} 项数据`, { tone: 'success' })
+              trackTelemetry('cloud_backup_upload_reconciled', {
+                force,
+                remoteUpdatedAt: remote.meta.updatedAt,
+                itemCount: remote.meta.itemCount,
+                ...cloudSyncTelemetryPayload(cloudSyncRef.current),
+              })
+              return
+            }
+            diffSummary = summarizeRatioBackupDiff(backup, remote.backup)
+          }
+        } catch {
+          // Keep the original conflict flow below if the verification request fails.
+        }
+
         if (!canUseCloudResult(controller)) return
         const conflictMessage = conflictMeta ? `云端备份已更新：${conflictMeta.updatedAt}` : '云端备份状态已变化'
         if (isSameCloudTarget(requestSettings)) {
@@ -330,6 +381,11 @@ export function SettingsScreen(props: {
           expectedUpdatedAt: requestSettings.lastBackupAt || '',
           remoteUpdatedAt: conflictMeta?.updatedAt || '',
           remoteItemCount: conflictMeta?.itemCount ?? 0,
+          localOnlyCount: diffSummary?.localOnlyCount ?? 0,
+          remoteOnlyCount: diffSummary?.remoteOnlyCount ?? 0,
+          changedCount: diffSummary?.changedCount ?? 0,
+          differentKeyCount: diffSummary?.differentKeyCount ?? 0,
+          diffSampleKeys: diffSummary?.sampleKeys ?? [],
           ...cloudSyncTelemetryPayload(cloudSyncRef.current),
         })
         if (mountedRef.current) setBusy(false)

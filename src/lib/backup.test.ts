@@ -6,6 +6,7 @@ import {
   RATIO_BACKUP_SCHEMA_V1,
   restoreRatioBackup,
   sameRatioBackupData,
+  summarizeRatioBackupDiff,
 } from './backup'
 
 beforeEach(() => {
@@ -187,5 +188,38 @@ describe('backup', () => {
         items: { ...right.items, 'ratio.accounts': '["2"]' },
       }),
     ).toBe(false)
+  })
+
+  it('summarizeRatioBackupDiff reports changed and missing keys without values', () => {
+    const local = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: {
+          'ratio.accounts': '["1"]',
+          'ratio.localOnly': '"x"',
+          'ratio.theme': '"matisse2"',
+        },
+      }),
+    )
+    const remote = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-02-01T00:00:00.000Z',
+        items: {
+          'ratio.accounts': '["2"]',
+          'ratio.remoteOnly': '"y"',
+          'ratio.theme': '"matisse2"',
+        },
+      }),
+    )
+
+    expect(summarizeRatioBackupDiff(local, remote)).toEqual({
+      localOnlyCount: 1,
+      remoteOnlyCount: 1,
+      changedCount: 1,
+      differentKeyCount: 3,
+      sampleKeys: ['ratio.localOnly', 'ratio.remoteOnly', 'ratio.accounts'],
+    })
   })
 })

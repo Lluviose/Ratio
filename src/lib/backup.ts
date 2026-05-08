@@ -10,6 +10,14 @@ export type RatioBackupFile = {
   items: Record<string, string>
 }
 
+export type RatioBackupDiffSummary = {
+  localOnlyCount: number
+  remoteOnlyCount: number
+  changedCount: number
+  differentKeyCount: number
+  sampleKeys: string[]
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -72,6 +80,37 @@ export function sameRatioBackupData(left: RatioBackupFile, right: RatioBackupFil
   }
 
   return true
+}
+
+export function summarizeRatioBackupDiff(
+  local: RatioBackupFile,
+  remote: RatioBackupFile,
+  maxSampleKeys = 12,
+): RatioBackupDiffSummary {
+  const localKeys = Object.keys(local.items).sort((a, b) => a.localeCompare(b))
+  const remoteKeys = new Set(Object.keys(remote.items))
+  const localOnly: string[] = []
+  const changed: string[] = []
+
+  for (const key of localKeys) {
+    if (!remoteKeys.has(key)) {
+      localOnly.push(key)
+      continue
+    }
+    if (local.items[key] !== remote.items[key]) changed.push(key)
+    remoteKeys.delete(key)
+  }
+
+  const remoteOnly = Array.from(remoteKeys).sort((a, b) => a.localeCompare(b))
+  const sampleKeys = [...localOnly, ...remoteOnly, ...changed].slice(0, Math.max(1, maxSampleKeys))
+
+  return {
+    localOnlyCount: localOnly.length,
+    remoteOnlyCount: remoteOnly.length,
+    changedCount: changed.length,
+    differentKeyCount: localOnly.length + remoteOnly.length + changed.length,
+    sampleKeys,
+  }
 }
 
 export function coerceRatioBackup(value: unknown): RatioBackupFile {
