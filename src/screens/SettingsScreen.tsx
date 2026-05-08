@@ -384,8 +384,8 @@ export function SettingsScreen(props: {
           localOnlyCount: diffSummary?.localOnlyCount ?? 0,
           remoteOnlyCount: diffSummary?.remoteOnlyCount ?? 0,
           changedCount: diffSummary?.changedCount ?? 0,
-          differentKeyCount: diffSummary?.differentKeyCount ?? 0,
-          diffSampleKeys: diffSummary?.sampleKeys ?? [],
+          differentEntryCount: diffSummary?.differentKeyCount ?? 0,
+          diffSampleNames: diffSummary?.sampleKeys ?? [],
           ...cloudSyncTelemetryPayload(cloudSyncRef.current),
         })
         if (mountedRef.current) setBusy(false)

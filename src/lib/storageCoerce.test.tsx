@@ -130,6 +130,45 @@ describe('localStorage coercion', () => {
     })
   })
 
+  it('uses deterministic account fallbacks for legacy rows without id or updatedAt', async () => {
+    localStorage.setItem(
+      'ratio.accounts',
+      JSON.stringify([
+        {
+          type: 'cash',
+          name: 'Cash',
+          balance: 12.34,
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { accounts } = useAccounts()
+      return <div data-testid="account">{JSON.stringify(accounts[0] ?? null)}</div>
+    }
+
+    render(<Reader />)
+
+    expect(JSON.parse(screen.getByTestId('account').textContent ?? 'null')).toEqual({
+      id: 'legacy-account-0-cash-cash',
+      type: 'cash',
+      name: 'Cash',
+      balance: 12.34,
+      updatedAt: '',
+    })
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('ratio.accounts') ?? '[]') as Array<Record<string, unknown>>
+      expect(stored[0]).toEqual({
+        id: 'legacy-account-0-cash-cash',
+        type: 'cash',
+        name: 'Cash',
+        balance: 12.34,
+        updatedAt: '',
+      })
+    })
+  })
+
   it('migrates legacy negative account balances to the non-negative model', async () => {
     localStorage.setItem(
       'ratio.accounts',

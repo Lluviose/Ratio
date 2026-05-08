@@ -157,8 +157,8 @@ function writeAutoSyncConflict(
     localOnlyCount?: number
     remoteOnlyCount?: number
     changedCount?: number
-    differentKeyCount?: number
-    diffSampleKeys?: string[]
+    differentEntryCount?: number
+    diffSampleNames?: string[]
   } = {},
 ) {
   if (!canApplyAutoSyncResult(settings, reason)) return false
@@ -216,8 +216,8 @@ async function reconcileRemoteBackup(
     localOnlyCount: diff.localOnlyCount,
     remoteOnlyCount: diff.remoteOnlyCount,
     changedCount: diff.changedCount,
-    differentKeyCount: diff.differentKeyCount,
-    diffSampleKeys: diff.sampleKeys,
+    differentEntryCount: diff.differentKeyCount,
+    diffSampleNames: diff.sampleKeys,
   })
   return applied ? 'conflict' : 'stale'
 }

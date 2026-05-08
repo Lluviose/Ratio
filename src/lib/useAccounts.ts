@@ -25,6 +25,19 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function legacyIdPart(value: string, fallback: string) {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return normalized || fallback
+}
+
+function legacyAccountId(index: number, type: AccountTypeId, name: string) {
+  return `legacy-account-${index}-${legacyIdPart(type, 'type')}-${legacyIdPart(name, 'account')}`
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
@@ -46,17 +59,16 @@ const initialAccounts: Account[] = []
 function coerceAccounts(value: unknown): Account[] {
   if (!Array.isArray(value)) return initialAccounts
 
-  const now = nowIso()
   const result: Account[] = []
-  for (const item of value) {
+  for (const [index, item] of value.entries()) {
     if (!isRecord(item)) continue
 
     const type = coerceAccountTypeId(item.type)
-    const id = typeof item.id === 'string' && item.id.trim() ? item.id : createId()
     const name =
       typeof item.name === 'string' && item.name.trim() ? item.name.trim() : defaultAccountName(type)
     const balance = normalizeStoredAccountBalance(type, item.balance)
-    const updatedAt = typeof item.updatedAt === 'string' && item.updatedAt ? item.updatedAt : now
+    const id = typeof item.id === 'string' && item.id.trim() ? item.id : legacyAccountId(index, type, name)
+    const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : ''
 
     result.push({ id, type, name, balance, updatedAt })
   }

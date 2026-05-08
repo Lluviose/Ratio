@@ -17,7 +17,7 @@ function enabled() {
   return settings.telemetryEnabled && hasCloudCredentials(settings)
 }
 
-function sanitizePayload(payload?: Record<string, unknown>) {
+export function sanitizeTelemetryPayload(payload?: Record<string, unknown>) {
   if (!payload) return undefined
   const next: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(payload)) {
@@ -89,7 +89,7 @@ export function trackTelemetry(name: string, payload?: Record<string, unknown>) 
   queue.push({
     name,
     at: new Date().toISOString(),
-    payload: sanitizePayload({ build: APP_BUILD, ...payload }),
+    payload: sanitizeTelemetryPayload({ build: APP_BUILD, ...payload }),
   })
   scheduleFlush()
 }
