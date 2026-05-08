@@ -1,5 +1,6 @@
 import { dispatchStorageWrite } from './storageEvents'
 import { canonicalizeAccountOpsForBackup } from './accountOpsStorage'
+import { canonicalizeTransactionsForBackup } from './ledgerStorage'
 
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
@@ -120,6 +121,7 @@ export function summarizeRatioBackupDiff(
 
 function normalizeBackupItemForCompare(key: string, raw: string) {
   if (key === 'ratio.accountOps') return canonicalizeAccountOpsForBackup(raw)
+  if (key === 'ratio.ledger') return canonicalizeTransactionsForBackup(raw)
   return raw
 }
 

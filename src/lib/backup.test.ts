@@ -240,6 +240,54 @@ describe('backup', () => {
     })
   })
 
+  it('sameRatioBackupData treats semantically equal ledger rows as equal across legacy id rewrites', () => {
+    const left = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: {
+          'ratio.ledger': JSON.stringify([
+            {
+              type: 'income',
+              amount: 12.345,
+              category: 'salary',
+              account: 'cash',
+              note: 'legacy',
+            },
+          ]),
+        },
+      }),
+    )
+    const right = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-02-01T00:00:00.000Z',
+        items: {
+          'ratio.ledger': JSON.stringify([
+            {
+              id: 'different-ledger-id',
+              type: 'income',
+              amount: 12.35,
+              category: 'salary',
+              account: 'cash',
+              date: '',
+              note: 'legacy',
+            },
+          ]),
+        },
+      }),
+    )
+
+    expect(sameRatioBackupData(left, right)).toBe(true)
+    expect(summarizeRatioBackupDiff(left, right)).toEqual({
+      localOnlyCount: 0,
+      remoteOnlyCount: 0,
+      changedCount: 0,
+      differentKeyCount: 0,
+      sampleKeys: [],
+    })
+  })
+
   it('summarizeRatioBackupDiff reports changed and missing keys without values', () => {
     const local = parseRatioBackup(
       JSON.stringify({

@@ -102,6 +102,51 @@ describe('localStorage coercion', () => {
     expect(screen.getByTestId('amount')).toHaveTextContent('-0.3')
   })
 
+  it('uses deterministic ledger fallbacks for legacy rows without id or date', async () => {
+    localStorage.setItem(
+      'ratio.ledger',
+      JSON.stringify([
+        {
+          type: 'income',
+          amount: 12.345,
+          category: 'salary',
+          account: 'cash',
+          note: 'legacy',
+        },
+      ]),
+    )
+
+    function Reader() {
+      const { transactions } = useLedger()
+      return <div data-testid="tx">{JSON.stringify(transactions[0] ?? null)}</div>
+    }
+
+    render(<Reader />)
+
+    expect(JSON.parse(screen.getByTestId('tx').textContent ?? 'null')).toEqual({
+      id: 'legacy-tx-0-income-12-35-salary-cash-part4-legacy',
+      type: 'income',
+      amount: 12.35,
+      category: 'salary',
+      account: 'cash',
+      date: '',
+      note: 'legacy',
+    })
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('ratio.ledger') ?? '[]') as Array<Record<string, unknown>>
+      expect(stored[0]).toEqual({
+        id: 'legacy-tx-0-income-12-35-salary-cash-part4-legacy',
+        type: 'income',
+        amount: 12.35,
+        category: 'salary',
+        account: 'cash',
+        date: '',
+        note: 'legacy',
+      })
+    })
+  })
+
   it('normalizes account balances to cents when loading old data', async () => {
     localStorage.setItem(
       'ratio.accounts',
