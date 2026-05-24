@@ -15,6 +15,10 @@ export function EditBalanceSheet(props: {
   const { toast } = useOverlay()
 
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const isIPhone = typeof navigator !== 'undefined' && /iPhone/i.test(navigator.userAgent)
+  const inputProps = isIPhone
+    ? ({ type: 'number', inputMode: 'decimal', step: 'any', enterKeyHint: 'done', autoComplete: 'off' } as const)
+    : ({ inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const)
 
   const submit = () => {
     const num = Number(inputRef.current?.value ?? '')
@@ -39,7 +43,7 @@ export function EditBalanceSheet(props: {
           <div className="fieldLabel">修改余额</div>
           <input
             className="input"
-            inputMode="decimal"
+            {...inputProps}
             defaultValue={String(initialValue)}
             ref={inputRef}
             placeholder="0"

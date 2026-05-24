@@ -240,9 +240,25 @@ export function AccountDetailSheet(props: {
   const [transferAmount, setTransferAmount] = useState('')
   const isIPhone = typeof navigator !== 'undefined' && /iPhone/i.test(navigator.userAgent)
   const amountInputProps = isIPhone
-    ? ({ type: 'number', inputMode: 'decimal', step: 'any' } as const)
-    : ({ inputMode: 'decimal' } as const)
-  const expressionInputProps = { inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const
+    ? ({ type: 'number', inputMode: 'decimal', step: 'any', enterKeyHint: 'done', autoComplete: 'off' } as const)
+    : ({ inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const)
+  const expressionInputProps = isIPhone
+    ? ({
+        type: 'tel',
+        inputMode: 'decimal',
+        pattern: '[0-9+\\-.]*',
+        enterKeyHint: 'done',
+        autoComplete: 'off',
+        autoCorrect: 'off',
+        spellCheck: false,
+      } as const)
+    : ({
+        inputMode: 'decimal',
+        enterKeyHint: 'done',
+        autoComplete: 'off',
+        autoCorrect: 'off',
+        spellCheck: false,
+      } as const)
 
   const handleClosePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault()
