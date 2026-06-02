@@ -4,7 +4,6 @@ import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
-import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
@@ -317,7 +316,18 @@ function SavingsStatusCard(props: {
 
   const progress = clampProgress(summary.progress)
   const monthlyNeed = summary.requiredMonthly
-  const targetDeltaDisplay = getGoalDeltaDisplay(summary.targetDeltaAtLatest)
+  const paceDeltaMonthly = summary.paceDailyDelta == null ? null : normalizeMoney(summary.paceDailyDelta * DAYS_PER_MONTH)
+  const paceDeltaDisplay = summary.isComplete
+    ? { label: '目标状态', value: '已达成', tone: '#10b981', sub: '目标已覆盖' }
+    : summary.isPastDue || summary.isDueToday
+      ? { label: '目标缺口', value: formatCny(summary.remaining), tone: '#ef4444', sub: summary.isDueToday ? '今天到期' : '目标已逾期' }
+      : paceDeltaMonthly == null
+        ? { label: '目标节奏', value: '—', tone: undefined, sub: formatSummaryPaceSource(summary) }
+        : paceDeltaMonthly === 0
+          ? { label: '目标节奏', value: '按计划', tone: 'var(--text)', sub: formatSummaryPaceSource(summary) }
+          : paceDeltaMonthly > 0
+            ? { label: '高于节奏', value: `${formatDelta(paceDeltaMonthly)}/月`, tone: '#10b981', sub: formatSummaryPaceSource(summary) }
+            : { label: '落后节奏', value: `${formatDelta(paceDeltaMonthly)}/月`, tone: '#ef4444', sub: formatSummaryPaceSource(summary) }
   const statusText = summary.isComplete
     ? '目标已达成'
     : summary.isPastDue
@@ -418,7 +428,7 @@ function SavingsStatusCard(props: {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
-          <MetricTile label={targetDeltaDisplay.label} value={targetDeltaDisplay.value} valueColor={targetDeltaDisplay.tone} sub={summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate, goalDateContext)}` : '等待快照'} />
+          <MetricTile label={paceDeltaDisplay.label} value={paceDeltaDisplay.value} valueColor={paceDeltaDisplay.tone} sub={paceDeltaDisplay.sub} />
           <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate, goalDateContext) : '暂无预测'} sub={projectionSub} />
         </div>
       </div>

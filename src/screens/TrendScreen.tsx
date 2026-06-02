@@ -267,6 +267,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const chartRef = useRef<HTMLDivElement | null>(null)
+  const activePointRef = useRef<TrendPoint | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null)
 
@@ -545,9 +546,19 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     )
   }
 
-  const handleChartClick = (state: unknown) => {
+  const getActivePointFromChartState = (state: unknown) => {
     const activePayload = (state as { activePayload?: readonly unknown[] } | null)?.activePayload
-    const point = (activePayload?.[0] as { payload?: TrendPoint } | undefined)?.payload
+    return (activePayload?.[0] as { payload?: TrendPoint } | undefined)?.payload ?? null
+  }
+
+  const captureActivePoint = (props: unknown) => {
+    const payload = (props as { payload?: readonly unknown[] } | null)?.payload
+    activePointRef.current = (payload?.[0] as { payload?: TrendPoint } | undefined)?.payload ?? null
+    return null
+  }
+
+  const handleChartClick = (state: unknown) => {
+    const point = getActivePointFromChartState(state) ?? activePointRef.current
     if (!point) return
     setSelectedPointKey((current) => current === point.dateKey ? null : point.dateKey)
   }
@@ -604,8 +615,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 dx={-6}
               />
               <Tooltip
-                content={() => null}
-                wrapperStyle={{ display: 'none' }}
+                content={captureActivePoint}
+                wrapperStyle={{ opacity: 0, visibility: 'hidden', pointerEvents: 'none' }}
                 cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
               />
               {mode === 'netDebt' ? (
