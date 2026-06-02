@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CalendarDays, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
+import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
@@ -262,11 +262,11 @@ function SavingsStatusCard(props: {
         <div className="cardInner">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本月储蓄状态</div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 8 }}>当前净资产</div>
               <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}>{formatCny(latestNetWorth)}</div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
-                设置目标后，这里会显示本周需要存多少和目标节奏。
+                设置目标后，这里会显示本月需要存多少和目标节奏。
               </div>
             </div>
             <button type="button" className="iconBtn" onClick={onEdit} aria-label="set savings goal">
@@ -283,7 +283,7 @@ function SavingsStatusCard(props: {
   }
 
   const progress = clampProgress(summary.progress)
-  const weeklyNeed = summary.requiredDaily == null ? null : normalizeMoney(summary.requiredDaily * 7)
+  const monthlyNeed = summary.requiredMonthly
   const targetDelta = summary.targetDeltaAtLatest
   const statusText = summary.isComplete
     ? '目标已达成'
@@ -303,14 +303,14 @@ function SavingsStatusCard(props: {
       : 'var(--muted-text)'
   const heroLabel = summary.isComplete
     ? '当前净资产'
-    : weeklyNeed == null
+    : monthlyNeed == null
       ? '距离目标还差'
-      : '本周建议存入'
+      : '本月建议存入'
   const heroValue = summary.isComplete
     ? formatCny(summary.currentNetWorth)
-    : weeklyNeed == null
+    : monthlyNeed == null
       ? formatCny(summary.remaining)
-      : formatCny(weeklyNeed)
+      : formatCny(monthlyNeed)
   const targetDeltaLabel = targetDelta == null || targetDelta >= 0 ? '领先目标' : '落后目标'
   const targetDeltaValue = targetDelta == null ? '—' : formatCny(Math.abs(targetDelta))
   const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
@@ -340,7 +340,7 @@ function SavingsStatusCard(props: {
       />
       <div className="cardInner" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
+          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本月储蓄状态</div>
           <div
             style={{
               flex: '0 0 auto',
@@ -736,6 +736,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
   const { summary, color } = props
   const [monthlyExtraValue, setMonthlyExtraValue] = useState(0)
   const [oneTimeValue, setOneTimeValue] = useState(0)
+  const [helpOpen, setHelpOpen] = useState(false)
 
   if (summary.isComplete) return null
 
@@ -788,14 +789,64 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
     >
       <div className="cardInner">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 950, fontSize: 14 }}>目标模拟器</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontWeight: 950, fontSize: 14 }}>目标模拟器</div>
+              <button
+                type="button"
+                onClick={() => setHelpOpen((open) => !open)}
+                aria-label="查看目标模拟器说明"
+                aria-expanded={helpOpen}
+                title="查看目标模拟器说明"
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 999,
+                  border: '1px solid var(--hairline)',
+                  background: 'rgb(255 255 255 / 0.72)',
+                  color: 'var(--muted-text)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flex: '0 0 auto',
+                }}
+              >
+                <Info size={15} strokeWidth={2.5} />
+              </button>
+            </div>
             <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>一次性存入先抵扣差额，每月多存再折算为增速</div>
           </div>
           <button type="button" className="iconBtn" onClick={reset} aria-label="reset savings simulator">
             <RotateCcw size={16} strokeWidth={2.5} />
           </button>
         </div>
+
+        {helpOpen ? (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              marginTop: 12,
+              borderRadius: 16,
+              padding: 12,
+              background: 'rgb(var(--primary-rgb) / 0.06)',
+              border: '1px solid var(--hairline)',
+              display: 'grid',
+              gap: 7,
+              fontSize: 11,
+              fontWeight: 850,
+              color: 'var(--muted-text)',
+            }}
+          >
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>每月多存</span>：按月金额折算成每日增速，影响模拟达成日和目标日缺口。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>一次性存入</span>：先直接减少距离目标还差的金额。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>月存达标</span>：把每月多存调到当前条件下尽量踩中目标日。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>一次补齐</span>：把一次性存入调到足以覆盖当前剩余差额。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>模拟达成</span>：按当前组合预计到达目标的日期；目标日余量/缺口表示到目标日时多出或少多少。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及距离踩中目标日还需要补的月存额。</div>
+          </motion.div>
+        ) : null}
 
         <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
           <SavingsSliderControl
