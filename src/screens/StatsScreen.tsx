@@ -1030,7 +1030,7 @@ function SavingsGoalCard(props: {
           <ProgressRing progress={summary.progress} color={color} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div className="muted" style={{ fontSize: 11, fontWeight: 900 }}>目标净资产</div>
-            <div style={{ fontSize: 22, fontWeight: 950, marginTop: 3 }}>{formatCny(summary.targetAmount)}</div>
+            <div style={{ fontSize: 22, fontWeight: 950, marginTop: 3, overflowWrap: 'anywhere' }}>{formatCny(summary.targetAmount)}</div>
             <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, fontWeight: 850 }}>
                 <span className="muted">还差</span>
@@ -1384,7 +1384,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             >
               <div className="cardInner">
                 <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产负债概览</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="总资产" value={formatCny(view.assetsEnd)} />
                   <MetricTile label="净资产" value={formatCny(view.end.net)} />
                   <MetricTile label="负债" value={formatDelta(-view.end.debt)} />
@@ -1401,7 +1401,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             >
               <div className="cardInner">
                 <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性与杠杆</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="流动资产" value={formatCny(view.currentAssets)} />
                   <MetricTile label="净流动资产" value={formatCny(view.netLiquid)} />
                   <MetricTile label="流动比" value={formatX(view.coverage.current)} sub="流动资产/负债" />
@@ -1425,7 +1425,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
                   基于快照差值（含流量/估值波动）
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
                   <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
                   <MetricTile label="负债" value={formatDelta(view.delta.debt)} />
@@ -1446,7 +1446,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             >
               <div className="cardInner">
                 <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>增长与节奏</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
                   <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
                   <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
