@@ -181,10 +181,10 @@ function MetricTile(props: {
 }) {
   const { label, value, sub, valueColor } = props
   return (
-    <div style={{ border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
-      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4, color: valueColor ?? 'var(--text)' }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11, fontWeight: 850, marginTop: 4, color: 'var(--muted-text)' }}>{sub}</div> : null}
+    <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)', overflowWrap: 'anywhere' }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4, color: valueColor ?? 'var(--text)', overflowWrap: 'anywhere' }}>{value}</div>
+      {sub ? <div style={{ fontSize: 11, fontWeight: 850, marginTop: 4, color: 'var(--muted-text)', overflowWrap: 'anywhere' }}>{sub}</div> : null}
     </div>
   )
 }
@@ -226,7 +226,7 @@ function SavingsStatusCard(props: {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
-              <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0 }}>{formatCny(latestNetWorth)}</div>
+              <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}>{formatCny(latestNetWorth)}</div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
                 设置目标后，这里会显示本周需要存多少和目标节奏。
               </div>
@@ -731,15 +731,9 @@ function SavingsSliderControl(props: {
     <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--bg)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
         <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>{label}</div>
-        <motion.div
-          key={safeValue}
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-          style={{ fontSize: 14, fontWeight: 950, color }}
-        >
+        <div style={{ fontSize: 14, fontWeight: 950, color, overflowWrap: 'anywhere' }}>
           {formatCny(safeValue)}
-        </motion.div>
+        </div>
       </div>
       <div style={{ position: 'relative', marginTop: 12, height: 30, display: 'flex', alignItems: 'center' }}>
         <div style={{ position: 'absolute', left: 0, right: 0, height: 8, borderRadius: 999, background: 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
@@ -751,6 +745,7 @@ function SavingsSliderControl(props: {
           />
         </div>
         <input
+          className="savingsRange"
           type="range"
           min={0}
           max={safeMax}
@@ -761,8 +756,7 @@ function SavingsSliderControl(props: {
           style={{
             position: 'relative',
             width: '100%',
-            accentColor: color,
-            opacity: 0.94,
+            color,
           }}
         />
       </div>
