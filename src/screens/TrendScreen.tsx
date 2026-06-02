@@ -6,6 +6,16 @@ import { SegmentedControl } from '../components/SegmentedControl'
 import { formatCny } from '../lib/format'
 import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
+import {
+  SAVINGS_GOAL_KEY,
+  addDaysToDateKey,
+  coerceSavingsGoal,
+  diffDateDays,
+  getLinearGoalValue,
+  getSavingsGoalSummary,
+  type SavingsGoal,
+  type SavingsGoalSummary,
+} from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
@@ -19,12 +29,14 @@ type TrendPoint = {
   date: string
   dateKey: string
   idx: number
-  net: number
-  debt: number
-  cash: number
-  invest: number
-  fixed: number
-  receivable: number
+  net: number | null
+  debt: number | null
+  cash: number | null
+  invest: number | null
+  fixed: number | null
+  receivable: number | null
+  goalTarget?: number | null
+  projectedNet?: number | null
 }
 
 function toDateKey(d: Date) {
@@ -79,6 +91,99 @@ function formatDelta(value: number) {
   return text
 }
 
+function formatMaybeCny(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? formatCny(value) : '—'
+}
+
+function formatMaybeDelta(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? formatDelta(value) : '—'
+}
+
+function formatGoalDate(dateKey: string | null | undefined) {
+  if (!dateKey) return '暂无'
+  const d = new Date(`${dateKey}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return dateKey
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
+function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
+  return {
+    date: label ?? formatLabel(dateKey),
+    dateKey,
+    idx: -1,
+    net: null,
+    debt: null,
+    cash: null,
+    invest: null,
+    fixed: null,
+    receivable: null,
+    goalTarget: null,
+    projectedNet: null,
+  }
+}
+
+function addFutureCheckpoints(
+  ensurePoint: (dateKey: string, label?: string) => void,
+  startDate: string,
+  endDate: string,
+  maxPoints = 8,
+) {
+  const days = diffDateDays(startDate, endDate)
+  if (days == null || days <= 35) return
+
+  const count = Math.min(maxPoints, Math.max(1, Math.floor(days / 45)))
+  for (let i = 1; i <= count; i += 1) {
+    const next = addDaysToDateKey(startDate, Math.round((days * i) / (count + 1)))
+    if (next && next > startDate && next < endDate) ensurePoint(next)
+  }
+}
+
+function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summary: SavingsGoalSummary | null) {
+  if (!goal || !summary || points.length === 0) return points
+
+  const firstDate = points[0]?.dateKey
+  if (!firstDate) return points
+
+  const byDate = new Map<string, TrendPoint>()
+  for (const point of points) {
+    byDate.set(point.dateKey, { ...point, goalTarget: null, projectedNet: null })
+  }
+
+  const ensurePoint = (dateKey: string, label?: string) => {
+    if (dateKey < firstDate) return
+    if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label))
+  }
+
+  ensurePoint(goal.targetDate, '目标')
+  if (goal.startDate >= firstDate) ensurePoint(goal.startDate)
+  if (summary.latestDate) addFutureCheckpoints(ensurePoint, summary.latestDate, goal.targetDate)
+
+  let projectionEnd: string | null = null
+  if (summary.latestDate && summary.avgDailyNetChange != null) {
+    projectionEnd = goal.targetDate
+    if (summary.projectedDate && summary.projectedDate > summary.latestDate && summary.projectedDate < goal.targetDate) {
+      projectionEnd = summary.projectedDate
+    }
+    ensurePoint(summary.latestDate)
+    ensurePoint(projectionEnd, projectionEnd === goal.targetDate ? '目标' : '预计')
+    addFutureCheckpoints(ensurePoint, summary.latestDate, projectionEnd)
+  }
+
+  const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+  for (const point of merged) {
+    point.goalTarget = getLinearGoalValue(goal, point.dateKey)
+
+    if (summary.latestDate && projectionEnd && summary.avgDailyNetChange != null) {
+      const daysFromLatest = diffDateDays(summary.latestDate, point.dateKey)
+      if (daysFromLatest != null && daysFromLatest >= 0 && point.dateKey <= projectionEnd) {
+        point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromLatest
+      }
+    }
+  }
+
+  return merged
+}
+
 function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: number) {
   if (!prev || !prev.accounts || !curr.accounts) return null
 
@@ -114,6 +219,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
   const [monthStartDayRaw] = useLocalStorageState<number>(MONTH_START_DAY_KEY, DEFAULT_MONTH_START_DAY)
+  const [goal] = useLocalStorageState<SavingsGoal | null>(SAVINGS_GOAL_KEY, null, {
+    coerce: coerceSavingsGoal,
+  })
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const chartRef = useRef<HTMLDivElement | null>(null)
@@ -169,7 +277,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     }
   }, [monthStartDay, range, snapshots])
 
-  const data = view.points
+  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots), [goal, snapshots])
+  const goalTrendPoints = useMemo(() => withGoalTrendLines(view.points, goal, goalSummary), [goal, goalSummary, view.points])
+  const data = mode === 'netDebt' ? goalTrendPoints : view.points
 
   const tooltip = (props: unknown) => {
     const active = Boolean((props as { active?: boolean } | null)?.active)
@@ -179,7 +289,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     if (!p) return null
 
     const idx = p.idx
-    const currSnap = view.selected[idx]
+    const currSnap = idx >= 0 ? view.selected[idx] ?? null : null
     const prevSnap = idx > 0 ? view.selected[idx - 1] : null
     const topChanges = currSnap ? pickTopChangingAccounts(prevSnap, currSnap, 3) : null
     const canCompare = Boolean(prevSnap)
@@ -191,23 +301,23 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>分组构成</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>流动资金</div>
-          <div style={{ color: colors.liquid }}>{formatCny(p.cash)}</div>
+          <div style={{ color: colors.liquid }}>{formatMaybeCny(p.cash)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>投资</div>
-          <div style={{ color: colors.invest }}>{formatCny(p.invest)}</div>
+          <div style={{ color: colors.invest }}>{formatMaybeCny(p.invest)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>固定资产</div>
-          <div style={{ color: colors.fixed }}>{formatCny(p.fixed)}</div>
+          <div style={{ color: colors.fixed }}>{formatMaybeCny(p.fixed)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>应收款</div>
-          <div style={{ color: colors.receivable }}>{formatCny(p.receivable)}</div>
+          <div style={{ color: colors.receivable }}>{formatMaybeCny(p.receivable)}</div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>负债</div>
-          <div style={{ opacity: 0.75, color: colors.debt }}>{formatDelta(-p.debt)}</div>
+          <div style={{ opacity: 0.75, color: colors.debt }}>{formatMaybeDelta(typeof p.debt === 'number' ? -p.debt : null)}</div>
         </div>
       </div>
     )
@@ -238,6 +348,26 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       </div>
     )
 
+    const goalPanel =
+      mode === 'netDebt' && (p.goalTarget != null || p.projectedNet != null) ? (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
+          <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>储蓄路径</div>
+          {p.goalTarget != null ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+              <div style={{ color: 'var(--muted-text)' }}>目标路径</div>
+              <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalTarget)}</div>
+            </div>
+          ) : null}
+          {p.projectedNet != null ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+              <div style={{ color: 'var(--muted-text)' }}>当前速度</div>
+              <div style={{ color: '#10b981' }}>{formatCny(p.projectedNet)}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : null
+
     if (mode === 'netDebt') {
       return (
         <div
@@ -255,12 +385,13 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
-            <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatCny(p.net)}</div>
+            <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatMaybeCny(p.net)}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
-            <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatDelta(-p.debt)}</div>
+            <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatMaybeDelta(typeof p.debt === 'number' ? -p.debt : null)}</div>
           </div>
+          {goalPanel}
           {breakdown}
           {topChangePanel}
         </div>
@@ -283,11 +414,11 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
              <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
-             <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatCny(p.cash)}</div>
+             <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatMaybeCny(p.cash)}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
              <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
-             <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatCny(p.invest)}</div>
+             <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatMaybeCny(p.invest)}</div>
         </div>
         {breakdown}
         {topChangePanel}
@@ -372,6 +503,34 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
+                  {goalSummary ? (
+                    <>
+                      <Line
+                        type="monotone"
+                        dataKey="goalTarget"
+                        stroke="rgba(15, 23, 42, 0.42)"
+                        strokeWidth={2.5}
+                        strokeDasharray="7 7"
+                        dot={false}
+                        activeDot={false}
+                        connectNulls={false}
+                        animationDuration={900}
+                        animationEasing="ease-out"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="projectedNet"
+                        stroke="#10b981"
+                        strokeWidth={3}
+                        strokeDasharray="2 7"
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
+                        connectNulls={false}
+                        animationDuration={900}
+                        animationEasing="ease-out"
+                      />
+                    </>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -404,6 +563,43 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             </div>
           )}
         </motion.div>
+
+        {mode === 'netDebt' && goalSummary ? (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              marginTop: 12,
+              border: '1px solid var(--hairline)',
+              borderRadius: 18,
+              padding: '10px 12px',
+              background: 'var(--card)',
+              display: 'grid',
+              gap: 8,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
+                  <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.42)' }} />
+                  目标路径
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
+                  <span style={{ width: 18, borderTop: '2px dashed #10b981' }} />
+                  当前速度
+                </span>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 950, color: goalSummary.isOnTrack === false ? '#ef4444' : '#10b981' }}>
+                {goalSummary.isComplete ? '已达成' : goalSummary.isOnTrack === false ? '低于目标节奏' : '跟得上目标'}
+              </div>
+            </div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850 }}>
+              目标 {formatCny(goalSummary.targetAmount)} · {formatGoalDate(goalSummary.targetDate)}
+              {goalSummary.projectedDate ? ` · 预计 ${formatGoalDate(goalSummary.projectedDate)}` : ''}
+            </div>
+          </motion.div>
+        ) : null}
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, position: 'relative', zIndex: 0 }}>
           <PillTabs
