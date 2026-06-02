@@ -240,7 +240,7 @@ export function AccountDetailSheet(props: {
   const [transferAmount, setTransferAmount] = useState('')
   const isIPhone = typeof navigator !== 'undefined' && /iPhone/i.test(navigator.userAgent)
   const amountInputProps = isIPhone
-    ? ({ type: 'number', inputMode: 'decimal', step: 'any', enterKeyHint: 'done', autoComplete: 'off' } as const)
+    ? ({ type: 'number', inputMode: 'decimal', step: 'any', enterKeyHint: 'done', autoComplete: 'one-time-code' } as const)
     : ({ inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const)
   const expressionInputProps = isIPhone
     ? ({
@@ -248,7 +248,7 @@ export function AccountDetailSheet(props: {
         inputMode: 'decimal',
         pattern: '[0-9+\\-.]*',
         enterKeyHint: 'done',
-        autoComplete: 'off',
+        autoComplete: 'one-time-code',
         autoCorrect: 'off',
         spellCheck: false,
       } as const)
