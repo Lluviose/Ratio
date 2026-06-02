@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CalendarDays, Pencil, RotateCcw, Target } from 'lucide-react'
+import { CalendarDays, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
 import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
+  addDaysToDateKey,
   coerceSavingsGoal,
   defaultGoalDate,
+  diffDateDays,
   getSavingsGoalSummary,
   isDateKey,
   todayDateKey,
@@ -85,6 +87,71 @@ function formatAbsCny(value: number) {
 }
 
 const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
+const MILESTONE_STORAGE_PREFIX = 'ratio.savingsGoal.maxMilestone.'
+const DAYS_PER_MONTH = 30.4375
+
+type GoalMilestoneInfo = {
+  progress: number
+  pct: number
+  amount: number
+  amountLeft: number
+}
+
+function clampProgress(value: number) {
+  return Math.max(0, Math.min(1, value))
+}
+
+function getNextGoalMilestone(summary: SavingsGoalSummary): GoalMilestoneInfo | null {
+  const totalNeeded = summary.targetAmount - summary.startNetWorth
+  if (totalNeeded <= 0) return null
+
+  const currentProgress = clampProgress(summary.progress)
+  const nextProgress = summary.isComplete
+    ? 1
+    : GOAL_MILESTONES.find((milestone) => currentProgress < milestone - 0.0001) ?? 1
+  const amount = normalizeMoney(summary.startNetWorth + totalNeeded * nextProgress)
+
+  return {
+    progress: nextProgress,
+    pct: Math.round(nextProgress * 100),
+    amount,
+    amountLeft: Math.max(0, normalizeMoney(amount - summary.currentNetWorth)),
+  }
+}
+
+function getReachedGoalMilestone(progress: number) {
+  const safeProgress = clampProgress(progress)
+  for (let i = GOAL_MILESTONES.length - 1; i >= 0; i -= 1) {
+    const milestone = GOAL_MILESTONES[i]
+    if (safeProgress >= milestone - 0.0001) return milestone
+  }
+  return null
+}
+
+function getGoalMilestoneStorageKey(goal: SavingsGoal) {
+  return `${MILESTONE_STORAGE_PREFIX}${goal.startDate}.${goal.startNetWorth}.${goal.targetAmount}.${goal.targetDate}`
+}
+
+function readSavedGoalMilestone(key: string) {
+  try {
+    const saved = Number(localStorage.getItem(key) ?? '0')
+    return Number.isFinite(saved) ? saved : 0
+  } catch {
+    return 0
+  }
+}
+
+function writeSavedGoalMilestone(key: string, milestone: number) {
+  try {
+    localStorage.setItem(key, String(milestone))
+  } catch {
+    // Ignore storage failures; the animation can simply replay later.
+  }
+}
+
+function sortedSnapshots(snapshots: Snapshot[]) {
+  return snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
+}
 
 function formatGoalDate(dateKey: string | null | undefined) {
   if (!dateKey) return '未设置'
@@ -176,26 +243,22 @@ function ProgressRing(props: { progress: number; color: string }) {
 
 function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: string }) {
   const { summary, color } = props
-  const totalNeeded = summary.targetAmount - summary.startNetWorth
-  if (totalNeeded <= 0) return null
+  const milestone = getNextGoalMilestone(summary)
+  if (!milestone) return null
 
-  const currentProgress = Math.max(0, Math.min(1, summary.progress))
-  const nextProgress = GOAL_MILESTONES.find((milestone) => currentProgress < milestone - 0.0001) ?? 1
-  const milestoneAmount = normalizeMoney(summary.startNetWorth + totalNeeded * nextProgress)
-  const amountLeft = Math.max(0, normalizeMoney(milestoneAmount - summary.currentNetWorth))
-  const milestonePct = Math.round(nextProgress * 100)
+  const currentProgress = clampProgress(summary.progress)
   const progressPct = `${Math.round(currentProgress * 1000) / 10}%`
   const subtitle = summary.isComplete
     ? '当前目标已完成'
-    : amountLeft <= 0
-      ? `已到达 ${milestonePct}% 里程碑`
-      : `再存 ${formatCny(amountLeft)} 到 ${formatCny(milestoneAmount)}`
+    : milestone.amountLeft <= 0
+      ? `已到达 ${milestone.pct}% 里程碑`
+      : `再存 ${formatCny(milestone.amountLeft)} 到 ${formatCny(milestone.amount)}`
 
   return (
     <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
         <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>下一里程碑</div>
-        <div style={{ fontSize: 11, fontWeight: 950, color }}>{milestonePct}%</div>
+        <div style={{ fontSize: 11, fontWeight: 950, color }}>{milestone.pct}%</div>
       </div>
       <div
         style={{
@@ -289,6 +352,304 @@ function SavingsActionPanel(props: { summary: SavingsGoalSummary; color: string 
         </div>
       ))}
     </div>
+  )
+}
+
+type FeedbackTile = {
+  label: string
+  value: string
+  sub: string
+  tone?: string
+}
+
+function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary: SavingsGoalSummary): { latestDate: string; tiles: FeedbackTile[] } | null {
+  const sorted = sortedSnapshots(snapshots)
+  if (sorted.length < 2) return null
+
+  const latest = sorted[sorted.length - 1]
+  const previous = sorted[sorted.length - 2]
+  const previousSummary = getSavingsGoalSummary(goal, sorted.slice(0, -1))
+  if (!previousSummary) return null
+
+  const netDelta = normalizeMoney(latest.net - previous.net)
+  const targetDistanceChange = normalizeMoney(previousSummary.remaining - summary.remaining)
+  const previousMilestone = getNextGoalMilestone(previousSummary)
+  const currentMilestone = getNextGoalMilestone(summary)
+
+  let projectionTile: FeedbackTile = {
+    label: '预计达成',
+    value: summary.projectedDate ? formatGoalDate(summary.projectedDate) : '继续记录',
+    sub: '需要更多快照',
+    tone: 'var(--muted-text)',
+  }
+  if (summary.isComplete) {
+    projectionTile = { label: '预计达成', value: '已达成', sub: formatGoalDate(latest.date), tone: '#10b981' }
+  } else if (previousSummary.projectedDate && summary.projectedDate) {
+    const shift = diffDateDays(summary.projectedDate, previousSummary.projectedDate)
+    projectionTile = {
+      label: '预计达成',
+      value: shift == null || shift === 0 ? '日期稳定' : shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
+      sub: formatGoalDate(summary.projectedDate),
+      tone: shift == null || shift === 0 ? 'var(--text)' : shift > 0 ? '#10b981' : '#ef4444',
+    }
+  } else if (summary.projectedDate) {
+    projectionTile = { label: '预计达成', value: formatGoalDate(summary.projectedDate), sub: '已形成预测', tone: '#10b981' }
+  }
+
+  let milestoneTile: FeedbackTile = {
+    label: '下一里程碑',
+    value: currentMilestone ? `${currentMilestone.pct}%` : '等待目标',
+    sub: currentMilestone ? `还差 ${formatCny(currentMilestone.amountLeft)}` : '目标已覆盖当前阶段',
+    tone: 'var(--muted-text)',
+  }
+  if (summary.isComplete) {
+    milestoneTile = { label: '下一里程碑', value: '100%', sub: '当前目标已完成', tone: '#10b981' }
+  } else if (previousMilestone && currentMilestone) {
+    if (previousMilestone.progress !== currentMilestone.progress && summary.progress >= previousMilestone.progress - 0.0001) {
+      milestoneTile = {
+        label: '下一里程碑',
+        value: `越过 ${previousMilestone.pct}%`,
+        sub: `下一站 ${currentMilestone.pct}%`,
+        tone: '#10b981',
+      }
+    } else if (previousMilestone.progress === currentMilestone.progress) {
+      const distanceDelta = normalizeMoney(previousMilestone.amountLeft - currentMilestone.amountLeft)
+      milestoneTile = {
+        label: '下一里程碑',
+        value: distanceDelta === 0 ? `${currentMilestone.pct}%` : distanceDelta > 0 ? `近了 ${formatCny(distanceDelta)}` : `远了 ${formatCny(Math.abs(distanceDelta))}`,
+        sub: `还差 ${formatCny(currentMilestone.amountLeft)}`,
+        tone: distanceDelta === 0 ? 'var(--text)' : distanceDelta > 0 ? '#10b981' : '#ef4444',
+      }
+    }
+  }
+
+  return {
+    latestDate: latest.date,
+    tiles: [
+      {
+        label: '本次净资产',
+        value: formatDelta(netDelta),
+        sub: `较 ${formatGoalDate(previous.date)}`,
+        tone: netDelta === 0 ? 'var(--text)' : netDelta > 0 ? '#10b981' : '#ef4444',
+      },
+      {
+        label: '距离目标',
+        value: targetDistanceChange === 0 ? '保持不变' : targetDistanceChange > 0 ? `近了 ${formatCny(targetDistanceChange)}` : `远了 ${formatCny(Math.abs(targetDistanceChange))}`,
+        sub: `还差 ${formatCny(summary.remaining)}`,
+        tone: targetDistanceChange === 0 ? 'var(--text)' : targetDistanceChange > 0 ? '#10b981' : '#ef4444',
+      },
+      projectionTile,
+      milestoneTile,
+    ],
+  }
+}
+
+function SnapshotFeedbackCard(props: { feedback: { latestDate: string; tiles: FeedbackTile[] } }) {
+  const { feedback } = props
+
+  return (
+    <motion.div
+      className="card"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <div className="cardInner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 950, fontSize: 14 }}>快照反馈</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>{formatGoalDate(feedback.latestDate)}</div>
+          </div>
+          <Sparkles size={18} strokeWidth={2.6} color="var(--primary)" />
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
+          {feedback.tiles.map((tile) => (
+            <div key={tile.label} style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+              <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{tile.label}</div>
+              <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: tile.tone ?? 'var(--text)', overflowWrap: 'anywhere' }}>{tile.value}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{tile.sub}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function formatProjectionShift(simulatedDate: string | null, summary: SavingsGoalSummary) {
+  if (!simulatedDate) return { text: '暂不可达', sub: '提高月存额后再看', tone: '#ef4444' }
+
+  if (summary.projectedDate) {
+    const shift = diffDateDays(simulatedDate, summary.projectedDate)
+    if (shift == null || shift === 0) return { text: '预测不变', sub: formatGoalDate(simulatedDate), tone: 'var(--text)' }
+    return {
+      text: shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
+      sub: formatGoalDate(simulatedDate),
+      tone: shift > 0 ? '#10b981' : '#ef4444',
+    }
+  }
+
+  const targetShift = diffDateDays(simulatedDate, summary.targetDate)
+  if (targetShift == null || targetShift === 0) return { text: '踩中目标日', sub: formatGoalDate(simulatedDate), tone: '#10b981' }
+  return {
+    text: targetShift > 0 ? `早 ${targetShift} 天` : `晚 ${Math.abs(targetShift)} 天`,
+    sub: formatGoalDate(simulatedDate),
+    tone: targetShift > 0 ? '#10b981' : '#ef4444',
+  }
+}
+
+function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: string }) {
+  const { summary, color } = props
+  const [monthlyExtraText, setMonthlyExtraText] = useState('')
+  const [oneTimeText, setOneTimeText] = useState('')
+
+  if (summary.isComplete) return null
+
+  const monthlyExtra = Math.max(0, parseMoneyInput(monthlyExtraText) ?? 0)
+  const oneTime = Math.max(0, parseMoneyInput(oneTimeText) ?? 0)
+  const baseDate = summary.latestDate ?? todayDateKey()
+  const simulatedDaily = normalizeMoney((summary.avgDailyNetChange ?? 0) + monthlyExtra / DAYS_PER_MONTH)
+  const remainingAfterBoost = Math.max(0, normalizeMoney(summary.targetAmount - summary.currentNetWorth - oneTime))
+  const simulatedDate = remainingAfterBoost <= 0
+    ? baseDate
+    : simulatedDaily > 0
+      ? addDaysToDateKey(baseDate, Math.ceil(remainingAfterBoost / simulatedDaily))
+      : null
+  const daysToTarget = diffDateDays(baseDate, summary.targetDate)
+  const simulatedNetAtTarget = daysToTarget == null || daysToTarget < 0
+    ? null
+    : normalizeMoney(summary.currentNetWorth + oneTime + simulatedDaily * daysToTarget)
+  const targetGap = simulatedNetAtTarget == null ? null : normalizeMoney(simulatedNetAtTarget - summary.targetAmount)
+  const shift = formatProjectionShift(simulatedDate, summary)
+
+  const reset = () => {
+    setMonthlyExtraText('')
+    setOneTimeText('')
+  }
+
+  return (
+    <motion.div
+      className="card"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <div className="cardInner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 950, fontSize: 14 }}>目标模拟器</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>基于当前速度</div>
+          </div>
+          <button type="button" className="iconBtn" onClick={reset} aria-label="reset savings simulator">
+            <RotateCcw size={16} strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginTop: 14 }}>
+          <label className="field" style={{ minWidth: 0 }}>
+            <div className="fieldLabel">每月多存</div>
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="0"
+              value={monthlyExtraText}
+              onChange={(e) => setMonthlyExtraText(e.target.value)}
+            />
+          </label>
+          <label className="field" style={{ minWidth: 0 }}>
+            <div className="fieldLabel">一次性存入</div>
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="0"
+              value={oneTimeText}
+              onChange={(e) => setOneTimeText(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
+          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>模拟达成</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: shift.tone, overflowWrap: 'anywhere' }}>
+              {simulatedDate ? formatGoalDate(simulatedDate) : '暂不可达'}
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
+          </div>
+          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{targetGap == null || targetGap >= 0 ? '目标日余量' : '目标日缺口'}</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: targetGap == null ? 'var(--muted-text)' : targetGap >= 0 ? '#10b981' : '#ef4444', overflowWrap: 'anywhere' }}>
+              {targetGap == null ? '—' : formatAbsCny(targetGap)}
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{targetGap == null ? '目标日已过' : shift.sub}</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, borderRadius: 16, padding: '10px 12px', background: 'rgb(var(--primary-rgb) / 0.06)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>模拟月增速</div>
+          <div style={{ fontSize: 12, fontWeight: 950, color }}>{formatDelta(simulatedDaily * DAYS_PER_MONTH)}/月</div>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
+function SavingsMilestoneCelebration(props: { milestone: number; color: string }) {
+  const { milestone, color } = props
+  const pct = Math.round(milestone * 100)
+
+  return (
+    <motion.div
+      className="card"
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.98 }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      style={{ overflow: 'hidden', position: 'relative' }}
+    >
+      <div className="cardInner">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <motion.div
+            animate={{ rotate: [0, -8, 8, 0], scale: [1, 1.08, 1] }}
+            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 16,
+              background: 'rgb(var(--primary-rgb) / 0.12)',
+              color,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: '0 0 auto',
+            }}
+          >
+            <Sparkles size={19} strokeWidth={2.6} />
+          </motion.div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 950, fontSize: 15 }}>达成 {pct}% 里程碑</div>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 3 }}>储蓄目标又向前推进了一段</div>
+          </div>
+        </div>
+      </div>
+      {[0, 1, 2, 3].map((index) => (
+        <motion.span
+          key={index}
+          initial={{ opacity: 0, y: 12, scale: 0.6 }}
+          animate={{ opacity: [0, 1, 0], y: [-2, -20 - index * 4], scale: [0.7, 1, 0.8] }}
+          transition={{ duration: 1.4, delay: 0.12 + index * 0.1, ease: 'easeOut' }}
+          style={{
+            position: 'absolute',
+            right: 28 + index * 18,
+            bottom: 18 + (index % 2) * 12,
+            width: 7,
+            height: 7,
+            borderRadius: 999,
+            background: index % 2 === 0 ? color : '#10b981',
+          }}
+        />
+      ))}
+    </motion.div>
   )
 }
 
@@ -696,6 +1057,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     coerce: coerceSavingsGoal,
   })
   const [goalSheetOpen, setGoalSheetOpen] = useState(false)
+  const [celebrationMilestone, setCelebrationMilestone] = useState<number | null>(null)
 
   const view = useMemo(() => {
     if (!snapshots || snapshots.length === 0) return null
@@ -772,6 +1134,10 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
   const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots), [goal, snapshots])
   const latestNetWorth = goalSummary?.currentNetWorth ?? view?.end.net ?? 0
+  const snapshotFeedback = useMemo(() => {
+    if (!goal || !goalSummary) return null
+    return buildSnapshotFeedback(goal, snapshots, goalSummary)
+  }, [goal, goalSummary, snapshots])
   const waterfallContributions = useMemo<WaterfallContribution[]>(() => {
     if (!view) return []
     const base = [
@@ -788,6 +1154,32 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     }
     return base
   }, [colors.debt, colors.fixed, colors.invest, colors.liquid, colors.receivable, view])
+
+  useEffect(() => {
+    if (!goal || !goalSummary) {
+      setCelebrationMilestone(null)
+      return
+    }
+
+    const reached = getReachedGoalMilestone(goalSummary.progress)
+    if (reached == null) {
+      setCelebrationMilestone(null)
+      return
+    }
+
+    const key = getGoalMilestoneStorageKey(goal)
+    const saved = readSavedGoalMilestone(key)
+    if (reached <= saved) {
+      setCelebrationMilestone(null)
+      return
+    }
+
+    writeSavedGoalMilestone(key, reached)
+    setCelebrationMilestone(reached)
+
+    const timer = window.setTimeout(() => setCelebrationMilestone(null), 5200)
+    return () => window.clearTimeout(timer)
+  }, [goal, goalSummary])
 
   return (
     <div className="stack" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
@@ -831,6 +1223,14 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               color={colors.invest}
               onEdit={() => setGoalSheetOpen(true)}
             />
+
+            {celebrationMilestone != null ? (
+              <SavingsMilestoneCelebration milestone={celebrationMilestone} color={colors.invest} />
+            ) : null}
+
+            {snapshotFeedback ? <SnapshotFeedbackCard feedback={snapshotFeedback} /> : null}
+
+            {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
 
             <NetWorthWaterfallCard
               startNet={view.start.net}
