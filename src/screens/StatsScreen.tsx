@@ -186,10 +186,6 @@ function writeSavedGoalMilestone(key: string, milestone: number) {
   }
 }
 
-function sortedSnapshots(snapshots: Snapshot[]) {
-  return snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
-}
-
 function formatGoalDate(dateKey: string | null | undefined) {
   if (!dateKey) return '未设置'
   const d = new Date(`${dateKey}T00:00:00`)
@@ -511,139 +507,6 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
         </span>
       </div>
     </div>
-  )
-}
-
-type FeedbackTile = {
-  label: string
-  value: string
-  sub: string
-  tone?: string
-}
-
-function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary: SavingsGoalSummary, monthStartDay: number): { latestDate: string; tiles: FeedbackTile[] } | null {
-  const sorted = sortedSnapshots(snapshots)
-  if (sorted.length < 2) return null
-
-  const latest = sorted[sorted.length - 1]
-  const previous = sorted[sorted.length - 2]
-  const previousSummary = getSavingsGoalSummary(goal, sorted.slice(0, -1), { monthStartDay })
-  if (!previousSummary) return null
-
-  const netDelta = normalizeMoney(latest.net - previous.net)
-  const targetDistanceChange = normalizeMoney(previousSummary.remaining - summary.remaining)
-  const previousMilestone = getNextGoalMilestone(previousSummary)
-  const currentMilestone = getNextGoalMilestone(summary)
-  const currentDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
-  const feedbackDateContext = [goal.startDate, goal.targetDate, latest.date, previous.date, summary.projectedDate, previousSummary.projectedDate]
-
-  const targetDistanceSub = targetDistanceChange === 0
-    ? '较上次持平'
-    : targetDistanceChange > 0
-      ? `较上次近了 ${formatCny(targetDistanceChange)}`
-      : `较上次远了 ${formatCny(Math.abs(targetDistanceChange))}`
-
-  let projectionTile: FeedbackTile = {
-    label: '预计达成',
-    value: summary.projectedDate ? formatShortGoalDate(summary.projectedDate, currentDateContext) : '暂无预测',
-    sub: '需要更多快照',
-    tone: 'var(--muted-text)',
-  }
-  if (summary.isComplete) {
-    projectionTile = { label: '预计达成', value: '已达成', sub: `达成于 ${formatShortGoalDate(latest.date, feedbackDateContext)}`, tone: '#10b981' }
-  } else if (previousSummary.projectedDate && summary.projectedDate) {
-    const shift = diffDateDays(summary.projectedDate, previousSummary.projectedDate)
-    projectionTile = {
-      label: '预计达成',
-      value: formatShortGoalDate(summary.projectedDate, currentDateContext),
-      sub: shift == null || shift === 0 ? '较上次稳定' : shift > 0 ? `较上次提前 ${shift} 天` : `较上次延后 ${Math.abs(shift)} 天`,
-      tone: shift == null || shift === 0 ? 'var(--text)' : shift > 0 ? '#10b981' : '#ef4444',
-    }
-  } else if (summary.projectedDate) {
-    projectionTile = { label: '预计达成', value: formatShortGoalDate(summary.projectedDate, currentDateContext), sub: '已形成预测', tone: '#10b981' }
-  }
-
-  let milestoneTile: FeedbackTile = {
-    label: '下一里程碑',
-    value: currentMilestone ? `${currentMilestone.pct}%` : '等待目标',
-    sub: currentMilestone ? `还差 ${formatCny(currentMilestone.amountLeft)}` : '目标已覆盖当前阶段',
-    tone: 'var(--muted-text)',
-  }
-  if (summary.isComplete) {
-    milestoneTile = { label: '下一里程碑', value: '100%', sub: '当前目标已完成', tone: '#10b981' }
-  } else if (previousMilestone && currentMilestone) {
-    if (previousMilestone.progress !== currentMilestone.progress && summary.progress >= previousMilestone.progress - 0.0001) {
-      milestoneTile = {
-        label: '下一里程碑',
-        value: `${currentMilestone.pct}%`,
-        sub: `刚越过 ${previousMilestone.pct}% · 还差 ${formatCny(currentMilestone.amountLeft)}`,
-        tone: '#10b981',
-      }
-    } else if (previousMilestone.progress === currentMilestone.progress) {
-      const distanceDelta = normalizeMoney(previousMilestone.amountLeft - currentMilestone.amountLeft)
-      milestoneTile = {
-        label: '下一里程碑',
-        value: `${currentMilestone.pct}%`,
-        sub: distanceDelta === 0
-          ? `还差 ${formatCny(currentMilestone.amountLeft)}`
-          : distanceDelta > 0
-            ? `还差 ${formatCny(currentMilestone.amountLeft)} · 较上次近了 ${formatCny(distanceDelta)}`
-            : `还差 ${formatCny(currentMilestone.amountLeft)} · 较上次远了 ${formatCny(Math.abs(distanceDelta))}`,
-        tone: distanceDelta === 0 ? 'var(--text)' : distanceDelta > 0 ? '#10b981' : '#ef4444',
-      }
-    }
-  }
-
-  return {
-    latestDate: latest.date,
-    tiles: [
-      {
-        label: '本次净资产',
-        value: formatCny(summary.currentNetWorth),
-        sub: `较 ${formatShortGoalDate(previous.date, feedbackDateContext)} ${formatDelta(netDelta)}`,
-        tone: netDelta === 0 ? 'var(--text)' : netDelta > 0 ? '#10b981' : '#ef4444',
-      },
-      {
-        label: '距离目标',
-        value: summary.isComplete ? '已达成' : formatCny(summary.remaining),
-        sub: summary.isComplete ? '目标已覆盖' : targetDistanceSub,
-        tone: summary.isComplete ? '#10b981' : targetDistanceChange === 0 ? 'var(--text)' : targetDistanceChange > 0 ? '#10b981' : '#ef4444',
-      },
-      projectionTile,
-      milestoneTile,
-    ],
-  }
-}
-
-function SnapshotFeedbackCard(props: { feedback: { latestDate: string; tiles: FeedbackTile[] } }) {
-  const { feedback } = props
-
-  return (
-    <motion.div
-      className="card"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-    >
-      <div className="cardInner">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-          <div>
-            <div style={{ fontWeight: 950, fontSize: 14 }}>快照反馈</div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>{formatShortGoalDate(feedback.latestDate)}</div>
-          </div>
-          <Sparkles size={18} strokeWidth={2.6} color="var(--primary)" />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
-          {feedback.tiles.map((tile) => (
-            <div key={tile.label} style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
-              <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{tile.label}</div>
-              <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: tile.tone ?? 'var(--text)', overflowWrap: 'anywhere' }}>{tile.value}</div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3, overflowWrap: 'anywhere' }}>{tile.sub}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </motion.div>
   )
 }
 
@@ -1413,10 +1276,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
   const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
   const latestNetWorth = goalSummary?.currentNetWorth ?? view?.end.net ?? 0
-  const snapshotFeedback = useMemo(() => {
-    if (!goal || !goalSummary) return null
-    return buildSnapshotFeedback(goal, snapshots, goalSummary, monthStartDay)
-  }, [goal, goalSummary, monthStartDay, snapshots])
 
   useEffect(() => {
     if (!goal || !goalSummary) {
@@ -1505,8 +1364,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             {celebrationMilestone != null ? (
               <SavingsMilestoneCelebration milestone={celebrationMilestone} color={colors.invest} />
             ) : null}
-
-            {snapshotFeedback ? <SnapshotFeedbackCard feedback={snapshotFeedback} /> : null}
 
             {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
 
