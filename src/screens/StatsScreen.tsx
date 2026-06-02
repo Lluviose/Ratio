@@ -103,6 +103,24 @@ function formatSummaryPaceSource(summary: SavingsGoalSummary) {
   return formatPaceSource(summary.avgDailyNetChangeMethod, summary.avgDailyNetChangeSnapshotCount, summary.avgDailyNetChangeSampleDays)
 }
 
+function debtAmountTone(value: number) {
+  return value > 0 ? '#ef4444' : undefined
+}
+
+function debtDeltaTone(value: number | null) {
+  if (value == null || value === 0 || !Number.isFinite(value)) return undefined
+  return value > 0 ? '#ef4444' : '#10b981'
+}
+
+function formatCoverageRatio(value: number | null, debt: number) {
+  if (debt <= 0) return '无负债'
+  return formatX(value)
+}
+
+function formatCoverageSub(label: string, debt: number) {
+  return debt <= 0 ? '暂无负债压力' : label
+}
+
 const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
 const MILESTONE_STORAGE_PREFIX = 'ratio.savingsGoal.maxMilestone.'
 const DAYS_PER_MONTH = 30.4375
@@ -1325,7 +1343,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     const currentAssets = addMoney(addMoney(end.cash, end.invest), end.receivable)
     const quickAssets = addMoney(end.cash, end.invest)
-    const netLiquid = subtractMoney(end.cash, end.debt)
+    const netLiquid = subtractMoney(currentAssets, end.debt)
 
     const ratios = {
       debtToAssets: safeDiv(end.debt, assetsEnd),
@@ -1476,7 +1494,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="总资产" value={formatCny(view.assetsEnd)} />
                   <MetricTile label="净资产" value={formatCny(view.end.net)} />
-                  <MetricTile label="负债" value={formatDelta(-view.end.debt)} />
+                  <MetricTile label="负债" value={formatCny(view.end.debt)} valueColor={debtAmountTone(view.end.debt)} />
                   <MetricTile label="资产负债率" value={formatPct(view.ratios.debtToAssets)} />
                 </div>
               </div>
@@ -1493,9 +1511,9 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="流动资产" value={formatCny(view.currentAssets)} />
                   <MetricTile label="净流动资产" value={formatCny(view.netLiquid)} />
-                  <MetricTile label="流动比" value={formatX(view.coverage.current)} sub="流动资产/负债" />
-                  <MetricTile label="速动比" value={formatX(view.coverage.quick)} sub="(现金+投资)/负债" />
-                  <MetricTile label="现金覆盖" value={formatX(view.coverage.cash)} sub="现金/负债" />
+                  <MetricTile label="流动比" value={formatCoverageRatio(view.coverage.current, view.end.debt)} sub={formatCoverageSub('流动资产/负债', view.end.debt)} />
+                  <MetricTile label="速动比" value={formatCoverageRatio(view.coverage.quick, view.end.debt)} sub={formatCoverageSub('(现金+投资)/负债', view.end.debt)} />
+                  <MetricTile label="现金覆盖" value={formatCoverageRatio(view.coverage.cash, view.end.debt)} sub={formatCoverageSub('现金/负债', view.end.debt)} />
                   <MetricTile label="负债/净资产" value={formatX(view.ratios.debtToNet)} />
                   <MetricTile label="净资产率" value={formatPct(view.ratios.netToAssets)} />
                   <MetricTile label="权益乘数" value={formatX(view.ratios.equityMultiplier)} />
@@ -1517,7 +1535,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
                   <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
-                  <MetricTile label="负债" value={formatDelta(view.delta.debt)} />
+                  <MetricTile label="负债" value={formatDelta(view.delta.debt)} valueColor={debtDeltaTone(view.delta.debt)} />
                   <MetricTile label="流动资金" value={formatDelta(view.delta.cash)} valueColor={colors.liquid} />
                   <MetricTile label="投资" value={formatDelta(view.delta.invest)} valueColor={colors.invest} />
                   <MetricTile label="固定资产" value={formatDelta(view.delta.fixed)} valueColor={colors.fixed} />
@@ -1538,7 +1556,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
                   <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
                   <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
-                  <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
+                  <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} valueColor={debtDeltaTone(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
                   <MetricTile label="日均净资产变化" value={view.growth.avgDailyNet != null ? formatDelta(view.growth.avgDailyNet) : '—'} sub={formatNetChangePaceSource(view.netPace)} />
                 </div>
               </div>

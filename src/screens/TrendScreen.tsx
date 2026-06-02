@@ -3,6 +3,7 @@ import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 import { motion } from 'framer-motion'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
+import { getGroupIdByAccountType, type AccountGroupId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
@@ -126,14 +127,16 @@ function formatMaybeCny(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? formatCny(value) : '—'
 }
 
-function formatMaybeDelta(value: number | null | undefined) {
-  return typeof value === 'number' && Number.isFinite(value) ? formatDelta(value) : '—'
-}
-
 function formatGoalPaceSource(summary: SavingsGoalSummary) {
   if (summary.avgDailyNetChange == null || !summary.avgDailyNetChangeMethod) return '速度等待更多快照'
   const methodText = summary.avgDailyNetChangeMethod === 'monthly-close' ? '月度估算' : '快照估算'
   return `${methodText} ${formatDelta(summary.avgDailyNetChange * DAYS_PER_MONTH)}/月`
+}
+
+function accountDeltaTone(delta: number, groupId: AccountGroupId) {
+  if (delta === 0) return 'var(--muted-text)'
+  const improvesNetWorth = groupId === 'debt' ? delta < 0 : delta > 0
+  return improvesNetWorth ? '#47d16a' : '#ff6b57'
 }
 
 function formatGoalDate(dateKey: string | null | undefined, contextDateKeys: Array<string | null | undefined> = []) {
@@ -230,18 +233,18 @@ function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: n
   const currById = new Map<string, number>()
   for (const a of curr.accounts) currById.set(a.id, a.balance)
 
-  const changes: { id: string; name: string; delta: number }[] = []
+  const changes: { id: string; name: string; delta: number; groupId: AccountGroupId }[] = []
 
   for (const a of curr.accounts) {
     const before = prevById.get(a.id) ?? 0
     const delta = subtractMoney(a.balance, before)
-    if (delta !== 0) changes.push({ id: a.id, name: a.name, delta })
+    if (delta !== 0) changes.push({ id: a.id, name: a.name, delta, groupId: getGroupIdByAccountType(a.type) })
   }
 
   for (const a of prev.accounts) {
     if (!currById.has(a.id)) {
       const delta = subtractMoney(0, a.balance)
-      if (delta !== 0) changes.push({ id: a.id, name: a.name, delta })
+      if (delta !== 0) changes.push({ id: a.id, name: a.name, delta, groupId: getGroupIdByAccountType(a.type) })
     }
   }
 
@@ -394,7 +397,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>负债</div>
-          <div style={{ opacity: 0.75, color: colors.debt }}>{formatMaybeDelta(typeof p.debt === 'number' ? -p.debt : null)}</div>
+          <div style={{ opacity: 0.75, color: colors.debt }}>{formatMaybeCny(p.debt)}</div>
         </div>
       </div>
     ) : null
@@ -417,7 +420,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             {topChanges.map((c) => (
               <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
                 <div style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
-                <div style={{ color: c.delta > 0 ? '#47d16a' : c.delta < 0 ? '#ff6b57' : 'var(--muted-text)' }}>{formatDelta(c.delta)}</div>
+                <div style={{ color: accountDeltaTone(c.delta, c.groupId) }}>{formatDelta(c.delta)}</div>
               </div>
             ))}
           </div>
@@ -476,7 +479,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
-            <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatMaybeDelta(typeof p.debt === 'number' ? -p.debt : null)}</div>
+            <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatMaybeCny(p.debt)}</div>
           </div>
           {goalPanel}
           {breakdown}
