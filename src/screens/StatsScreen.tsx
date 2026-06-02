@@ -160,10 +160,30 @@ function formatGoalDate(dateKey: string | null | undefined) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function formatShortGoalDate(dateKey: string | null | undefined) {
+function getDateYear(dateKey: string | null | undefined) {
+  if (!dateKey) return null
+  const m = /^(\d{4})/.exec(dateKey)
+  if (!m) return null
+  const year = Number(m[1])
+  return Number.isFinite(year) ? year : null
+}
+
+function shouldShowYearForDateKeys(dateKeys: Array<string | null | undefined>) {
+  const years = new Set<number>()
+  for (const dateKey of dateKeys) {
+    const year = getDateYear(dateKey)
+    if (year != null) years.add(year)
+  }
+  if (years.size > 1) return true
+  const [year] = Array.from(years)
+  return year != null && year !== new Date().getFullYear()
+}
+
+function formatShortGoalDate(dateKey: string | null | undefined, contextDateKeys: Array<string | null | undefined> = []) {
   if (!dateKey) return '未设置'
   const d = new Date(`${dateKey}T00:00:00`)
   if (Number.isNaN(d.getTime())) return dateKey
+  if (shouldShowYearForDateKeys([dateKey, ...contextDateKeys])) return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
@@ -228,7 +248,7 @@ function SavingsStatusCard(props: {
   onEdit: () => void
 }) {
   const { summary, latestNetWorth, rangeDeltaNet, startDate, endDate, selectedCount, color, onEdit } = props
-  const rangeLabel = selectedCount >= 2 ? formatCompactDateRange(startDate, endDate) : formatShortGoalDate(endDate)
+  const rangeLabel = selectedCount >= 2 ? formatCompactDateRange(startDate, endDate) : formatShortGoalDate(endDate, [startDate])
 
   if (!summary) {
     return (
@@ -296,6 +316,7 @@ function SavingsStatusCard(props: {
   const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
   const progressPct = `${Math.round(progress * 1000) / 10}%`
   const projectionSub = selectedCount >= 2 ? `${selectedCount}条快照` : rangeLabel
+  const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
 
   return (
     <motion.div
@@ -366,8 +387,8 @@ function SavingsStatusCard(props: {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
-          <MetricTile label={targetDeltaLabel} value={targetDeltaValue} valueColor={targetDeltaTone} sub={summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate)}` : '等待快照'} />
-          <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate) : '暂无预测'} sub={projectionSub} />
+          <MetricTile label={targetDeltaLabel} value={targetDeltaValue} valueColor={targetDeltaTone} sub={summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate, goalDateContext)}` : '等待快照'} />
+          <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate, goalDateContext) : '暂无预测'} sub={projectionSub} />
         </div>
       </div>
     </motion.div>
@@ -478,25 +499,26 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
   const targetDistanceChange = normalizeMoney(previousSummary.remaining - summary.remaining)
   const previousMilestone = getNextGoalMilestone(previousSummary)
   const currentMilestone = getNextGoalMilestone(summary)
+  const dateContext = [goal.startDate, goal.targetDate, latest.date, previous.date, summary.projectedDate, previousSummary.projectedDate]
 
   let projectionTile: FeedbackTile = {
     label: '预计达成',
-    value: summary.projectedDate ? formatShortGoalDate(summary.projectedDate) : '继续记录',
+    value: summary.projectedDate ? formatShortGoalDate(summary.projectedDate, dateContext) : '继续记录',
     sub: '需要更多快照',
     tone: 'var(--muted-text)',
   }
   if (summary.isComplete) {
-    projectionTile = { label: '预计达成', value: '已达成', sub: formatShortGoalDate(latest.date), tone: '#10b981' }
+    projectionTile = { label: '预计达成', value: '已达成', sub: formatShortGoalDate(latest.date, dateContext), tone: '#10b981' }
   } else if (previousSummary.projectedDate && summary.projectedDate) {
     const shift = diffDateDays(summary.projectedDate, previousSummary.projectedDate)
     projectionTile = {
       label: '预计达成',
       value: shift == null || shift === 0 ? '日期稳定' : shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
-      sub: formatShortGoalDate(summary.projectedDate),
+      sub: formatShortGoalDate(summary.projectedDate, dateContext),
       tone: shift == null || shift === 0 ? 'var(--text)' : shift > 0 ? '#10b981' : '#ef4444',
     }
   } else if (summary.projectedDate) {
-    projectionTile = { label: '预计达成', value: formatShortGoalDate(summary.projectedDate), sub: '已形成预测', tone: '#10b981' }
+    projectionTile = { label: '预计达成', value: formatShortGoalDate(summary.projectedDate, dateContext), sub: '已形成预测', tone: '#10b981' }
   }
 
   let milestoneTile: FeedbackTile = {
@@ -532,7 +554,7 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
       {
         label: '本次净资产',
         value: formatDelta(netDelta),
-        sub: `较 ${formatShortGoalDate(previous.date)}`,
+        sub: `较 ${formatShortGoalDate(previous.date, dateContext)}`,
         tone: netDelta === 0 ? 'var(--text)' : netDelta > 0 ? '#10b981' : '#ef4444',
       },
       {
@@ -581,22 +603,23 @@ function SnapshotFeedbackCard(props: { feedback: { latestDate: string; tiles: Fe
 
 function formatProjectionShift(simulatedDate: string | null, summary: SavingsGoalSummary) {
   if (!simulatedDate) return { text: '暂不可达', sub: '提高月存额后再看', tone: '#ef4444' }
+  const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate, simulatedDate]
 
   if (summary.projectedDate) {
     const shift = diffDateDays(simulatedDate, summary.projectedDate)
-    if (shift == null || shift === 0) return { text: '预测不变', sub: formatShortGoalDate(simulatedDate), tone: 'var(--text)' }
+    if (shift == null || shift === 0) return { text: '预测不变', sub: formatShortGoalDate(simulatedDate, dateContext), tone: 'var(--text)' }
     return {
       text: shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
-      sub: formatShortGoalDate(simulatedDate),
+      sub: formatShortGoalDate(simulatedDate, dateContext),
       tone: shift > 0 ? '#10b981' : '#ef4444',
     }
   }
 
   const targetShift = diffDateDays(simulatedDate, summary.targetDate)
-  if (targetShift == null || targetShift === 0) return { text: '踩中目标日', sub: formatShortGoalDate(simulatedDate), tone: '#10b981' }
+  if (targetShift == null || targetShift === 0) return { text: '踩中目标日', sub: formatShortGoalDate(simulatedDate, dateContext), tone: '#10b981' }
   return {
     text: targetShift > 0 ? `早 ${targetShift} 天` : `晚 ${Math.abs(targetShift)} 天`,
-    sub: formatShortGoalDate(simulatedDate),
+    sub: formatShortGoalDate(simulatedDate, dateContext),
     tone: targetShift > 0 ? '#10b981' : '#ef4444',
   }
 }
@@ -684,6 +707,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
     : normalizeMoney(summary.currentNetWorth + oneTime + simulatedDaily * daysToTarget)
   const targetGap = simulatedNetAtTarget == null ? null : normalizeMoney(simulatedNetAtTarget - summary.targetAmount)
   const shift = formatProjectionShift(simulatedDate, summary)
+  const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate, simulatedDate]
 
   const reset = () => {
     setMonthlyExtraValue(0)
@@ -733,7 +757,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>模拟达成</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: shift.tone, overflowWrap: 'anywhere' }}>
-              {simulatedDate ? formatShortGoalDate(simulatedDate) : '暂不可达'}
+              {simulatedDate ? formatShortGoalDate(simulatedDate, dateContext) : '暂不可达'}
             </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
           </div>
@@ -861,7 +885,8 @@ function SavingsGoalCard(props: {
     )
   }
 
-  const latestText = summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate)}` : '等待快照'
+  const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
+  const latestText = summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate, dateContext)}` : '等待快照'
   const gainedSinceStart = normalizeMoney(summary.currentNetWorth - summary.startNetWorth)
   const gainedTone = gainedSinceStart >= 0 ? color : '#ef4444'
   const safeProgress = clampProgress(summary.progress)
@@ -894,7 +919,7 @@ function SavingsGoalCard(props: {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 950, fontSize: 15 }}>储蓄目标</div>
               <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 2 }}>
-                目标日 {formatShortGoalDate(summary.targetDate)}
+                目标日 {formatShortGoalDate(summary.targetDate, dateContext)}
               </div>
             </div>
           </div>
@@ -950,7 +975,7 @@ function SavingsGoalCard(props: {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 850, flexWrap: 'wrap' }}>
               <span className="muted">{latestText}</span>
-              <span className="muted">起点 {formatShortGoalDate(summary.startDate)}</span>
+              <span className="muted">起点 {formatShortGoalDate(summary.startDate, dateContext)}</span>
             </div>
           </div>
         </div>
@@ -1213,7 +1238,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               </>
             ) : (
               <>
-                {formatShortGoalDate(view.end.date)} · 净资产 <span style={{ color: 'var(--text)' }}>{formatCny(view.end.net)}</span>
+                {formatShortGoalDate(view.end.date, [view.start.date])} · 净资产 <span style={{ color: 'var(--text)' }}>{formatCny(view.end.net)}</span>
               </>
             )
           ) : (

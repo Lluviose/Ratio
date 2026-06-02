@@ -48,13 +48,41 @@ function toDateKey(d: Date) {
   return `${y}-${m}-${day}`
 }
 
-function formatLabel(date: string) {
+function getDateYear(dateKey: string | null | undefined) {
+  if (!dateKey) return null
+  const m = /^(\d{4})/.exec(dateKey)
+  if (!m) return null
+  const year = Number(m[1])
+  return Number.isFinite(year) ? year : null
+}
+
+function shouldShowYearForDateKeys(dateKeys: Array<string | null | undefined>) {
+  const years = new Set<number>()
+  for (const dateKey of dateKeys) {
+    const year = getDateYear(dateKey)
+    if (year != null) years.add(year)
+  }
+  if (years.size > 1) return true
+  const [year] = Array.from(years)
+  return year != null && year !== new Date().getFullYear()
+}
+
+function formatLabel(date: string, options?: { showYear?: boolean }) {
   // date is stored as YYYY-MM-DD
   const d = new Date(`${date}T00:00:00`)
   if (Number.isNaN(d.getTime())) return date
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
+  const showYear = options?.showYear ?? shouldShowYearForDateKeys([date])
+  if (showYear) return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
   return `${m}/${day}`
+}
+
+function formatMonthLabel(monthKey: string, showYear: boolean) {
+  const m = /^(\d{4})-(\d{2})$/.exec(monthKey)
+  if (!m) return monthKey
+  if (showYear) return `${Number(m[1])}/${Number(m[2])}`
+  return formatMonthKeyLabel(monthKey)
 }
 
 function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDay: number) {
@@ -101,16 +129,14 @@ function formatMaybeDelta(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? formatDelta(value) : '—'
 }
 
-function formatGoalDate(dateKey: string | null | undefined) {
+function formatGoalDate(dateKey: string | null | undefined, contextDateKeys: Array<string | null | undefined> = []) {
   if (!dateKey) return '暂无'
-  const d = new Date(`${dateKey}T00:00:00`)
-  if (Number.isNaN(d.getTime())) return dateKey
-  return `${d.getMonth() + 1}/${d.getDate()}`
+  return formatLabel(dateKey, { showYear: shouldShowYearForDateKeys([dateKey, ...contextDateKeys]) })
 }
 
-function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
+function makeGoalPoint(dateKey: string, label?: string, showYear?: boolean): TrendPoint {
   return {
-    date: label ?? formatLabel(dateKey),
+    date: label ?? formatLabel(dateKey, { showYear: showYear || shouldShowYearForDateKeys([dateKey]) }),
     dateKey,
     idx: -1,
     net: null,
@@ -141,7 +167,7 @@ function addFutureCheckpoints(
   }
 }
 
-function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summary: SavingsGoalSummary | null) {
+function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summary: SavingsGoalSummary | null, showYear: boolean) {
   if (!goal || !summary || points.length === 0) return points
 
   const firstDate = points[0]?.dateKey
@@ -154,7 +180,7 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
 
   const ensurePoint = (dateKey: string, label?: string) => {
     if (dateKey < firstDate) return
-    if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label))
+    if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label, showYear))
   }
 
   ensurePoint(goal.targetDate, '目标')
@@ -249,41 +275,51 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [])
 
   const view = useMemo(() => {
-    if (!snapshots || snapshots.length === 0) return { points: [] as TrendPoint[], selected: [] as Snapshot[] }
+    if (!snapshots || snapshots.length === 0) return { points: [] as TrendPoint[], selected: [] as Snapshot[], showYear: false }
 
     const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
 
     let selected: Snapshot[] = []
     let labels: string[] = []
+    let showYear = false
 
     if (range === '30d') {
       const cutoff = new Date()
       cutoff.setDate(cutoff.getDate() - 30)
       const cutoffKey = toDateKey(cutoff)
       selected = sorted.filter((s) => s.date >= cutoffKey)
-      labels = selected.map((s) => formatLabel(s.date))
+      showYear = shouldShowYearForDateKeys(selected.map((s) => s.date))
+      labels = selected.map((s) => formatLabel(s.date, { showYear }))
     } else if (range === '6m') {
       const picked = pickMonthlyLast(sorted, 6, monthStartDay)
       selected = picked.map((x) => x.snapshot)
-      labels = picked.map((x) => formatMonthKeyLabel(x.monthKey))
+      showYear = shouldShowYearForDateKeys(picked.map((x) => x.monthKey))
+      labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))
     } else if (range === 'custom') {
       selected = sorted.slice(Math.max(0, sorted.length - RECENT_SNAPSHOT_LIMIT))
-      labels = selected.map((s) => formatLabel(s.date))
+      showYear = shouldShowYearForDateKeys(selected.map((s) => s.date))
+      labels = selected.map((s) => formatLabel(s.date, { showYear }))
     } else {
       const picked = pickMonthlyLast(sorted, 12, monthStartDay)
       selected = picked.map((x) => x.snapshot)
-      labels = picked.map((x) => formatMonthKeyLabel(x.monthKey))
+      showYear = shouldShowYearForDateKeys(picked.map((x) => x.monthKey))
+      labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))
     }
 
     return {
-      points: selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date))),
+      points: selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date, { showYear }))),
       selected,
+      showYear,
     }
   }, [monthStartDay, range, snapshots])
 
   const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots), [goal, snapshots])
-  const goalTrendPoints = useMemo(() => withGoalTrendLines(view.points, goal, goalSummary), [goal, goalSummary, view.points])
+  const goalTrendPoints = useMemo(() => withGoalTrendLines(view.points, goal, goalSummary, view.showYear), [goal, goalSummary, view.points, view.showYear])
   const data = mode === 'netDebt' ? goalTrendPoints : view.points
+  const showYearInData = shouldShowYearForDateKeys(data.map((point) => point.dateKey))
+  const goalDateContext = goalSummary
+    ? [goalSummary.startDate, goalSummary.latestDate, goalSummary.targetDate, goalSummary.projectedDate]
+    : []
   const goalPaceText = !goalSummary
     ? ''
     : goalSummary.isComplete
@@ -326,6 +362,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       typeof p.debt === 'number'
     const goalReferenceAtPoint = p.goalComparison ?? p.goalTarget
     const targetDeltaAtPoint = typeof p.net === 'number' && goalReferenceAtPoint != null ? p.net - goalReferenceAtPoint : null
+    const exactDateLabel = formatLabel(p.dateKey, { showYear: showYearInData })
+    const tooltipDateLabel = p.date === exactDateLabel ? p.date : `${p.date}（${exactDateLabel}）`
 
     const breakdown = hasBreakdown ? (
       <div style={{ marginTop: 10 }}>
@@ -424,9 +462,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             minWidth: 180,
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>
-            {p.date.includes('/') ? p.date : `${p.date}（${formatLabel(p.dateKey)}）`}
-          </div>
+          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{tooltipDateLabel}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
             <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatMaybeCny(p.net)}</div>
@@ -453,9 +489,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           minWidth: 180,
         }}
       >
-        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>
-          {p.date.includes('/') ? p.date : `${p.date}（${formatLabel(p.dateKey)}）`}
-        </div>
+        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{tooltipDateLabel}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
              <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
              <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatMaybeCny(p.cash)}</div>
@@ -639,8 +673,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               </div>
             </div>
             <div className="muted" style={{ fontSize: 11, fontWeight: 850 }}>
-              目标 {formatCny(goalSummary.targetAmount)} · {formatGoalDate(goalSummary.targetDate)}
-              {goalSummary.projectedDate ? ` · 预计 ${formatGoalDate(goalSummary.projectedDate)}` : ''}
+              目标 {formatCny(goalSummary.targetAmount)} · {formatGoalDate(goalSummary.targetDate, goalDateContext)}
+              {goalSummary.projectedDate ? ` · 预计 ${formatGoalDate(goalSummary.projectedDate, goalDateContext)}` : ''}
               {goalSummary.targetDeltaAtLatest != null
                 ? ` · ${goalSummary.targetDeltaAtLatest >= 0 ? '领先' : '落后'} ${formatCny(Math.abs(goalSummary.targetDeltaAtLatest))}`
                 : ''}
