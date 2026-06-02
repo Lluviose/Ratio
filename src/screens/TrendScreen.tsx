@@ -12,6 +12,7 @@ import {
   coerceSavingsGoal,
   diffDateDays,
   getGoalComparisonValue,
+  getLinearGoalValue,
   getSavingsGoalSummary,
   type SavingsGoal,
   type SavingsGoalSummary,
@@ -36,6 +37,7 @@ type TrendPoint = {
   fixed: number | null
   receivable: number | null
   goalTarget?: number | null
+  goalComparison?: number | null
   projectedNet?: number | null
 }
 
@@ -118,6 +120,7 @@ function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
     fixed: null,
     receivable: null,
     goalTarget: null,
+    goalComparison: null,
     projectedNet: null,
   }
 }
@@ -146,7 +149,7 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
 
   const byDate = new Map<string, TrendPoint>()
   for (const point of points) {
-    byDate.set(point.dateKey, { ...point, goalTarget: null, projectedNet: null })
+    byDate.set(point.dateKey, { ...point, goalTarget: null, goalComparison: null, projectedNet: null })
   }
 
   const ensurePoint = (dateKey: string, label?: string) => {
@@ -171,7 +174,8 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
 
   const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
   for (const point of merged) {
-    point.goalTarget = getGoalComparisonValue(goal, point.dateKey)
+    point.goalTarget = getLinearGoalValue(goal, point.dateKey)
+    point.goalComparison = point.dateKey >= goal.startDate ? getGoalComparisonValue(goal, point.dateKey) : null
 
     if (summary.latestDate && projectionEnd && summary.avgDailyNetChange != null) {
       const daysFromLatest = diffDateDays(summary.latestDate, point.dateKey)
@@ -320,7 +324,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       typeof p.fixed === 'number' &&
       typeof p.receivable === 'number' &&
       typeof p.debt === 'number'
-    const targetDeltaAtPoint = typeof p.net === 'number' && p.goalTarget != null ? p.net - p.goalTarget : null
+    const goalReferenceAtPoint = p.goalComparison ?? p.goalTarget
+    const targetDeltaAtPoint = typeof p.net === 'number' && goalReferenceAtPoint != null ? p.net - goalReferenceAtPoint : null
 
     const breakdown = hasBreakdown ? (
       <div style={{ marginTop: 10 }}>
@@ -376,7 +381,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     ) : null
 
     const goalPanel =
-      mode === 'netDebt' && (p.goalTarget != null || p.projectedNet != null) ? (
+      mode === 'netDebt' && (p.goalTarget != null || p.goalComparison != null || p.projectedNet != null) ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
           <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>储蓄路径</div>
@@ -384,6 +389,12 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>目标路径</div>
               <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalTarget)}</div>
+            </div>
+          ) : null}
+          {p.goalTarget == null && p.goalComparison != null ? (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+              <div style={{ color: 'var(--muted-text)' }}>目标基准</div>
+              <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalComparison)}</div>
             </div>
           ) : null}
           {p.projectedNet != null ? (

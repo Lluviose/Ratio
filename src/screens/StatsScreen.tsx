@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { CalendarDays, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
@@ -1058,6 +1058,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   })
   const [goalSheetOpen, setGoalSheetOpen] = useState(false)
   const [celebrationMilestone, setCelebrationMilestone] = useState<number | null>(null)
+  const celebrationKeyRef = useRef<string | null>(null)
 
   const view = useMemo(() => {
     if (!snapshots || snapshots.length === 0) return null
@@ -1168,13 +1169,17 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     }
 
     const key = getGoalMilestoneStorageKey(goal)
-    const saved = readSavedGoalMilestone(key)
-    if (reached <= saved) {
-      setCelebrationMilestone(null)
-      return
+    const celebrationKey = `${key}.${reached}`
+    if (celebrationKeyRef.current !== celebrationKey) {
+      const saved = readSavedGoalMilestone(key)
+      if (reached <= saved) {
+        setCelebrationMilestone(null)
+        return
+      }
+      celebrationKeyRef.current = celebrationKey
+      writeSavedGoalMilestone(key, reached)
     }
 
-    writeSavedGoalMilestone(key, reached)
     setCelebrationMilestone(reached)
 
     const timer = window.setTimeout(() => setCelebrationMilestone(null), 5200)
