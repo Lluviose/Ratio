@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  addDaysToDateKey,
   coerceSavingsGoal,
+  getGoalComparisonValue,
   getLinearGoalValue,
   getSavingsGoalSummary,
+  todayDateKey,
   type SavingsGoal,
 } from './savingsGoal'
 import type { Snapshot } from './snapshots'
@@ -38,6 +41,8 @@ describe('savingsGoal', () => {
     expect(getLinearGoalValue(goal, '2026-01-01')).toBe(100000)
     expect(getLinearGoalValue(goal, '2026-12-31')).toBe(200000)
     expect(getLinearGoalValue(goal, '2025-12-31')).toBeNull()
+    expect(getGoalComparisonValue(goal, '2025-12-31')).toBe(100000)
+    expect(getGoalComparisonValue(goal, '2027-01-31')).toBe(200000)
   })
 
   it('summarizes progress and projected completion from snapshots', () => {
@@ -50,5 +55,16 @@ describe('savingsGoal', () => {
     expect(summary?.remaining).toBe(70000)
     expect(summary?.avgDailyNetChange).toBe(1000)
     expect(summary?.projectedDate).toBe('2026-04-11')
+    expect(summary?.targetValueAtLatest).toBeCloseTo(108241.76)
+    expect(summary?.targetDeltaAtLatest).toBeCloseTo(21758.24)
+  })
+
+  it('marks unfinished goals due today or past due', () => {
+    const today = todayDateKey()
+    const yesterday = addDaysToDateKey(today, -1)!
+
+    expect(getSavingsGoalSummary({ ...goal, targetDate: today }, [snapshot(today, 120000)])?.isDueToday).toBe(true)
+    expect(getSavingsGoalSummary({ ...goal, targetDate: yesterday }, [snapshot(today, 120000)])?.isPastDue).toBe(true)
+    expect(getSavingsGoalSummary({ ...goal, targetDate: yesterday }, [snapshot(today, 220000)])?.isPastDue).toBe(false)
   })
 })

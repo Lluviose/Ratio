@@ -13,6 +13,7 @@ export type AiFinancialContextV1 = {
     ledger: unknown
     snapshots: unknown
     accountOps: unknown
+    savingsGoal: unknown
   }
 }
 
@@ -61,6 +62,7 @@ export function buildAiFinancialContext(storage: Storage = localStorage): AiFina
       ledger: safeJsonParse(storage.getItem('ratio.ledger')),
       snapshots: safeJsonParse(storage.getItem('ratio.snapshots')),
       accountOps: safeJsonParse(storage.getItem('ratio.accountOps')),
+      savingsGoal: safeJsonParse(storage.getItem('ratio.savingsGoal')),
     },
   }
 }

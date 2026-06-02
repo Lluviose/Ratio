@@ -27,8 +27,12 @@ export type SavingsGoalSummary = {
   avgDailyNetChange: number | null
   projectedDate: string | null
   projectedNetAtTargetDate: number | null
+  targetValueAtLatest: number | null
+  targetDeltaAtLatest: number | null
   paceDailyDelta: number | null
   isComplete: boolean
+  isDueToday: boolean
+  isPastDue: boolean
   isOnTrack: boolean | null
 }
 
@@ -173,6 +177,14 @@ export function getLinearGoalValue(goal: SavingsGoal, dateKey: string): number |
   return normalizeMoney(goal.startNetWorth + (goal.targetAmount - goal.startNetWorth) * progress)
 }
 
+export function getGoalComparisonValue(goal: SavingsGoal, dateKey: string): number | null {
+  const linear = getLinearGoalValue(goal, dateKey)
+  if (linear != null) return linear
+  if (dateKey > goal.targetDate) return goal.targetAmount
+  if (dateKey < goal.startDate) return goal.startNetWorth
+  return null
+}
+
 export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snapshot[]): SavingsGoalSummary | null {
   if (!goal) return null
 
@@ -189,6 +201,8 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
 
   const daysLeftRaw = diffDateDays(todayDateKey(), goal.targetDate)
   const daysLeft = daysLeftRaw == null ? null : Math.max(0, daysLeftRaw)
+  const isDueToday = !isComplete && daysLeftRaw === 0
+  const isPastDue = !isComplete && daysLeftRaw != null && daysLeftRaw < 0
   const requiredDaily = !isComplete && daysLeft && daysLeft > 0 ? remaining / daysLeft : null
   const requiredMonthly = requiredDaily == null ? null : requiredDaily * 30.4375
 
@@ -210,6 +224,9 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
     }
   }
 
+  const targetValueAtLatest = latestDate ? getGoalComparisonValue(goal, latestDate) : null
+  const targetDeltaAtLatest = targetValueAtLatest == null ? null : normalizeMoney(currentNetWorth - targetValueAtLatest)
+
   return {
     latestDate,
     currentNetWorth,
@@ -225,8 +242,12 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
     avgDailyNetChange: avgDailyNetChange == null ? null : normalizeMoney(avgDailyNetChange),
     projectedDate,
     projectedNetAtTargetDate,
+    targetValueAtLatest,
+    targetDeltaAtLatest,
     paceDailyDelta: paceDailyDelta == null ? null : normalizeMoney(paceDailyDelta),
     isComplete,
+    isDueToday,
+    isPastDue,
     isOnTrack,
   }
 }

@@ -80,6 +80,12 @@ function formatDelta(value: number) {
   return text
 }
 
+function formatAbsCny(value: number) {
+  return formatCny(Math.abs(value))
+}
+
+const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
+
 function formatGoalDate(dateKey: string | null | undefined) {
   if (!dateKey) return '未设置'
   const d = new Date(`${dateKey}T00:00:00`)
@@ -168,6 +174,252 @@ function ProgressRing(props: { progress: number; color: string }) {
   )
 }
 
+function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: string }) {
+  const { summary, color } = props
+  const totalNeeded = summary.targetAmount - summary.startNetWorth
+  if (totalNeeded <= 0) return null
+
+  const currentProgress = Math.max(0, Math.min(1, summary.progress))
+  const nextProgress = GOAL_MILESTONES.find((milestone) => currentProgress < milestone - 0.0001) ?? 1
+  const milestoneAmount = normalizeMoney(summary.startNetWorth + totalNeeded * nextProgress)
+  const amountLeft = Math.max(0, normalizeMoney(milestoneAmount - summary.currentNetWorth))
+  const milestonePct = Math.round(nextProgress * 100)
+  const progressPct = `${Math.round(currentProgress * 1000) / 10}%`
+  const subtitle = summary.isComplete
+    ? '当前目标已完成'
+    : amountLeft <= 0
+      ? `已到达 ${milestonePct}% 里程碑`
+      : `再存 ${formatCny(amountLeft)} 到 ${formatCny(milestoneAmount)}`
+
+  return (
+    <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+        <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>下一里程碑</div>
+        <div style={{ fontSize: 11, fontWeight: 950, color }}>{milestonePct}%</div>
+      </div>
+      <div
+        style={{
+          position: 'relative',
+          height: 12,
+          borderRadius: 999,
+          background: 'rgba(15,23,42,0.08)',
+          overflow: 'hidden',
+        }}
+      >
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: progressPct }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          style={{ height: '100%', borderRadius: 999, background: color }}
+        />
+        {GOAL_MILESTONES.map((milestone) => (
+          <span
+            key={milestone}
+            style={{
+              position: 'absolute',
+              top: 2,
+              bottom: 2,
+              left: `${milestone * 100}%`,
+              width: 2,
+              borderRadius: 999,
+              transform: 'translateX(-1px)',
+              background: 'rgb(255 255 255 / 0.78)',
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, fontWeight: 850 }}>
+        <span className="muted">{subtitle}</span>
+        <span style={{ color: 'var(--muted-text)' }}>
+          {GOAL_MILESTONES.map((milestone) => `${Math.round(milestone * 100)}%`).join(' · ')}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function SavingsActionPanel(props: { summary: SavingsGoalSummary; color: string }) {
+  const { summary, color } = props
+
+  if (summary.isComplete) {
+    return (
+      <div style={{ marginTop: 12, borderRadius: 18, padding: 12, background: 'rgb(var(--primary-rgb) / 0.06)', fontSize: 12, fontWeight: 900 }}>
+        目标已经完成，可以设置下一阶段目标。
+      </div>
+    )
+  }
+
+  const targetDelta = summary.targetDeltaAtLatest
+  const projectedGap = summary.projectedNetAtTargetDate == null
+    ? null
+    : normalizeMoney(summary.projectedNetAtTargetDate - summary.targetAmount)
+
+  const items = [
+    {
+      label: '每天需要',
+      value: summary.requiredDaily == null ? '—' : formatCny(summary.requiredDaily),
+      sub: summary.isPastDue ? '目标已逾期' : summary.isDueToday ? '今日到期' : '从今天起',
+    },
+    {
+      label: '每周需要',
+      value: summary.requiredDaily == null ? '—' : formatCny(summary.requiredDaily * 7),
+      sub: '按 7 天估算',
+    },
+    {
+      label: targetDelta == null || targetDelta >= 0 ? '领先目标' : '落后目标',
+      value: targetDelta == null ? '—' : formatAbsCny(targetDelta),
+      sub: summary.latestDate ? `截至 ${formatGoalDate(summary.latestDate)}` : '等待快照',
+      tone: targetDelta == null ? 'var(--muted-text)' : targetDelta >= 0 ? '#10b981' : '#ef4444',
+    },
+    {
+      label: projectedGap == null || projectedGap >= 0 ? '目标日余量' : '目标日缺口',
+      value: projectedGap == null ? '—' : formatAbsCny(projectedGap),
+      sub: summary.projectedNetAtTargetDate == null ? '等待更多快照' : '按当前速度',
+      tone: projectedGap == null ? 'var(--muted-text)' : projectedGap >= 0 ? '#10b981' : '#ef4444',
+    },
+  ]
+
+  return (
+    <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
+      {items.map((item) => (
+        <div key={item.label} style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+          <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{item.label}</div>
+          <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: item.tone ?? color, overflowWrap: 'anywhere' }}>{item.value}</div>
+          <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{item.sub}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+type WaterfallContribution = {
+  id: string
+  label: string
+  value: number
+  color: string
+}
+
+function NetWorthWaterfallCard(props: {
+  startNet: number
+  endNet: number
+  contributions: WaterfallContribution[]
+}) {
+  const { startNet, endNet, contributions } = props
+  const width = 336
+  const height = 178
+  const top = 18
+  const bottom = 38
+  const left = 10
+  const chartH = height - top - bottom
+
+  const bars: Array<{ id: string; label: string; from: number; to: number; value: number; color: string; total?: boolean }> = []
+  bars.push({ id: 'start', label: '期初', from: 0, to: startNet, value: startNet, color: 'rgba(15,23,42,0.72)', total: true })
+
+  let running = startNet
+  for (const item of contributions) {
+    const next = normalizeMoney(running + item.value)
+    bars.push({
+      id: item.id,
+      label: item.label,
+      from: running,
+      to: next,
+      value: item.value,
+      color: item.value >= 0 ? item.color : '#ef4444',
+    })
+    running = next
+  }
+
+  bars.push({ id: 'end', label: '期末', from: 0, to: endNet, value: endNet, color: 'var(--primary)', total: true })
+
+  const allValues = bars.flatMap((bar) => [bar.from, bar.to, 0])
+  const rawMin = Math.min(...allValues)
+  const rawMax = Math.max(...allValues)
+  const pad = Math.max(1000, (rawMax - rawMin) * 0.14)
+  const min = rawMin - pad
+  const max = rawMax + pad
+  const range = Math.max(1, max - min)
+  const barW = 26
+  const gap = (width - left * 2 - barW * bars.length) / Math.max(1, bars.length - 1)
+  const yFor = (value: number) => top + ((max - value) / range) * chartH
+  const zeroY = yFor(0)
+  const netDelta = normalizeMoney(endNet - startNet)
+
+  return (
+    <motion.div
+      className="card"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: 0.06 }}
+    >
+      <div className="cardInner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontWeight: 950, fontSize: 14 }}>净资产变化瀑布图</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>拆解本区间净资产变化来源</div>
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 950, color: netDelta >= 0 ? '#10b981' : '#ef4444' }}>{formatDelta(netDelta)}</div>
+        </div>
+
+        <div style={{ width: '100%', overflow: 'hidden', marginTop: 10 }}>
+          <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img" aria-label="net worth waterfall chart">
+            <line x1={left} x2={width - left} y1={zeroY} y2={zeroY} stroke="rgba(15,23,42,0.12)" strokeDasharray="4 4" />
+            {bars.map((bar, index) => {
+              const x = left + index * (barW + gap)
+              const yTop = yFor(Math.max(bar.from, bar.to))
+              const yBottom = yFor(Math.min(bar.from, bar.to))
+              const rectH = Math.max(2, yBottom - yTop)
+              const nextBar = bars[index + 1]
+              const connectorY = yFor(bar.to)
+              const nextX = left + (index + 1) * (barW + gap)
+
+              return (
+                <g key={bar.id}>
+                  {nextBar ? (
+                    <line
+                      x1={x + barW}
+                      x2={nextX}
+                      y1={connectorY}
+                      y2={connectorY}
+                      stroke="rgba(15,23,42,0.16)"
+                      strokeWidth={1}
+                    />
+                  ) : null}
+                  <motion.rect
+                    x={x}
+                    y={yTop}
+                    width={barW}
+                    height={rectH}
+                    rx={7}
+                    fill={bar.color}
+                    initial={{ opacity: 0, y: yTop + 8 }}
+                    animate={{ opacity: 1, y: yTop }}
+                    transition={{ duration: 0.34, delay: 0.08 + index * 0.04, ease: [0.16, 1, 0.3, 1] }}
+                  />
+                  <text x={x + barW / 2} y={height - 16} textAnchor="middle" fontSize={10} fontWeight={800} fill="var(--muted-text)">
+                    {bar.label}
+                  </text>
+                </g>
+              )
+            })}
+          </svg>
+        </div>
+
+        <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+          {contributions.map((item) => (
+            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted-text)' }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: item.value >= 0 ? item.color : '#ef4444' }} />
+                {item.label}
+              </div>
+              <div style={{ color: item.value >= 0 ? '#10b981' : '#ef4444' }}>{formatDelta(item.value)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 function SavingsGoalCard(props: {
   goal: SavingsGoal | null
   summary: SavingsGoalSummary | null
@@ -217,11 +469,15 @@ function SavingsGoalCard(props: {
 
   const statusText = summary.isComplete
     ? '已达成'
-    : summary.isOnTrack === true
-      ? '节奏正常'
-      : summary.isOnTrack === false
-        ? '需要提速'
-        : '等待更多快照'
+    : summary.isPastDue
+      ? '已逾期'
+      : summary.isDueToday
+        ? '今日到期'
+        : summary.isOnTrack === true
+          ? '节奏正常'
+          : summary.isOnTrack === false
+            ? '需要提速'
+            : '等待更多快照'
 
   const projectedText = summary.isComplete
     ? '已达成'
@@ -305,6 +561,9 @@ function SavingsGoalCard(props: {
             {summary.paceDailyDelta == null ? '继续记录快照' : `${summary.paceDailyDelta >= 0 ? '+' : ''}${formatCny(summary.paceDailyDelta)}/天`}
           </div>
         </div>
+
+        <SavingsMilestoneStrip summary={summary} color={color} />
+        <SavingsActionPanel summary={summary} color={color} />
       </div>
     </motion.div>
   )
@@ -513,6 +772,22 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
   const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots), [goal, snapshots])
   const latestNetWorth = goalSummary?.currentNetWorth ?? view?.end.net ?? 0
+  const waterfallContributions = useMemo<WaterfallContribution[]>(() => {
+    if (!view) return []
+    const base = [
+      { id: 'cash', label: '流动', value: view.delta.cash, color: colors.liquid },
+      { id: 'invest', label: '投资', value: view.delta.invest, color: colors.invest },
+      { id: 'fixed', label: '固定', value: view.delta.fixed, color: colors.fixed },
+      { id: 'receivable', label: '应收', value: view.delta.receivable, color: colors.receivable },
+      { id: 'debt', label: '负债', value: normalizeMoney(-view.delta.debt), color: colors.debt },
+    ]
+    const contributionTotal = normalizeMoney(base.reduce((sum, item) => sum + item.value, 0))
+    const residual = normalizeMoney(view.delta.net - contributionTotal)
+    if (Math.abs(residual) >= 0.01) {
+      base.push({ id: 'other', label: '其他', value: residual, color: 'rgba(15,23,42,0.58)' })
+    }
+    return base
+  }, [colors.debt, colors.fixed, colors.invest, colors.liquid, colors.receivable, view])
 
   return (
     <div className="stack" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
@@ -555,6 +830,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               summary={goalSummary}
               color={colors.invest}
               onEdit={() => setGoalSheetOpen(true)}
+            />
+
+            <NetWorthWaterfallCard
+              startNet={view.start.net}
+              endNet={view.end.net}
+              contributions={waterfallContributions}
             />
 
             <motion.div

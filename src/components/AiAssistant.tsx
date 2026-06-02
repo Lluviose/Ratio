@@ -191,6 +191,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
         '- accountOps.kind="transfer" 是账户间内部转移，不改变净资产；不要把它当作收入/支出。\n' +
         '- snapshots 是不同日期的余额快照；相邻快照的差值代表期间总变化（可能包含流量+估值波动），不能拆成逐笔明细。\n' +
         '- ledger（如果存在）可能是可选/不完整的明细，不要假设覆盖全部。\n' +
+        '- savingsGoal（如果存在）是用户设置的净资产储蓄目标，包含目标金额、目标日期、起点日期和起点净资产；它不是实际资产或负债。\n' +
         '\n' +
         '回答要求：基于 JSON 推理；缺信息先提问；不要编造不存在的交易/分类。\n\n' +
         json,
