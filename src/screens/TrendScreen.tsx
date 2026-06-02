@@ -45,6 +45,16 @@ type TrendPoint = {
   projectedNet?: number | null
 }
 
+type FutureCadence = {
+  stepDays: number
+  maxPoints: number
+}
+
+const DEFAULT_FUTURE_CADENCE: FutureCadence = {
+  stepDays: Math.round(DAYS_PER_MONTH),
+  maxPoints: 8,
+}
+
 function toDateKey(d: Date) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -146,6 +156,35 @@ function formatGoalDate(dateKey: string | null | undefined, contextDateKeys: Arr
   return formatLabel(dateKey, { showYear: shouldShowYearForDateKeys([dateKey, ...contextDateKeys]) })
 }
 
+function median(values: number[]) {
+  if (values.length === 0) return null
+  const sorted = values.slice().sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) return sorted[mid]
+  return (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+function getTypicalPointGapDays(points: TrendPoint[]) {
+  const gaps: number[] = []
+  for (let i = 1; i < points.length; i += 1) {
+    const gap = diffDateDays(points[i - 1].dateKey, points[i].dateKey)
+    if (gap != null && gap > 0) gaps.push(gap)
+  }
+  return median(gaps)
+}
+
+function getFutureCadence(range: RangeId, points: TrendPoint[]): FutureCadence {
+  if (range === '30d') return { stepDays: 7, maxPoints: 18 }
+  if (range === '6m') return DEFAULT_FUTURE_CADENCE
+  if (range === '1y') return { stepDays: Math.round(DAYS_PER_MONTH), maxPoints: 14 }
+
+  const typicalGap = getTypicalPointGapDays(points) ?? Math.round(DAYS_PER_MONTH)
+  return {
+    stepDays: Math.max(1, Math.min(45, Math.round(typicalGap))),
+    maxPoints: 16,
+  }
+}
+
 function makeGoalPoint(dateKey: string, label?: string, showYear?: boolean): TrendPoint {
   return {
     date: label ?? formatLabel(dateKey, { showYear: showYear || shouldShowYearForDateKeys([dateKey]) }),
@@ -167,19 +206,22 @@ function addFutureCheckpoints(
   ensurePoint: (dateKey: string, label?: string) => void,
   startDate: string,
   endDate: string,
-  maxPoints = 8,
+  cadence: FutureCadence,
 ) {
   const days = diffDateDays(startDate, endDate)
-  if (days == null || days <= 35) return
+  if (days == null || days <= 0) return
 
-  const count = Math.min(maxPoints, Math.max(1, Math.floor(days / 45)))
-  for (let i = 1; i <= count; i += 1) {
-    const next = addDaysToDateKey(startDate, Math.round((days * i) / (count + 1)))
+  const stepDays = Math.max(1, cadence.stepDays)
+  const maxPoints = Math.max(0, cadence.maxPoints)
+  let added = 0
+  for (let offset = stepDays; offset < days && added < maxPoints; offset += stepDays) {
+    const next = addDaysToDateKey(startDate, offset)
     if (next && next > startDate && next < endDate) ensurePoint(next)
+    added += 1
   }
 }
 
-function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summary: SavingsGoalSummary | null, showYear: boolean) {
+function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summary: SavingsGoalSummary | null, showYear: boolean, futureCadence: FutureCadence) {
   if (!goal || !summary || points.length === 0) return points
 
   const firstDate = points[0]?.dateKey
@@ -197,7 +239,7 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
 
   ensurePoint(goal.targetDate, '目标')
   if (goal.startDate >= firstDate) ensurePoint(goal.startDate)
-  if (summary.latestDate) addFutureCheckpoints(ensurePoint, summary.latestDate, goal.targetDate)
+  if (summary.latestDate) addFutureCheckpoints(ensurePoint, summary.latestDate, goal.targetDate, futureCadence)
 
   let projectionEnd: string | null = null
   if (summary.latestDate && summary.avgDailyNetChange != null) {
@@ -207,7 +249,7 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
     }
     ensurePoint(summary.latestDate)
     ensurePoint(projectionEnd, projectionEnd === goal.targetDate ? '目标' : '预计')
-    addFutureCheckpoints(ensurePoint, summary.latestDate, projectionEnd)
+    addFutureCheckpoints(ensurePoint, summary.latestDate, projectionEnd, futureCadence)
   }
 
   const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
@@ -289,7 +331,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [])
 
   const view = useMemo(() => {
-    if (!snapshots || snapshots.length === 0) return { points: [] as TrendPoint[], selected: [] as Snapshot[], showYear: false }
+    if (!snapshots || snapshots.length === 0) {
+      return { points: [] as TrendPoint[], selected: [] as Snapshot[], showYear: false, futureCadence: DEFAULT_FUTURE_CADENCE }
+    }
 
     const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
 
@@ -320,15 +364,21 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))
     }
 
+    const points = selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date, { showYear })))
+
     return {
-      points: selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date, { showYear }))),
+      points,
       selected,
       showYear,
+      futureCadence: getFutureCadence(range, points),
     }
   }, [monthStartDay, range, snapshots])
 
   const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
-  const goalTrendPoints = useMemo(() => withGoalTrendLines(view.points, goal, goalSummary, view.showYear), [goal, goalSummary, view.points, view.showYear])
+  const goalTrendPoints = useMemo(
+    () => withGoalTrendLines(view.points, goal, goalSummary, view.showYear, view.futureCadence),
+    [goal, goalSummary, view.futureCadence, view.points, view.showYear],
+  )
   const data = mode === 'netDebt' ? goalTrendPoints : view.points
   const showYearInData = shouldShowYearForDateKeys(data.map((point) => point.dateKey))
   const goalDateContext = goalSummary
