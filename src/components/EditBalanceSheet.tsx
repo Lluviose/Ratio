@@ -17,7 +17,15 @@ export function EditBalanceSheet(props: {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const isIPhone = typeof navigator !== 'undefined' && /iPhone/i.test(navigator.userAgent)
   const inputProps = isIPhone
-    ? ({ type: 'number', inputMode: 'decimal', step: 'any', enterKeyHint: 'done', autoComplete: 'one-time-code' } as const)
+    ? ({
+        type: 'tel',
+        inputMode: 'tel',
+        pattern: '[0-9.]*',
+        enterKeyHint: 'done',
+        autoComplete: 'one-time-code',
+        autoCorrect: 'off',
+        spellCheck: false,
+      } as const)
     : ({ inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const)
 
   const submit = () => {
