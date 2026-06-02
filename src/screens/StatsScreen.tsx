@@ -189,6 +189,172 @@ function MetricTile(props: {
   )
 }
 
+function roundUpMoney(value: number, step: number) {
+  if (!Number.isFinite(value) || value <= 0) return step
+  return normalizeMoney(Math.ceil(value / step) * step)
+}
+
+function getSliderStep(max: number) {
+  if (max <= 10000) return 100
+  if (max <= 100000) return 500
+  return 1000
+}
+
+function SavingsStatusCard(props: {
+  summary: SavingsGoalSummary | null
+  latestNetWorth: number
+  rangeDeltaNet: number
+  startDate: string
+  endDate: string
+  selectedCount: number
+  color: string
+  onEdit: () => void
+}) {
+  const { summary, latestNetWorth, rangeDeltaNet, startDate, endDate, selectedCount, color, onEdit } = props
+  const rangeLabel = selectedCount >= 2 ? `${startDate} 至 ${endDate}` : endDate
+
+  if (!summary) {
+    return (
+      <motion.div
+        className="card"
+        initial={{ opacity: 0, y: 12, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        style={{ overflow: 'hidden', position: 'relative' }}
+      >
+        <div className="cardInner">
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
+              <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0 }}>{formatCny(latestNetWorth)}</div>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+                设置目标后，这里会显示本周需要存多少和目标节奏。
+              </div>
+            </div>
+            <button type="button" className="iconBtn" onClick={onEdit} aria-label="set savings goal">
+              <Target size={18} strokeWidth={2.6} />
+            </button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
+            <MetricTile label="区间净资产" value={formatDelta(rangeDeltaNet)} sub={rangeLabel} />
+            <MetricTile label="快照数量" value={`${selectedCount}条`} sub="持续记录后会更准确" />
+          </div>
+        </div>
+      </motion.div>
+    )
+  }
+
+  const progress = clampProgress(summary.progress)
+  const weeklyNeed = summary.requiredDaily == null ? null : normalizeMoney(summary.requiredDaily * 7)
+  const targetDelta = summary.targetDeltaAtLatest
+  const statusText = summary.isComplete
+    ? '目标已达成'
+    : summary.isPastDue
+      ? '目标已逾期'
+      : summary.isDueToday
+        ? '今日到期'
+        : summary.isOnTrack === true
+          ? '跟得上目标'
+          : summary.isOnTrack === false
+            ? '低于目标节奏'
+            : '等待更多快照'
+  const statusTone = summary.isComplete || summary.isOnTrack === true
+    ? '#10b981'
+    : summary.isPastDue || summary.isDueToday || summary.isOnTrack === false
+      ? '#ef4444'
+      : 'var(--muted-text)'
+  const heroLabel = summary.isComplete
+    ? '当前净资产'
+    : weeklyNeed == null
+      ? '距离目标还差'
+      : '本周建议存入'
+  const heroValue = summary.isComplete
+    ? formatCny(summary.currentNetWorth)
+    : weeklyNeed == null
+      ? formatCny(summary.remaining)
+      : formatCny(weeklyNeed)
+  const targetDeltaLabel = targetDelta == null || targetDelta >= 0 ? '领先目标' : '落后目标'
+  const targetDeltaValue = targetDelta == null ? '—' : formatCny(Math.abs(targetDelta))
+  const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
+  const progressPct = `${Math.round(progress * 1000) / 10}%`
+
+  return (
+    <motion.div
+      className="card"
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      style={{ overflow: 'hidden', position: 'relative' }}
+    >
+      <motion.div
+        aria-hidden="true"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: summary.isComplete || summary.isOnTrack === true ? 0.14 : 0.08 }}
+        transition={{ duration: 0.35 }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: `linear-gradient(135deg, ${color}, transparent 62%)`,
+          pointerEvents: 'none',
+        }}
+      />
+      <div className="cardInner" style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
+            <motion.div
+              key={heroValue}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              style={{ fontSize: 28, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}
+            >
+              {heroValue}
+            </motion.div>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+              {heroLabel} · 距离目标还差 {formatCny(summary.remaining)}
+            </div>
+          </div>
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderRadius: 999,
+              padding: '7px 10px',
+              background: 'rgb(255 255 255 / 0.72)',
+              border: '1px solid var(--hairline)',
+              color: statusTone,
+              fontSize: 11,
+              fontWeight: 950,
+            }}
+          >
+            {statusText}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
+          <div style={{ height: 10, borderRadius: 999, background: 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: progressPct }}
+              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 18px ${color}` }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 850 }}>
+            <span className="muted">目标 {formatCny(summary.targetAmount)}</span>
+            <span style={{ color }}>{Math.round(progress * 100)}%</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
+          <MetricTile label={targetDeltaLabel} value={targetDeltaValue} valueColor={targetDeltaTone} sub={summary.latestDate ? `截至 ${formatGoalDate(summary.latestDate)}` : '等待快照'} />
+          <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatGoalDate(summary.projectedDate) : '暂无预测'} sub={rangeLabel} />
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 function ProgressRing(props: { progress: number; color: string }) {
   const { progress, color } = props
   const size = 112
@@ -200,6 +366,22 @@ function ProgressRing(props: { progress: number; color: string }) {
 
   return (
     <div style={{ width: size, height: size, position: 'relative', flex: '0 0 auto' }}>
+      <motion.div
+        aria-hidden="true"
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{
+          opacity: safeProgress >= 0.75 ? 0.12 : 0.06,
+          scale: safeProgress >= 0.75 ? [1, 1.05, 1] : 1,
+        }}
+        transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+        style={{
+          position: 'absolute',
+          inset: 10,
+          borderRadius: 999,
+          background: color,
+          filter: 'blur(10px)',
+        }}
+      />
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <circle
           cx={size / 2}
@@ -221,7 +403,7 @@ function ProgressRing(props: { progress: number; color: string }) {
           initial={{ strokeDashoffset: circumference }}
           animate={{ strokeDashoffset: circumference * (1 - safeProgress) }}
           transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          style={{ rotate: -90, transformOrigin: '50% 50%' }}
+          style={{ rotate: -90, transformOrigin: '50% 50%', filter: safeProgress >= 1 ? `drop-shadow(0 0 8px ${color})` : undefined }}
         />
       </svg>
       <div
@@ -234,7 +416,15 @@ function ProgressRing(props: { progress: number; color: string }) {
           flexDirection: 'column',
         }}
       >
-        <div style={{ fontSize: 24, fontWeight: 950, lineHeight: 1 }}>{pct}%</div>
+        <motion.div
+          key={pct}
+          initial={{ opacity: 0, y: 5, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          style={{ fontSize: 24, fontWeight: 950, lineHeight: 1 }}
+        >
+          {pct}%
+        </motion.div>
         <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)', marginTop: 4 }}>进度</div>
       </div>
     </div>
@@ -273,11 +463,35 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
           initial={{ width: 0 }}
           animate={{ width: progressPct }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          style={{ height: '100%', borderRadius: 999, background: color }}
+          style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 14px ${color}` }}
+        />
+        <motion.span
+          aria-hidden="true"
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: [0.9, 1.18, 1] }}
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          style={{
+            position: 'absolute',
+            top: 1,
+            left: progressPct,
+            width: 10,
+            height: 10,
+            borderRadius: 999,
+            background: '#fff',
+            border: `2px solid ${color}`,
+            marginLeft: -5,
+            boxShadow: `0 0 12px ${color}`,
+          }}
         />
         {GOAL_MILESTONES.map((milestone) => (
-          <span
+          <motion.span
             key={milestone}
+            initial={{ scale: 0.82, opacity: 0.7 }}
+            animate={{
+              scale: currentProgress >= milestone - 0.0001 ? [1, 1.65, 1] : 1,
+              opacity: currentProgress >= milestone - 0.0001 ? 1 : 0.7,
+            }}
+            transition={{ duration: 0.42, delay: currentProgress >= milestone - 0.0001 ? 0.12 : 0, ease: [0.16, 1, 0.3, 1] }}
             style={{
               position: 'absolute',
               top: 2,
@@ -285,7 +499,7 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
               left: `${milestone * 100}%`,
               width: 2,
               borderRadius: 999,
-              transform: 'translateX(-1px)',
+              marginLeft: -1,
               background: 'rgb(255 255 255 / 0.78)',
             }}
           />
@@ -498,15 +712,81 @@ function formatProjectionShift(simulatedDate: string | null, summary: SavingsGoa
   }
 }
 
+function SavingsSliderControl(props: {
+  label: string
+  value: number
+  max: number
+  step: number
+  color: string
+  helper: string
+  onChange: (value: number) => void
+}) {
+  const { label, value, max, step, color, helper, onChange } = props
+  const safeMax = Math.max(step, max)
+  const safeValue = Math.max(0, Math.min(value, safeMax))
+  const progress = clampProgress(safeValue / safeMax)
+  const progressPct = `${Math.round(progress * 1000) / 10}%`
+
+  return (
+    <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--bg)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
+        <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>{label}</div>
+        <motion.div
+          key={safeValue}
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          style={{ fontSize: 14, fontWeight: 950, color }}
+        >
+          {formatCny(safeValue)}
+        </motion.div>
+      </div>
+      <div style={{ position: 'relative', marginTop: 12, height: 30, display: 'flex', alignItems: 'center' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, height: 8, borderRadius: 999, background: 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+          <motion.div
+            initial={false}
+            animate={{ width: progressPct }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            style={{ height: '100%', borderRadius: 999, background: color }}
+          />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={safeMax}
+          step={step}
+          value={safeValue}
+          onChange={(e) => onChange(normalizeMoney(Number(e.target.value)))}
+          aria-label={label}
+          style={{
+            position: 'relative',
+            width: '100%',
+            accentColor: color,
+            opacity: 0.94,
+          }}
+        />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 10, fontWeight: 800, color: 'var(--muted-text)' }}>
+        <span>{helper}</span>
+        <span>最高 {formatCny(safeMax)}</span>
+      </div>
+    </div>
+  )
+}
+
 function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: string }) {
   const { summary, color } = props
-  const [monthlyExtraText, setMonthlyExtraText] = useState('')
-  const [oneTimeText, setOneTimeText] = useState('')
+  const [monthlyExtraValue, setMonthlyExtraValue] = useState(0)
+  const [oneTimeValue, setOneTimeValue] = useState(0)
 
   if (summary.isComplete) return null
 
-  const monthlyExtra = Math.max(0, parseMoneyInput(monthlyExtraText) ?? 0)
-  const oneTime = Math.max(0, parseMoneyInput(oneTimeText) ?? 0)
+  const monthlyMax = roundUpMoney(Math.max(5000, summary.remaining / 6, (summary.requiredMonthly ?? 0) * 2), 500)
+  const oneTimeMax = roundUpMoney(Math.max(5000, summary.remaining), 1000)
+  const monthlyStep = getSliderStep(monthlyMax)
+  const oneTimeStep = getSliderStep(oneTimeMax)
+  const monthlyExtra = Math.min(Math.max(0, normalizeMoney(monthlyExtraValue)), monthlyMax)
+  const oneTime = Math.min(Math.max(0, normalizeMoney(oneTimeValue)), oneTimeMax)
   const baseDate = summary.latestDate ?? todayDateKey()
   const simulatedDaily = normalizeMoney((summary.avgDailyNetChange ?? 0) + monthlyExtra / DAYS_PER_MONTH)
   const remainingAfterBoost = Math.max(0, normalizeMoney(summary.targetAmount - summary.currentNetWorth - oneTime))
@@ -523,8 +803,8 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
   const shift = formatProjectionShift(simulatedDate, summary)
 
   const reset = () => {
-    setMonthlyExtraText('')
-    setOneTimeText('')
+    setMonthlyExtraValue(0)
+    setOneTimeValue(0)
   }
 
   return (
@@ -545,27 +825,25 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10, marginTop: 14 }}>
-          <label className="field" style={{ minWidth: 0 }}>
-            <div className="fieldLabel">每月多存</div>
-            <input
-              className="input"
-              inputMode="decimal"
-              placeholder="0"
-              value={monthlyExtraText}
-              onChange={(e) => setMonthlyExtraText(e.target.value)}
-            />
-          </label>
-          <label className="field" style={{ minWidth: 0 }}>
-            <div className="fieldLabel">一次性存入</div>
-            <input
-              className="input"
-              inputMode="decimal"
-              placeholder="0"
-              value={oneTimeText}
-              onChange={(e) => setOneTimeText(e.target.value)}
-            />
-          </label>
+        <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+          <SavingsSliderControl
+            label="每月多存"
+            value={monthlyExtra}
+            max={monthlyMax}
+            step={monthlyStep}
+            color={color}
+            helper="影响长期速度"
+            onChange={setMonthlyExtraValue}
+          />
+          <SavingsSliderControl
+            label="一次性存入"
+            value={oneTime}
+            max={oneTimeMax}
+            step={oneTimeStep}
+            color={color}
+            helper="立即缩短距离"
+            onChange={setOneTimeValue}
+          />
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
@@ -649,134 +927,6 @@ function SavingsMilestoneCelebration(props: { milestone: number; color: string }
           }}
         />
       ))}
-    </motion.div>
-  )
-}
-
-type WaterfallContribution = {
-  id: string
-  label: string
-  value: number
-  color: string
-}
-
-function NetWorthWaterfallCard(props: {
-  startNet: number
-  endNet: number
-  contributions: WaterfallContribution[]
-}) {
-  const { startNet, endNet, contributions } = props
-  const width = 336
-  const height = 178
-  const top = 18
-  const bottom = 38
-  const left = 10
-  const chartH = height - top - bottom
-
-  const bars: Array<{ id: string; label: string; from: number; to: number; value: number; color: string; total?: boolean }> = []
-  bars.push({ id: 'start', label: '期初', from: 0, to: startNet, value: startNet, color: 'rgba(15,23,42,0.72)', total: true })
-
-  let running = startNet
-  for (const item of contributions) {
-    const next = normalizeMoney(running + item.value)
-    bars.push({
-      id: item.id,
-      label: item.label,
-      from: running,
-      to: next,
-      value: item.value,
-      color: item.value >= 0 ? item.color : '#ef4444',
-    })
-    running = next
-  }
-
-  bars.push({ id: 'end', label: '期末', from: 0, to: endNet, value: endNet, color: 'var(--primary)', total: true })
-
-  const allValues = bars.flatMap((bar) => [bar.from, bar.to, 0])
-  const rawMin = Math.min(...allValues)
-  const rawMax = Math.max(...allValues)
-  const pad = Math.max(1000, (rawMax - rawMin) * 0.14)
-  const min = rawMin - pad
-  const max = rawMax + pad
-  const range = Math.max(1, max - min)
-  const barW = 26
-  const gap = (width - left * 2 - barW * bars.length) / Math.max(1, bars.length - 1)
-  const yFor = (value: number) => top + ((max - value) / range) * chartH
-  const zeroY = yFor(0)
-  const netDelta = normalizeMoney(endNet - startNet)
-
-  return (
-    <motion.div
-      className="card"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: 0.06 }}
-    >
-      <div className="cardInner">
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontWeight: 950, fontSize: 14 }}>净资产变化瀑布图</div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>拆解本区间净资产变化来源</div>
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 950, color: netDelta >= 0 ? '#10b981' : '#ef4444' }}>{formatDelta(netDelta)}</div>
-        </div>
-
-        <div style={{ width: '100%', overflow: 'hidden', marginTop: 10 }}>
-          <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} role="img" aria-label="net worth waterfall chart">
-            <line x1={left} x2={width - left} y1={zeroY} y2={zeroY} stroke="rgba(15,23,42,0.12)" strokeDasharray="4 4" />
-            {bars.map((bar, index) => {
-              const x = left + index * (barW + gap)
-              const yTop = yFor(Math.max(bar.from, bar.to))
-              const yBottom = yFor(Math.min(bar.from, bar.to))
-              const rectH = Math.max(2, yBottom - yTop)
-              const nextBar = bars[index + 1]
-              const connectorY = yFor(bar.to)
-              const nextX = left + (index + 1) * (barW + gap)
-
-              return (
-                <g key={bar.id}>
-                  {nextBar ? (
-                    <line
-                      x1={x + barW}
-                      x2={nextX}
-                      y1={connectorY}
-                      y2={connectorY}
-                      stroke="rgba(15,23,42,0.16)"
-                      strokeWidth={1}
-                    />
-                  ) : null}
-                  <motion.rect
-                    x={x}
-                    y={yTop}
-                    width={barW}
-                    height={rectH}
-                    rx={7}
-                    fill={bar.color}
-                    initial={{ opacity: 0, y: yTop + 8 }}
-                    animate={{ opacity: 1, y: yTop }}
-                    transition={{ duration: 0.34, delay: 0.08 + index * 0.04, ease: [0.16, 1, 0.3, 1] }}
-                  />
-                  <text x={x + barW / 2} y={height - 16} textAnchor="middle" fontSize={10} fontWeight={800} fill="var(--muted-text)">
-                    {bar.label}
-                  </text>
-                </g>
-              )
-            })}
-          </svg>
-        </div>
-
-        <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
-          {contributions.map((item) => (
-            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--muted-text)' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 4, background: item.value >= 0 ? item.color : '#ef4444' }} />
-                {item.label}
-              </div>
-              <div style={{ color: item.value >= 0 ? '#10b981' : '#ef4444' }}>{formatDelta(item.value)}</div>
-            </div>
-          ))}
-        </div>
-      </div>
     </motion.div>
   )
 }
@@ -1139,22 +1289,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     if (!goal || !goalSummary) return null
     return buildSnapshotFeedback(goal, snapshots, goalSummary)
   }, [goal, goalSummary, snapshots])
-  const waterfallContributions = useMemo<WaterfallContribution[]>(() => {
-    if (!view) return []
-    const base = [
-      { id: 'cash', label: '流动', value: view.delta.cash, color: colors.liquid },
-      { id: 'invest', label: '投资', value: view.delta.invest, color: colors.invest },
-      { id: 'fixed', label: '固定', value: view.delta.fixed, color: colors.fixed },
-      { id: 'receivable', label: '应收', value: view.delta.receivable, color: colors.receivable },
-      { id: 'debt', label: '负债', value: normalizeMoney(-view.delta.debt), color: colors.debt },
-    ]
-    const contributionTotal = normalizeMoney(base.reduce((sum, item) => sum + item.value, 0))
-    const residual = normalizeMoney(view.delta.net - contributionTotal)
-    if (Math.abs(residual) >= 0.01) {
-      base.push({ id: 'other', label: '其他', value: residual, color: 'rgba(15,23,42,0.58)' })
-    }
-    return base
-  }, [colors.debt, colors.fixed, colors.invest, colors.liquid, colors.receivable, view])
 
   useEffect(() => {
     if (!goal || !goalSummary) {
@@ -1222,6 +1356,17 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
         {!view ? null : (
           <div className="stack" style={{ marginTop: 12 }}>
+            <SavingsStatusCard
+              summary={goalSummary}
+              latestNetWorth={latestNetWorth}
+              rangeDeltaNet={view.delta.net}
+              startDate={view.start.date}
+              endDate={view.end.date}
+              selectedCount={view.selectedCount}
+              color={colors.invest}
+              onEdit={() => setGoalSheetOpen(true)}
+            />
+
             <SavingsGoalCard
               goal={goal}
               summary={goalSummary}
@@ -1236,12 +1381,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             {snapshotFeedback ? <SnapshotFeedbackCard feedback={snapshotFeedback} /> : null}
 
             {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
-
-            <NetWorthWaterfallCard
-              startNet={view.start.net}
-              endNet={view.end.net}
-              contributions={waterfallContributions}
-            />
 
             <motion.div
               className="card"
