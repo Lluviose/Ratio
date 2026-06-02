@@ -680,6 +680,58 @@ function SavingsSliderControl(props: {
   )
 }
 
+type SavingsSimulationPlan = {
+  baseDate: string
+  baseDaily: number
+  simulatedDaily: number
+  baseMonthlyPace: number
+  simulatedMonthlyPace: number
+  remainingAfterOneTime: number
+  simulatedDate: string | null
+  daysToTarget: number | null
+  simulatedNetAtTarget: number | null
+  targetGap: number | null
+  extraMonthlyNeededForTarget: number | null
+}
+
+function buildSavingsSimulationPlan(summary: SavingsGoalSummary, monthlyExtra: number, oneTime: number): SavingsSimulationPlan {
+  const baseDate = summary.latestDate ?? todayDateKey()
+  const baseDaily = normalizeMoney(summary.avgDailyNetChange ?? 0)
+  const simulatedDaily = normalizeMoney(baseDaily + monthlyExtra / DAYS_PER_MONTH)
+  const baseMonthlyPace = normalizeMoney(baseDaily * DAYS_PER_MONTH)
+  const simulatedMonthlyPace = normalizeMoney(simulatedDaily * DAYS_PER_MONTH)
+  const remainingAfterOneTime = Math.max(0, normalizeMoney(summary.targetAmount - summary.currentNetWorth - oneTime))
+  const simulatedDate = remainingAfterOneTime <= 0
+    ? baseDate
+    : simulatedDaily > 0
+      ? addDaysToDateKey(baseDate, Math.ceil(remainingAfterOneTime / simulatedDaily))
+      : null
+  const daysToTarget = diffDateDays(baseDate, summary.targetDate)
+  const simulatedNetAtTarget = daysToTarget == null || daysToTarget < 0
+    ? null
+    : normalizeMoney(summary.currentNetWorth + oneTime + simulatedDaily * daysToTarget)
+  const targetGap = simulatedNetAtTarget == null ? null : normalizeMoney(simulatedNetAtTarget - summary.targetAmount)
+  const extraMonthlyNeededForTarget = targetGap != null && targetGap < 0 && daysToTarget != null && daysToTarget > 0
+    ? normalizeMoney((Math.abs(targetGap) / daysToTarget) * DAYS_PER_MONTH)
+    : targetGap == null
+      ? null
+      : 0
+
+  return {
+    baseDate,
+    baseDaily,
+    simulatedDaily,
+    baseMonthlyPace,
+    simulatedMonthlyPace,
+    remainingAfterOneTime,
+    simulatedDate,
+    daysToTarget,
+    simulatedNetAtTarget,
+    targetGap,
+    extraMonthlyNeededForTarget,
+  }
+}
+
 function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: string }) {
   const { summary, color } = props
   const [monthlyExtraValue, setMonthlyExtraValue] = useState(0)
@@ -687,27 +739,40 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
 
   if (summary.isComplete) return null
 
-  const monthlyMax = roundUpMoney(Math.max(5000, summary.remaining / 6, (summary.requiredMonthly ?? 0) * 2), 500)
+  const baseDate = summary.latestDate ?? todayDateKey()
+  const baseDaily = normalizeMoney(summary.avgDailyNetChange ?? 0)
+  const daysToTarget = diffDateDays(baseDate, summary.targetDate)
+  const baseTargetShortfall = daysToTarget != null && daysToTarget > 0
+    ? normalizeMoney(summary.targetAmount - summary.currentNetWorth - baseDaily * daysToTarget)
+    : summary.remaining
+  const monthlyNeededToHitTarget = daysToTarget != null && daysToTarget > 0
+    ? Math.max(0, normalizeMoney((baseTargetShortfall / daysToTarget) * DAYS_PER_MONTH))
+    : 0
+  const monthlyMax = roundUpMoney(Math.max(5000, summary.remaining / 6, (summary.requiredMonthly ?? 0) * 1.6, monthlyNeededToHitTarget * 1.4), 500)
   const oneTimeMax = roundUpMoney(Math.max(5000, summary.remaining), 1000)
   const monthlyStep = getSliderStep(monthlyMax)
   const oneTimeStep = getSliderStep(oneTimeMax)
   const monthlyExtra = Math.min(Math.max(0, normalizeMoney(monthlyExtraValue)), monthlyMax)
   const oneTime = Math.min(Math.max(0, normalizeMoney(oneTimeValue)), oneTimeMax)
-  const baseDate = summary.latestDate ?? todayDateKey()
-  const simulatedDaily = normalizeMoney((summary.avgDailyNetChange ?? 0) + monthlyExtra / DAYS_PER_MONTH)
-  const remainingAfterBoost = Math.max(0, normalizeMoney(summary.targetAmount - summary.currentNetWorth - oneTime))
-  const simulatedDate = remainingAfterBoost <= 0
-    ? baseDate
-    : simulatedDaily > 0
-      ? addDaysToDateKey(baseDate, Math.ceil(remainingAfterBoost / simulatedDaily))
-      : null
-  const daysToTarget = diffDateDays(baseDate, summary.targetDate)
-  const simulatedNetAtTarget = daysToTarget == null || daysToTarget < 0
-    ? null
-    : normalizeMoney(summary.currentNetWorth + oneTime + simulatedDaily * daysToTarget)
-  const targetGap = simulatedNetAtTarget == null ? null : normalizeMoney(simulatedNetAtTarget - summary.targetAmount)
-  const shift = formatProjectionShift(simulatedDate, summary)
-  const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate, simulatedDate]
+  const plan = buildSavingsSimulationPlan(summary, monthlyExtra, oneTime)
+  const shift = formatProjectionShift(plan.simulatedDate, summary)
+  const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate, plan.simulatedDate]
+  const targetMonthlyExtra = plan.extraMonthlyNeededForTarget == null
+    ? monthlyExtra
+    : Math.min(monthlyMax, roundUpMoney(monthlyExtra + plan.extraMonthlyNeededForTarget, monthlyStep))
+  const canBoostMonthly = plan.extraMonthlyNeededForTarget != null && plan.extraMonthlyNeededForTarget > 0 && targetMonthlyExtra > monthlyExtra
+  const oneTimeToComplete = Math.min(oneTimeMax, roundUpMoney(summary.remaining, oneTimeStep))
+  const canCompleteOneTime = oneTime < oneTimeToComplete
+  const targetGapTone = plan.targetGap == null
+    ? 'var(--muted-text)'
+    : plan.targetGap >= 0
+      ? '#10b981'
+      : '#ef4444'
+  const extraNeededText = plan.extraMonthlyNeededForTarget == null
+    ? '目标日已过'
+    : plan.extraMonthlyNeededForTarget <= 0
+      ? '已覆盖'
+      : formatCny(plan.extraMonthlyNeededForTarget)
 
   const reset = () => {
     setMonthlyExtraValue(0)
@@ -725,7 +790,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 950, fontSize: 14 }}>目标模拟器</div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>基于当前速度</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>一次性存入先抵扣差额，每月多存再折算为增速</div>
           </div>
           <button type="button" className="iconBtn" onClick={reset} aria-label="reset savings simulator">
             <RotateCcw size={16} strokeWidth={2.5} />
@@ -739,7 +804,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             max={monthlyMax}
             step={monthlyStep}
             color={color}
-            helper="影响长期速度"
+            helper={`${formatDelta(monthlyExtra / DAYS_PER_MONTH)}/天`}
             onChange={setMonthlyExtraValue}
           />
           <SavingsSliderControl
@@ -748,31 +813,57 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             max={oneTimeMax}
             step={oneTimeStep}
             color={color}
-            helper="立即缩短距离"
+            helper={`剩余 ${formatCny(plan.remainingAfterOneTime)}`}
             onChange={setOneTimeValue}
           />
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 10 }}>
+          <button
+            type="button"
+            className="ghostBtn"
+            disabled={!canBoostMonthly}
+            onClick={() => setMonthlyExtraValue(targetMonthlyExtra)}
+            style={{ justifyContent: 'center', opacity: canBoostMonthly ? 1 : 0.55 }}
+          >
+            月存达标
+          </button>
+          <button
+            type="button"
+            className="ghostBtn"
+            disabled={!canCompleteOneTime}
+            onClick={() => setOneTimeValue(oneTimeToComplete)}
+            style={{ justifyContent: 'center', opacity: canCompleteOneTime ? 1 : 0.55 }}
+          >
+            一次补齐
+          </button>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>模拟达成</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: shift.tone, overflowWrap: 'anywhere' }}>
-              {simulatedDate ? formatShortGoalDate(simulatedDate, dateContext) : '暂不可达'}
+              {plan.simulatedDate ? formatShortGoalDate(plan.simulatedDate, dateContext) : '暂不可达'}
             </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
           </div>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{targetGap == null || targetGap >= 0 ? '目标日余量' : '目标日缺口'}</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: targetGap == null ? 'var(--muted-text)' : targetGap >= 0 ? '#10b981' : '#ef4444', overflowWrap: 'anywhere' }}>
-              {targetGap == null ? '—' : formatAbsCny(targetGap)}
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{plan.targetGap == null || plan.targetGap >= 0 ? '目标日余量' : '目标日缺口'}</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: targetGapTone, overflowWrap: 'anywhere' }}>
+              {plan.targetGap == null ? '—' : formatAbsCny(plan.targetGap)}
             </div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{targetGap == null ? '目标日已过' : shift.sub}</div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{plan.targetGap == null ? '目标日已过' : shift.sub}</div>
           </div>
-        </div>
-
-        <div style={{ marginTop: 12, borderRadius: 16, padding: '10px 12px', background: 'rgb(var(--primary-rgb) / 0.06)', display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>模拟月增速</div>
-          <div style={{ fontSize: 12, fontWeight: 950, color }}>{formatDelta(simulatedDaily * DAYS_PER_MONTH)}/月</div>
+          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>月增速</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color, overflowWrap: 'anywhere' }}>{formatDelta(plan.simulatedMonthlyPace)}</div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>原速 {formatDelta(plan.baseMonthlyPace)}</div>
+          </div>
+          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>还需月存</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: plan.extraMonthlyNeededForTarget != null && plan.extraMonthlyNeededForTarget > 0 ? '#ef4444' : '#10b981', overflowWrap: 'anywhere' }}>{extraNeededText}</div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>踩中目标日</div>
+          </div>
         </div>
       </div>
     </motion.div>
