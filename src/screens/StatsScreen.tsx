@@ -11,12 +11,15 @@ import {
   coerceSavingsGoal,
   defaultGoalDate,
   diffDateDays,
+  getNetChangePace,
   getSavingsGoalSummary,
   isDateKey,
   todayDateKey,
+  type NetChangePace,
   type SavingsGoal,
   type SavingsGoalSummary,
 } from '../lib/savingsGoal'
+import { DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY, clampMonthStartDay } from '../lib/monthStart'
 import type { ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -86,9 +89,24 @@ function formatAbsCny(value: number) {
   return formatCny(Math.abs(value))
 }
 
+function formatPaceSource(method: NetChangePace['method'] | null | undefined, snapshotCount: number | null | undefined, sampleDays: number | null | undefined) {
+  if (!method || !snapshotCount || !sampleDays) return '样本跨度不足，暂不估算'
+  const methodText = method === 'monthly-close' ? '按月度快照估算' : '按快照跨度估算'
+  return `${methodText} · ${snapshotCount}条/${sampleDays}天`
+}
+
+function formatNetChangePaceSource(pace: NetChangePace | null | undefined) {
+  return pace ? formatPaceSource(pace.method, pace.snapshotCount, pace.sampleDays) : formatPaceSource(null, null, null)
+}
+
+function formatSummaryPaceSource(summary: SavingsGoalSummary) {
+  return formatPaceSource(summary.avgDailyNetChangeMethod, summary.avgDailyNetChangeSnapshotCount, summary.avgDailyNetChangeSampleDays)
+}
+
 const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
 const MILESTONE_STORAGE_PREFIX = 'ratio.savingsGoal.maxMilestone.'
 const DAYS_PER_MONTH = 30.4375
+const TARGET_GAP_TOLERANCE = 1
 
 type GoalMilestoneInfo = {
   progress: number
@@ -315,7 +333,7 @@ function SavingsStatusCard(props: {
   const targetDeltaValue = targetDelta == null ? '—' : formatCny(Math.abs(targetDelta))
   const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
   const progressPct = `${Math.round(progress * 1000) / 10}%`
-  const projectionSub = selectedCount >= 2 ? `${selectedCount}条快照` : rangeLabel
+  const projectionSub = summary.avgDailyNetChange != null || selectedCount >= 2 ? formatSummaryPaceSource(summary) : rangeLabel
   const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
 
   return (
@@ -486,13 +504,13 @@ type FeedbackTile = {
   tone?: string
 }
 
-function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary: SavingsGoalSummary): { latestDate: string; tiles: FeedbackTile[] } | null {
+function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary: SavingsGoalSummary, monthStartDay: number): { latestDate: string; tiles: FeedbackTile[] } | null {
   const sorted = sortedSnapshots(snapshots)
   if (sorted.length < 2) return null
 
   const latest = sorted[sorted.length - 1]
   const previous = sorted[sorted.length - 2]
-  const previousSummary = getSavingsGoalSummary(goal, sorted.slice(0, -1))
+  const previousSummary = getSavingsGoalSummary(goal, sorted.slice(0, -1), { monthStartDay })
   if (!previousSummary) return null
 
   const netDelta = normalizeMoney(latest.net - previous.net)
@@ -760,20 +778,28 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
   const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate, plan.simulatedDate]
   const targetMonthlyExtra = plan.extraMonthlyNeededForTarget == null
     ? monthlyExtra
-    : Math.min(monthlyMax, roundUpMoney(monthlyExtra + plan.extraMonthlyNeededForTarget, monthlyStep))
+    : Math.min(monthlyMax, normalizeMoney(monthlyExtra + plan.extraMonthlyNeededForTarget))
   const canBoostMonthly = plan.extraMonthlyNeededForTarget != null && plan.extraMonthlyNeededForTarget > 0 && targetMonthlyExtra > monthlyExtra
-  const oneTimeToComplete = Math.min(oneTimeMax, roundUpMoney(summary.remaining, oneTimeStep))
-  const canCompleteOneTime = oneTime < oneTimeToComplete
-  const targetGapTone = plan.targetGap == null
+  const monthlyBoostButtonLabel = plan.extraMonthlyNeededForTarget != null && monthlyExtra + plan.extraMonthlyNeededForTarget > monthlyMax
+    ? '拉满月存'
+    : '按目标日设月存'
+  const targetGapForDisplay = plan.targetGap == null
+    ? null
+    : Math.abs(plan.targetGap) <= TARGET_GAP_TOLERANCE
+      ? 0
+      : plan.targetGap
+  const targetGapTone = targetGapForDisplay == null
     ? 'var(--muted-text)'
-    : plan.targetGap >= 0
+    : targetGapForDisplay >= 0
       ? '#10b981'
       : '#ef4444'
-  const extraNeededText = plan.extraMonthlyNeededForTarget == null
+  const extraMonthlyNeededForDisplay = targetGapForDisplay === 0 ? 0 : plan.extraMonthlyNeededForTarget
+  const extraNeededText = extraMonthlyNeededForDisplay == null
     ? '目标日已过'
-    : plan.extraMonthlyNeededForTarget <= 0
-      ? '已覆盖'
-      : formatCny(plan.extraMonthlyNeededForTarget)
+    : extraMonthlyNeededForDisplay <= 0
+      ? '无需再补'
+      : formatCny(extraMonthlyNeededForDisplay)
+  const targetDateLabel = `目标日 ${formatShortGoalDate(summary.targetDate, dateContext)}`
 
   const reset = () => {
     setMonthlyExtraValue(0)
@@ -787,7 +813,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="cardInner">
+      <div className="cardInner" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -797,6 +823,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
                 onClick={() => setHelpOpen((open) => !open)}
                 aria-label="查看目标模拟器说明"
                 aria-expanded={helpOpen}
+                aria-controls="savings-goal-simulator-help"
                 title="查看目标模拟器说明"
                 style={{
                   width: 28,
@@ -814,7 +841,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
                 <Info size={15} strokeWidth={2.5} />
               </button>
             </div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>一次性存入先抵扣差额，每月多存再折算为增速</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>用一次性存入和每月多存，模拟目标日还差多少</div>
           </div>
           <button type="button" className="iconBtn" onClick={reset} aria-label="reset savings simulator">
             <RotateCcw size={16} strokeWidth={2.5} />
@@ -823,15 +850,25 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
 
         {helpOpen ? (
           <motion.div
+            id="savings-goal-simulator-help"
+            role="tooltip"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             style={{
-              marginTop: 12,
+              position: 'absolute',
+              top: 58,
+              left: 0,
+              right: 0,
+              zIndex: 8,
               borderRadius: 16,
               padding: 12,
-              background: 'rgb(var(--primary-rgb) / 0.06)',
+              background: 'var(--card)',
               border: '1px solid var(--hairline)',
+              boxShadow: '0 18px 44px rgb(15 23 42 / 0.18)',
+              backdropFilter: 'blur(16px)',
+              maxHeight: 'min(360px, calc(100vh - 180px))',
+              overflowY: 'auto',
               display: 'grid',
               gap: 7,
               fontSize: 11,
@@ -841,10 +878,10 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           >
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>每月多存</span>：按月金额折算成每日增速，影响模拟达成日和目标日缺口。</div>
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>一次性存入</span>：先直接减少距离目标还差的金额。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>月存达标</span>：把每月多存调到当前条件下尽量踩中目标日。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>一次补齐</span>：把一次性存入调到足以覆盖当前剩余差额。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>模拟达成</span>：按当前组合预计到达目标的日期；目标日余量/缺口表示到目标日时多出或少多少。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及距离踩中目标日还需要补的月存额。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>按目标日设月存</span>：把每月多存调到刚好覆盖目标日缺口；如果滑块上限不够，会改为拉满月存。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>模拟达成</span>：按当前组合预计到达目标的日期。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>目标日结果</span>：显示目标日当天预计多出或少多少；接近刚好时显示“刚好达标”。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及为了踩中目标日还要补的月存额。</div>
           </motion.div>
         ) : null}
 
@@ -869,7 +906,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 8, marginTop: 10 }}>
           <button
             type="button"
             className="ghostBtn"
@@ -877,16 +914,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             onClick={() => setMonthlyExtraValue(targetMonthlyExtra)}
             style={{ justifyContent: 'center', opacity: canBoostMonthly ? 1 : 0.55 }}
           >
-            月存达标
-          </button>
-          <button
-            type="button"
-            className="ghostBtn"
-            disabled={!canCompleteOneTime}
-            onClick={() => setOneTimeValue(oneTimeToComplete)}
-            style={{ justifyContent: 'center', opacity: canCompleteOneTime ? 1 : 0.55 }}
-          >
-            一次补齐
+            {monthlyBoostButtonLabel}
           </button>
         </div>
 
@@ -899,11 +927,13 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
           </div>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{plan.targetGap == null || plan.targetGap >= 0 ? '目标日余量' : '目标日缺口'}</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: targetGapTone, overflowWrap: 'anywhere' }}>
-              {plan.targetGap == null ? '—' : formatAbsCny(plan.targetGap)}
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>
+              {targetGapForDisplay == null || targetGapForDisplay === 0 ? '目标日结果' : targetGapForDisplay > 0 ? '目标日余量' : '目标日缺口'}
             </div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{plan.targetGap == null ? '目标日已过' : shift.sub}</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: targetGapTone, overflowWrap: 'anywhere' }}>
+              {targetGapForDisplay == null ? '—' : targetGapForDisplay === 0 ? '刚好达标' : formatAbsCny(targetGapForDisplay)}
+            </div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{targetGapForDisplay == null ? '目标日已过' : targetDateLabel}</div>
           </div>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>月增速</div>
@@ -912,7 +942,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           </div>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>还需月存</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: plan.extraMonthlyNeededForTarget != null && plan.extraMonthlyNeededForTarget > 0 ? '#ef4444' : '#10b981', overflowWrap: 'anywhere' }}>{extraNeededText}</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: extraMonthlyNeededForDisplay != null && extraMonthlyNeededForDisplay > 0 ? '#ef4444' : '#10b981', overflowWrap: 'anywhere' }}>{extraNeededText}</div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>踩中目标日</div>
           </div>
         </div>
@@ -1251,12 +1281,14 @@ function SavingsGoalSheet(props: {
 export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors }) {
   const { snapshots, colors } = props
   const [range, setRange] = useState<RangeId>('6m')
+  const [monthStartDayRaw] = useLocalStorageState<number>(MONTH_START_DAY_KEY, DEFAULT_MONTH_START_DAY)
   const [goal, setGoal] = useLocalStorageState<SavingsGoal | null>(SAVINGS_GOAL_KEY, null, {
     coerce: coerceSavingsGoal,
   })
   const [goalSheetOpen, setGoalSheetOpen] = useState(false)
   const [celebrationMilestone, setCelebrationMilestone] = useState<number | null>(null)
   const celebrationKeyRef = useRef<string | null>(null)
+  const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const view = useMemo(() => {
     if (!snapshots || snapshots.length === 0) return null
@@ -1308,11 +1340,13 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       cash: safeDiv(end.cash, end.debt),
     }
 
+    const netPace = getNetChangePace(selected, { monthStartDay })
+
     const growth = {
       net: safeGrowth(delta.net, start.net),
       assets: safeGrowth(delta.assets, assetsStart),
       debt: safeGrowth(delta.debt, start.debt),
-      avgDailyNet: days && days > 0 ? normalizeMoney(delta.net / days) : null,
+      avgDailyNet: netPace?.avgDaily ?? null,
     }
 
     return {
@@ -1328,15 +1362,16 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       ratios,
       coverage,
       growth,
+      netPace,
     }
-  }, [range, snapshots])
+  }, [monthStartDay, range, snapshots])
 
-  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots), [goal, snapshots])
+  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
   const latestNetWorth = goalSummary?.currentNetWorth ?? view?.end.net ?? 0
   const snapshotFeedback = useMemo(() => {
     if (!goal || !goalSummary) return null
-    return buildSnapshotFeedback(goal, snapshots, goalSummary)
-  }, [goal, goalSummary, snapshots])
+    return buildSnapshotFeedback(goal, snapshots, goalSummary, monthStartDay)
+  }, [goal, goalSummary, monthStartDay, snapshots])
 
   useEffect(() => {
     if (!goal || !goalSummary) {
@@ -1504,7 +1539,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                   <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
                   <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
                   <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
-                  <MetricTile label="日均净资产变化" value={view.growth.avgDailyNet != null ? formatDelta(view.growth.avgDailyNet) : '—'} />
+                  <MetricTile label="日均净资产变化" value={view.growth.avgDailyNet != null ? formatDelta(view.growth.avgDailyNet) : '—'} sub={formatNetChangePaceSource(view.netPace)} />
                 </div>
               </div>
             </motion.div>

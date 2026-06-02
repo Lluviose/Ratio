@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   addDaysToDateKey,
   coerceSavingsGoal,
+  getAverageDailyNetChange,
   getGoalComparisonValue,
   getLinearGoalValue,
+  getNetChangePace,
   getSavingsGoalSummary,
   todayDateKey,
   type SavingsGoal,
@@ -57,6 +59,43 @@ describe('savingsGoal', () => {
     expect(summary?.projectedDate).toBe('2026-04-11')
     expect(summary?.targetValueAtLatest).toBeCloseTo(108241.76)
     expect(summary?.targetDeltaAtLatest).toBeCloseTo(21758.24)
+  })
+
+  it('does not turn a short concentrated update into a daily pace', () => {
+    expect(getAverageDailyNetChange([
+      snapshot('2026-01-30', 100000),
+      snapshot('2026-01-31', 130000),
+    ])).toBeNull()
+  })
+
+  it('uses monthly closing snapshots for sparse monthly records', () => {
+    const pace = getNetChangePace([
+      snapshot('2026-01-31', 100000),
+      snapshot('2026-02-28', 130000),
+      snapshot('2026-03-31', 150000),
+    ])
+
+    expect(pace?.method).toBe('monthly-close')
+    expect(pace?.sampleDays).toBe(59)
+    expect(pace?.snapshotCount).toBe(3)
+    expect(pace?.avgDaily).toBeCloseTo(847.46)
+  })
+
+  it('prefers monthly pace when record gaps mix clusters and long pauses', () => {
+    const pace = getNetChangePace([
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-01-02', 101000),
+      snapshot('2026-01-03', 102000),
+      snapshot('2026-02-10', 120000),
+      snapshot('2026-02-11', 121000),
+      snapshot('2026-03-10', 150000),
+    ])
+
+    expect(pace?.method).toBe('monthly-close')
+    expect(pace?.startDate).toBe('2026-01-03')
+    expect(pace?.endDate).toBe('2026-03-10')
+    expect(pace?.sampleDays).toBe(66)
+    expect(pace?.avgDaily).toBeCloseTo(727.27)
   })
 
   it('marks unfinished goals due today or past due', () => {

@@ -25,6 +25,7 @@ type TrendMode = 'netDebt' | 'cashInvest'
 type RangeId = '30d' | '6m' | '1y' | 'custom'
 
 const RECENT_SNAPSHOT_LIMIT = 90
+const DAYS_PER_MONTH = 30.4375
 
 type TrendPoint = {
   date: string
@@ -127,6 +128,12 @@ function formatMaybeCny(value: number | null | undefined) {
 
 function formatMaybeDelta(value: number | null | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? formatDelta(value) : '—'
+}
+
+function formatGoalPaceSource(summary: SavingsGoalSummary) {
+  if (summary.avgDailyNetChange == null || !summary.avgDailyNetChangeMethod) return '速度等待更多快照'
+  const methodText = summary.avgDailyNetChangeMethod === 'monthly-close' ? '月度估算' : '快照估算'
+  return `${methodText} ${formatDelta(summary.avgDailyNetChange * DAYS_PER_MONTH)}/月`
 }
 
 function formatGoalDate(dateKey: string | null | undefined, contextDateKeys: Array<string | null | undefined> = []) {
@@ -313,7 +320,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     }
   }, [monthStartDay, range, snapshots])
 
-  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots), [goal, snapshots])
+  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
   const goalTrendPoints = useMemo(() => withGoalTrendLines(view.points, goal, goalSummary, view.showYear), [goal, goalSummary, view.points, view.showYear])
   const data = mode === 'netDebt' ? goalTrendPoints : view.points
   const showYearInData = shouldShowYearForDateKeys(data.map((point) => point.dateKey))
@@ -678,6 +685,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               {goalSummary.targetDeltaAtLatest != null
                 ? ` · ${goalSummary.targetDeltaAtLatest >= 0 ? '领先' : '落后'} ${formatCny(Math.abs(goalSummary.targetDeltaAtLatest))}`
                 : ''}
+              {` · ${formatGoalPaceSource(goalSummary)}`}
             </div>
           </motion.div>
         ) : null}
