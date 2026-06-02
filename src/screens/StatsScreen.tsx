@@ -730,8 +730,13 @@ type SavingsSimulationPlan = {
   extraMonthlyNeededForTarget: number | null
 }
 
+function getActiveGoalDate(summary: SavingsGoalSummary) {
+  const today = todayDateKey()
+  return summary.latestDate && summary.latestDate > today ? summary.latestDate : today
+}
+
 function buildSavingsSimulationPlan(summary: SavingsGoalSummary, monthlyExtra: number, oneTime: number): SavingsSimulationPlan {
-  const baseDate = summary.latestDate ?? todayDateKey()
+  const baseDate = getActiveGoalDate(summary)
   const baseDaily = normalizeMoney(summary.avgDailyNetChange ?? 0)
   const simulatedDaily = normalizeMoney(baseDaily + monthlyExtra / DAYS_PER_MONTH)
   const baseMonthlyPace = normalizeMoney(baseDaily * DAYS_PER_MONTH)
@@ -776,7 +781,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
 
   if (summary.isComplete) return null
 
-  const baseDate = summary.latestDate ?? todayDateKey()
+  const baseDate = getActiveGoalDate(summary)
   const baseDaily = normalizeMoney(summary.avgDailyNetChange ?? 0)
   const daysToTarget = diffDateDays(baseDate, summary.targetDate)
   const baseTargetShortfall = daysToTarget != null && daysToTarget > 0

@@ -159,6 +159,11 @@ function latestSnapshot(snapshots: Snapshot[]): Snapshot | null {
   }, null)
 }
 
+function activeDateFromLatest(latestDate: string | null) {
+  const today = todayDateKey()
+  return latestDate && latestDate > today ? latestDate : today
+}
+
 function sortValidSnapshots(snapshots: Snapshot[]) {
   return snapshots
     .filter((s) => dateKeyToUtcDays(s.date) != null)
@@ -292,6 +297,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const latest = latestSnapshot(snapshots)
   const currentNetWorth = latest ? normalizeMoney(latest.net) : normalizeMoney(goal.startNetWorth)
   const latestDate = latest?.date ?? null
+  const activeDate = activeDateFromLatest(latestDate)
 
   const totalNeeded = goal.targetAmount - goal.startNetWorth
   const gained = currentNetWorth - goal.startNetWorth
@@ -300,7 +306,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const remaining = Math.max(0, normalizeMoney(goal.targetAmount - currentNetWorth))
   const isComplete = remaining <= 0
 
-  const daysLeftRaw = diffDateDays(todayDateKey(), goal.targetDate)
+  const daysLeftRaw = diffDateDays(activeDate, goal.targetDate)
   const daysLeft = daysLeftRaw == null ? null : Math.max(0, daysLeftRaw)
   const isDueToday = !isComplete && daysLeftRaw === 0
   const isPastDue = !isComplete && daysLeftRaw != null && daysLeftRaw < 0
@@ -315,12 +321,12 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   let projectedDate: string | null = null
   if (!isComplete && latestDate && avgDailyNetChange != null && avgDailyNetChange > 0) {
     const daysToGoal = Math.ceil(remaining / avgDailyNetChange)
-    projectedDate = addDaysToDateKey(latestDate, daysToGoal)
+    projectedDate = addDaysToDateKey(activeDate, daysToGoal)
   }
 
   let projectedNetAtTargetDate: number | null = null
   if (latestDate && avgDailyNetChange != null) {
-    const daysToTarget = diffDateDays(latestDate, goal.targetDate)
+    const daysToTarget = diffDateDays(activeDate, goal.targetDate)
     if (daysToTarget != null && daysToTarget >= 0) {
       projectedNetAtTargetDate = normalizeMoney(currentNetWorth + avgDailyNetChange * daysToTarget)
     }

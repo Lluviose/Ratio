@@ -48,17 +48,36 @@ describe('savingsGoal', () => {
   })
 
   it('summarizes progress and projected completion from snapshots', () => {
-    const summary = getSavingsGoalSummary(goal, [
-      snapshot('2026-01-01', 100000),
-      snapshot('2026-01-31', 130000),
+    const today = todayDateKey()
+    const startDate = addDaysToDateKey(today, -30)!
+    const targetDate = addDaysToDateKey(today, 365)!
+    const summaryGoal = { ...goal, startDate, targetDate }
+    const summary = getSavingsGoalSummary(summaryGoal, [
+      snapshot(startDate, 100000),
+      snapshot(today, 130000),
     ])
 
     expect(summary?.progress).toBe(0.3)
     expect(summary?.remaining).toBe(70000)
     expect(summary?.avgDailyNetChange).toBe(1000)
-    expect(summary?.projectedDate).toBe('2026-04-11')
-    expect(summary?.targetValueAtLatest).toBeCloseTo(108241.76)
-    expect(summary?.targetDeltaAtLatest).toBeCloseTo(21758.24)
+    expect(summary?.projectedDate).toBe(addDaysToDateKey(today, 70))
+    expect(summary?.targetValueAtLatest).toBeCloseTo(107594.94)
+    expect(summary?.targetDeltaAtLatest).toBeCloseTo(22405.06)
+  })
+
+  it('projects stale snapshots from today instead of the old snapshot date', () => {
+    const today = todayDateKey()
+    const startDate = addDaysToDateKey(today, -90)!
+    const latestDate = addDaysToDateKey(today, -60)!
+    const targetDate = addDaysToDateKey(today, 365)!
+    const summaryGoal = { ...goal, startDate, targetDate }
+    const summary = getSavingsGoalSummary(summaryGoal, [
+      snapshot(startDate, 100000),
+      snapshot(latestDate, 130000),
+    ])
+
+    expect(summary?.avgDailyNetChange).toBe(1000)
+    expect(summary?.projectedDate).toBe(addDaysToDateKey(today, 70))
   })
 
   it('does not turn a short concentrated update into a daily pace', () => {
