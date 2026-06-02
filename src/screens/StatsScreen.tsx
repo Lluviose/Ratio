@@ -347,6 +347,7 @@ function SavingsStatusCard(props: {
     : monthlyNeed == null
       ? formatCny(summary.remaining)
       : formatCny(monthlyNeed)
+  const heroSub = summary.isComplete ? '目标已覆盖' : `距离目标还差 ${formatCny(summary.remaining)}`
   const targetDeltaLabel = targetDelta == null || targetDelta >= 0 ? '领先目标' : '落后目标'
   const targetDeltaValue = targetDelta == null ? '—' : formatCny(Math.abs(targetDelta))
   const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
@@ -404,7 +405,7 @@ function SavingsStatusCard(props: {
           {heroValue}
         </motion.div>
         <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
-          距离目标还差 {formatCny(summary.remaining)}
+          {heroSub}
         </div>
 
         <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
@@ -535,26 +536,33 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
   const targetDistanceChange = normalizeMoney(previousSummary.remaining - summary.remaining)
   const previousMilestone = getNextGoalMilestone(previousSummary)
   const currentMilestone = getNextGoalMilestone(summary)
-  const dateContext = [goal.startDate, goal.targetDate, latest.date, previous.date, summary.projectedDate, previousSummary.projectedDate]
+  const currentDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
+  const feedbackDateContext = [goal.startDate, goal.targetDate, latest.date, previous.date, summary.projectedDate, previousSummary.projectedDate]
+
+  const targetDistanceSub = targetDistanceChange === 0
+    ? '较上次持平'
+    : targetDistanceChange > 0
+      ? `较上次近了 ${formatCny(targetDistanceChange)}`
+      : `较上次远了 ${formatCny(Math.abs(targetDistanceChange))}`
 
   let projectionTile: FeedbackTile = {
     label: '预计达成',
-    value: summary.projectedDate ? formatShortGoalDate(summary.projectedDate, dateContext) : '继续记录',
+    value: summary.projectedDate ? formatShortGoalDate(summary.projectedDate, currentDateContext) : '暂无预测',
     sub: '需要更多快照',
     tone: 'var(--muted-text)',
   }
   if (summary.isComplete) {
-    projectionTile = { label: '预计达成', value: '已达成', sub: formatShortGoalDate(latest.date, dateContext), tone: '#10b981' }
+    projectionTile = { label: '预计达成', value: '已达成', sub: `达成于 ${formatShortGoalDate(latest.date, feedbackDateContext)}`, tone: '#10b981' }
   } else if (previousSummary.projectedDate && summary.projectedDate) {
     const shift = diffDateDays(summary.projectedDate, previousSummary.projectedDate)
     projectionTile = {
       label: '预计达成',
-      value: shift == null || shift === 0 ? '日期稳定' : shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
-      sub: formatShortGoalDate(summary.projectedDate, dateContext),
+      value: formatShortGoalDate(summary.projectedDate, currentDateContext),
+      sub: shift == null || shift === 0 ? '较上次稳定' : shift > 0 ? `较上次提前 ${shift} 天` : `较上次延后 ${Math.abs(shift)} 天`,
       tone: shift == null || shift === 0 ? 'var(--text)' : shift > 0 ? '#10b981' : '#ef4444',
     }
   } else if (summary.projectedDate) {
-    projectionTile = { label: '预计达成', value: formatShortGoalDate(summary.projectedDate, dateContext), sub: '已形成预测', tone: '#10b981' }
+    projectionTile = { label: '预计达成', value: formatShortGoalDate(summary.projectedDate, currentDateContext), sub: '已形成预测', tone: '#10b981' }
   }
 
   let milestoneTile: FeedbackTile = {
@@ -569,16 +577,20 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
     if (previousMilestone.progress !== currentMilestone.progress && summary.progress >= previousMilestone.progress - 0.0001) {
       milestoneTile = {
         label: '下一里程碑',
-        value: `越过 ${previousMilestone.pct}%`,
-        sub: `下一站 ${currentMilestone.pct}%`,
+        value: `${currentMilestone.pct}%`,
+        sub: `刚越过 ${previousMilestone.pct}% · 还差 ${formatCny(currentMilestone.amountLeft)}`,
         tone: '#10b981',
       }
     } else if (previousMilestone.progress === currentMilestone.progress) {
       const distanceDelta = normalizeMoney(previousMilestone.amountLeft - currentMilestone.amountLeft)
       milestoneTile = {
         label: '下一里程碑',
-        value: distanceDelta === 0 ? `${currentMilestone.pct}%` : distanceDelta > 0 ? `近了 ${formatCny(distanceDelta)}` : `远了 ${formatCny(Math.abs(distanceDelta))}`,
-        sub: `还差 ${formatCny(currentMilestone.amountLeft)}`,
+        value: `${currentMilestone.pct}%`,
+        sub: distanceDelta === 0
+          ? `还差 ${formatCny(currentMilestone.amountLeft)}`
+          : distanceDelta > 0
+            ? `还差 ${formatCny(currentMilestone.amountLeft)} · 较上次近了 ${formatCny(distanceDelta)}`
+            : `还差 ${formatCny(currentMilestone.amountLeft)} · 较上次远了 ${formatCny(Math.abs(distanceDelta))}`,
         tone: distanceDelta === 0 ? 'var(--text)' : distanceDelta > 0 ? '#10b981' : '#ef4444',
       }
     }
@@ -589,15 +601,15 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
     tiles: [
       {
         label: '本次净资产',
-        value: formatDelta(netDelta),
-        sub: `较 ${formatShortGoalDate(previous.date, dateContext)}`,
+        value: formatCny(summary.currentNetWorth),
+        sub: `较 ${formatShortGoalDate(previous.date, feedbackDateContext)} ${formatDelta(netDelta)}`,
         tone: netDelta === 0 ? 'var(--text)' : netDelta > 0 ? '#10b981' : '#ef4444',
       },
       {
         label: '距离目标',
-        value: targetDistanceChange === 0 ? '保持不变' : targetDistanceChange > 0 ? `近了 ${formatCny(targetDistanceChange)}` : `远了 ${formatCny(Math.abs(targetDistanceChange))}`,
-        sub: `还差 ${formatCny(summary.remaining)}`,
-        tone: targetDistanceChange === 0 ? 'var(--text)' : targetDistanceChange > 0 ? '#10b981' : '#ef4444',
+        value: summary.isComplete ? '已达成' : formatCny(summary.remaining),
+        sub: summary.isComplete ? '目标已覆盖' : targetDistanceSub,
+        tone: summary.isComplete ? '#10b981' : targetDistanceChange === 0 ? 'var(--text)' : targetDistanceChange > 0 ? '#10b981' : '#ef4444',
       },
       projectionTile,
       milestoneTile,
@@ -628,7 +640,7 @@ function SnapshotFeedbackCard(props: { feedback: { latestDate: string; tiles: Fe
             <div key={tile.label} style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
               <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{tile.label}</div>
               <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: tile.tone ?? 'var(--text)', overflowWrap: 'anywhere' }}>{tile.value}</div>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{tile.sub}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3, overflowWrap: 'anywhere' }}>{tile.sub}</div>
             </div>
           ))}
         </div>
@@ -752,11 +764,13 @@ function buildSavingsSimulationPlan(summary: SavingsGoalSummary, monthlyExtra: n
     ? null
     : normalizeMoney(summary.currentNetWorth + oneTime + simulatedDaily * daysToTarget)
   const targetGap = simulatedNetAtTarget == null ? null : normalizeMoney(simulatedNetAtTarget - summary.targetAmount)
-  const extraMonthlyNeededForTarget = targetGap != null && targetGap < 0 && daysToTarget != null && daysToTarget > 0
-    ? normalizeMoney((Math.abs(targetGap) / daysToTarget) * DAYS_PER_MONTH)
-    : targetGap == null
-      ? null
-      : 0
+  const extraMonthlyNeededForTarget = targetGap == null
+    ? null
+    : targetGap >= 0
+      ? 0
+      : daysToTarget != null && daysToTarget > 0
+        ? normalizeMoney((Math.abs(targetGap) / daysToTarget) * DAYS_PER_MONTH)
+        : null
 
   return {
     baseDate,
@@ -816,12 +830,22 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
     : targetGapForDisplay >= 0
       ? '#10b981'
       : '#ef4444'
+  const targetDateNeedsImmediateDeposit = daysToTarget === 0 && targetGapForDisplay != null && targetGapForDisplay < 0
   const extraMonthlyNeededForDisplay = targetGapForDisplay === 0 ? 0 : plan.extraMonthlyNeededForTarget
-  const extraNeededText = extraMonthlyNeededForDisplay == null
-    ? '目标日已过'
-    : extraMonthlyNeededForDisplay <= 0
-      ? '无需再补'
-      : formatCny(extraMonthlyNeededForDisplay)
+  const extraNeededText = targetDateNeedsImmediateDeposit
+    ? '需当天补足'
+    : extraMonthlyNeededForDisplay == null
+      ? '目标日已过'
+      : extraMonthlyNeededForDisplay <= 0
+        ? '无需再补'
+        : formatCny(extraMonthlyNeededForDisplay)
+  const extraNeededLabel = targetDateNeedsImmediateDeposit ? '目标日补足' : '还需月存'
+  const extraNeededSub = targetDateNeedsImmediateDeposit ? '月存已来不及' : '踩中目标日'
+  const extraNeededTone = targetDateNeedsImmediateDeposit
+    ? '#ef4444'
+    : extraMonthlyNeededForDisplay != null && extraMonthlyNeededForDisplay > 0
+      ? '#ef4444'
+      : '#10b981'
   const targetDateLabel = `目标日 ${formatShortGoalDate(summary.targetDate, dateContext)}`
 
   const reset = () => {
@@ -964,9 +988,9 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>原速 {formatDelta(plan.baseMonthlyPace)}</div>
           </div>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>还需月存</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: extraMonthlyNeededForDisplay != null && extraMonthlyNeededForDisplay > 0 ? '#ef4444' : '#10b981', overflowWrap: 'anywhere' }}>{extraNeededText}</div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>踩中目标日</div>
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{extraNeededLabel}</div>
+            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: extraNeededTone, overflowWrap: 'anywhere' }}>{extraNeededText}</div>
+            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{extraNeededSub}</div>
           </div>
         </div>
       </div>
