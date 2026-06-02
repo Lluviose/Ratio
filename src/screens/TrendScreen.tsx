@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
 import { motion } from 'framer-motion'
+import { X } from 'lucide-react'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { getGroupIdByAccountType, type AccountGroupId } from '../lib/accounts'
@@ -267,6 +268,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
   const chartRef = useRef<HTMLDivElement | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
+  const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null)
 
   useEffect(() => {
     const el = chartRef.current
@@ -353,13 +355,15 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         : 'var(--muted-text)'
   const goalDeltaText = goalSummary ? getGoalDeltaDisplay(goalSummary.targetDeltaAtLatest).inline : null
 
-  const tooltip = (props: unknown) => {
-    const active = Boolean((props as { active?: boolean } | null)?.active)
-    const payload = (props as { payload?: readonly unknown[] } | null)?.payload
-    if (!active || !payload || payload.length === 0) return null
-    const p = (payload[0] as { payload?: TrendPoint } | undefined)?.payload
-    if (!p) return null
+  useEffect(() => {
+    if (selectedPointKey && !data.some((point) => point.dateKey === selectedPointKey)) {
+      setSelectedPointKey(null)
+    }
+  }, [data, selectedPointKey])
 
+  const selectedPoint = selectedPointKey ? data.find((point) => point.dateKey === selectedPointKey) ?? null : null
+
+  const renderTrendDetail = (p: TrendPoint, onClose?: () => void) => {
     const idx = p.idx
     const currSnap = idx >= 0 ? view.selected[idx] ?? null : null
     const prevSnap = idx > 0 ? view.selected[idx - 1] : null
@@ -377,6 +381,22 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     const targetDeltaDisplay = getGoalDeltaDisplay(targetDeltaAtPoint)
     const exactDateLabel = formatLabel(p.dateKey, { showYear: showYearInData })
     const tooltipDateLabel = p.date === exactDateLabel ? p.date : `${p.date}（${exactDateLabel}）`
+    const detailHeader = (
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)' }}>{tooltipDateLabel}</div>
+        {onClose ? (
+          <button
+            type="button"
+            className="iconBtn"
+            onClick={onClose}
+            aria-label="关闭趋势详情"
+            style={{ width: 28, height: 28, flex: '0 0 auto' }}
+          >
+            <X size={15} strokeWidth={2.5} />
+          </button>
+        ) : null}
+      </div>
+    )
 
     const breakdown = hasBreakdown ? (
       <div style={{ marginTop: 10 }}>
@@ -473,9 +493,13 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             borderRadius: 18,
             boxShadow: 'var(--shadow-hover)',
             minWidth: 180,
+            width: '100%',
+            maxWidth: 440,
+            maxHeight: 'min(420px, calc(100vh - 220px))',
+            overflowY: 'auto',
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{tooltipDateLabel}</div>
+          {detailHeader}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
             <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatMaybeCny(p.net)}</div>
@@ -500,21 +524,32 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           borderRadius: 18,
           boxShadow: 'var(--shadow-hover)',
           minWidth: 180,
+          width: '100%',
+          maxWidth: 440,
+          maxHeight: 'min(420px, calc(100vh - 220px))',
+          overflowY: 'auto',
         }}
       >
-        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)', marginBottom: 8 }}>{tooltipDateLabel}</div>
+        {detailHeader}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-             <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
-             <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatMaybeCny(p.cash)}</div>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
+          <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatMaybeCny(p.cash)}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
-             <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatMaybeCny(p.invest)}</div>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
+          <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatMaybeCny(p.invest)}</div>
         </div>
         {breakdown}
         {topChangePanel}
       </div>
     )
+  }
+
+  const handleChartClick = (state: unknown) => {
+    const activePayload = (state as { activePayload?: readonly unknown[] } | null)?.activePayload
+    const point = (activePayload?.[0] as { payload?: TrendPoint } | undefined)?.payload
+    if (!point) return
+    setSelectedPointKey((current) => current === point.dateKey ? null : point.dateKey)
   }
 
   return (
@@ -546,13 +581,14 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             touchAction: 'pan-y',
             userSelect: 'none',
             WebkitUserSelect: 'none',
+            cursor: data.length > 0 ? 'pointer' : 'default',
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
         >
           {chartWidth > 0 && data.length > 0 ? (
-            <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }}>
+            <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }} onClick={handleChartClick}>
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
@@ -568,8 +604,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 dx={-6}
               />
               <Tooltip
-                content={tooltip}
-                wrapperStyle={{ zIndex: 2, pointerEvents: 'none' }}
+                content={() => null}
+                wrapperStyle={{ display: 'none' }}
                 cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
               />
               {mode === 'netDebt' ? (
@@ -654,6 +690,18 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             </div>
           )}
         </motion.div>
+
+        {selectedPoint ? (
+          <motion.div
+            key={`${mode}-${selectedPoint.dateKey}`}
+            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            style={{ display: 'flex', justifyContent: 'center', marginTop: 10, position: 'relative', zIndex: 3 }}
+          >
+            {renderTrendDetail(selectedPoint, () => setSelectedPointKey(null))}
+          </motion.div>
+        ) : null}
 
         {mode === 'netDebt' && goalSummary ? (
           <motion.div
