@@ -5,6 +5,7 @@ import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { getGroupIdByAccountType, type AccountGroupId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
+import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
 import {
@@ -350,6 +351,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       : goalSummary.isPastDue || goalSummary.isDueToday || goalSummary.isOnTrack === false
         ? '#ef4444'
         : 'var(--muted-text)'
+  const goalDeltaText = goalSummary ? getGoalDeltaDisplay(goalSummary.targetDeltaAtLatest).inline : null
 
   const tooltip = (props: unknown) => {
     const active = Boolean((props as { active?: boolean } | null)?.active)
@@ -372,6 +374,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       typeof p.debt === 'number'
     const goalReferenceAtPoint = p.goalComparison ?? p.goalTarget
     const targetDeltaAtPoint = typeof p.net === 'number' && goalReferenceAtPoint != null ? p.net - goalReferenceAtPoint : null
+    const targetDeltaDisplay = getGoalDeltaDisplay(targetDeltaAtPoint)
     const exactDateLabel = formatLabel(p.dateKey, { showYear: showYearInData })
     const tooltipDateLabel = p.date === exactDateLabel ? p.date : `${p.date}（${exactDateLabel}）`
 
@@ -453,8 +456,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           ) : null}
           {targetDeltaAtPoint != null ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
-              <div style={{ color: 'var(--muted-text)' }}>{targetDeltaAtPoint >= 0 ? '领先目标' : '落后目标'}</div>
-              <div style={{ color: targetDeltaAtPoint >= 0 ? '#10b981' : '#ef4444' }}>{formatCny(Math.abs(targetDeltaAtPoint))}</div>
+              <div style={{ color: 'var(--muted-text)' }}>{targetDeltaDisplay.label}</div>
+              <div style={{ color: targetDeltaDisplay.tone ?? 'var(--text)' }}>{targetDeltaDisplay.value}</div>
             </div>
           ) : null}
         </div>
@@ -685,9 +688,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             <div className="muted" style={{ fontSize: 11, fontWeight: 850 }}>
               目标 {formatCny(goalSummary.targetAmount)} · {formatGoalDate(goalSummary.targetDate, goalDateContext)}
               {goalSummary.projectedDate ? ` · 预计 ${formatGoalDate(goalSummary.projectedDate, goalDateContext)}` : ''}
-              {goalSummary.targetDeltaAtLatest != null
-                ? ` · ${goalSummary.targetDeltaAtLatest >= 0 ? '领先' : '落后'} ${formatCny(Math.abs(goalSummary.targetDeltaAtLatest))}`
-                : ''}
+              {goalDeltaText ? ` · ${goalDeltaText}` : ''}
               {` · ${formatGoalPaceSource(goalSummary)}`}
             </div>
           </motion.div>

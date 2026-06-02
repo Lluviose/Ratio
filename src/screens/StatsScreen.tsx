@@ -4,6 +4,7 @@ import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
+import { GOAL_DELTA_TOLERANCE, getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
@@ -124,7 +125,6 @@ function formatCoverageSub(label: string, debt: number) {
 const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
 const MILESTONE_STORAGE_PREFIX = 'ratio.savingsGoal.maxMilestone.'
 const DAYS_PER_MONTH = 30.4375
-const TARGET_GAP_TOLERANCE = 1
 
 type GoalMilestoneInfo = {
   progress: number
@@ -320,7 +320,7 @@ function SavingsStatusCard(props: {
 
   const progress = clampProgress(summary.progress)
   const monthlyNeed = summary.requiredMonthly
-  const targetDelta = summary.targetDeltaAtLatest
+  const targetDeltaDisplay = getGoalDeltaDisplay(summary.targetDeltaAtLatest)
   const statusText = summary.isComplete
     ? '目标已达成'
     : summary.isPastDue
@@ -348,9 +348,6 @@ function SavingsStatusCard(props: {
       ? formatCny(summary.remaining)
       : formatCny(monthlyNeed)
   const heroSub = summary.isComplete ? '目标已覆盖' : `距离目标还差 ${formatCny(summary.remaining)}`
-  const targetDeltaLabel = targetDelta == null || targetDelta >= 0 ? '领先目标' : '落后目标'
-  const targetDeltaValue = targetDelta == null ? '—' : formatCny(Math.abs(targetDelta))
-  const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
   const progressPct = `${Math.round(progress * 1000) / 10}%`
   const projectionSub = summary.avgDailyNetChange != null || selectedCount >= 2 ? formatSummaryPaceSource(summary) : rangeLabel
   const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
@@ -424,7 +421,7 @@ function SavingsStatusCard(props: {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
-          <MetricTile label={targetDeltaLabel} value={targetDeltaValue} valueColor={targetDeltaTone} sub={summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate, goalDateContext)}` : '等待快照'} />
+          <MetricTile label={targetDeltaDisplay.label} value={targetDeltaDisplay.value} valueColor={targetDeltaDisplay.tone} sub={summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate, goalDateContext)}` : '等待快照'} />
           <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate, goalDateContext) : '暂无预测'} sub={projectionSub} />
         </div>
       </div>
@@ -822,7 +819,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
     : '按目标日设月存'
   const targetGapForDisplay = plan.targetGap == null
     ? null
-    : Math.abs(plan.targetGap) <= TARGET_GAP_TOLERANCE
+    : Math.abs(plan.targetGap) <= GOAL_DELTA_TOLERANCE
       ? 0
       : plan.targetGap
   const targetGapTone = targetGapForDisplay == null
@@ -1107,7 +1104,7 @@ function SavingsGoalCard(props: {
   const dateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
   const latestText = summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate, dateContext)}` : '等待快照'
   const gainedSinceStart = normalizeMoney(summary.currentNetWorth - summary.startNetWorth)
-  const gainedTone = gainedSinceStart >= 0 ? color : '#ef4444'
+  const gainedTone = gainedSinceStart === 0 ? 'var(--text)' : gainedSinceStart > 0 ? color : '#ef4444'
   const safeProgress = clampProgress(summary.progress)
   const progressText = `${Math.round(safeProgress * 100)}%`
 
