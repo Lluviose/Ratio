@@ -4,7 +4,7 @@ import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
-import { GOAL_DELTA_TOLERANCE, getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
+import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
@@ -125,6 +125,7 @@ function formatCoverageSub(label: string, debt: number) {
 const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
 const MILESTONE_STORAGE_PREFIX = 'ratio.savingsGoal.maxMilestone.'
 const DAYS_PER_MONTH = 30.4375
+const TARGET_GAP_TOLERANCE = 1
 
 type GoalMilestoneInfo = {
   progress: number
@@ -819,7 +820,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
     : '按目标日设月存'
   const targetGapForDisplay = plan.targetGap == null
     ? null
-    : Math.abs(plan.targetGap) <= GOAL_DELTA_TOLERANCE
+    : Math.abs(plan.targetGap) <= TARGET_GAP_TOLERANCE
       ? 0
       : plan.targetGap
   const targetGapTone = targetGapForDisplay == null

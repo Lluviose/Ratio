@@ -1,7 +1,7 @@
 import { formatCny } from './format'
 import { normalizeMoney } from './money'
 
-export const GOAL_DELTA_TOLERANCE = 1
+const GOAL_DELTA_TOLERANCE = 0.005
 
 export type GoalDeltaDisplay = {
   label: string
@@ -22,28 +22,33 @@ export function getGoalDeltaDisplay(delta: number | null | undefined): GoalDelta
   const normalized = normalizeMoney(delta)
   if (Math.abs(normalized) <= GOAL_DELTA_TOLERANCE) {
     return {
-      label: '贴合目标',
-      value: '刚好',
+      label: '贴合进度',
+      value: '按计划',
       tone: 'var(--text)',
-      inline: '贴合目标',
+      inline: '贴合进度',
     }
   }
 
   if (normalized > 0) {
-    const value = formatCny(normalized)
+    const value = formatGoalDeltaAmount(normalized)
     return {
-      label: '领先目标',
+      label: '领先进度',
       value,
       tone: '#10b981',
-      inline: `领先 ${value}`,
+      inline: `领先进度 ${value}`,
     }
   }
 
-  const value = formatCny(Math.abs(normalized))
+  const value = formatGoalDeltaAmount(normalized)
   return {
-    label: '落后目标',
+    label: '落后进度',
     value,
     tone: '#ef4444',
-    inline: `落后 ${value}`,
+    inline: `落后进度 ${value}`,
   }
+}
+
+function formatGoalDeltaAmount(value: number) {
+  const abs = Math.abs(normalizeMoney(value))
+  return formatCny(abs, { keepCents: abs < 1 })
 }
