@@ -48,11 +48,13 @@ type TrendPoint = {
 type FutureCadence = {
   stepDays: number
   maxPoints: number
+  horizonDays: number
 }
 
 const DEFAULT_FUTURE_CADENCE: FutureCadence = {
   stepDays: Math.round(DAYS_PER_MONTH),
   maxPoints: 8,
+  horizonDays: Math.round(DAYS_PER_MONTH * 6),
 }
 
 function toDateKey(d: Date) {
@@ -173,16 +175,42 @@ function getTypicalPointGapDays(points: TrendPoint[]) {
   return median(gaps)
 }
 
+function getPointSpanDays(points: TrendPoint[]) {
+  const first = points[0]?.dateKey
+  const last = points[points.length - 1]?.dateKey
+  if (!first || !last) return null
+  const days = diffDateDays(first, last)
+  return days != null && days > 0 ? days : null
+}
+
 function getFutureCadence(range: RangeId, points: TrendPoint[]): FutureCadence {
-  if (range === '30d') return { stepDays: 7, maxPoints: 18 }
+  if (range === '30d') return { stepDays: 7, maxPoints: 18, horizonDays: 30 }
   if (range === '6m') return DEFAULT_FUTURE_CADENCE
-  if (range === '1y') return { stepDays: Math.round(DAYS_PER_MONTH), maxPoints: 14 }
+  if (range === '1y') return { stepDays: Math.round(DAYS_PER_MONTH), maxPoints: 14, horizonDays: Math.round(DAYS_PER_MONTH * 12) }
 
   const typicalGap = getTypicalPointGapDays(points) ?? Math.round(DAYS_PER_MONTH)
+  const spanDays = getPointSpanDays(points) ?? typicalGap * 16
   return {
     stepDays: Math.max(1, Math.min(45, Math.round(typicalGap))),
     maxPoints: 16,
+    horizonDays: Math.max(30, Math.min(Math.round(DAYS_PER_MONTH * 12), Math.round(spanDays))),
   }
+}
+
+function getForecastEndDate(startDate: string, requestedEndDate: string, cadence: FutureCadence) {
+  const days = diffDateDays(startDate, requestedEndDate)
+  if (days == null || days <= 0) return requestedEndDate
+
+  const horizonDays = Math.max(cadence.stepDays, Math.round(cadence.horizonDays))
+  if (days <= horizonDays) return requestedEndDate
+
+  return addDaysToDateKey(startDate, horizonDays) ?? requestedEndDate
+}
+
+function getProjectionEndLabel(endDate: string, goal: SavingsGoal, summary: SavingsGoalSummary) {
+  if (endDate === goal.targetDate) return '目标'
+  if (summary.projectedDate && endDate === summary.projectedDate) return '预计'
+  return '展望'
 }
 
 function makeGoalPoint(dateKey: string, label?: string, showYear?: boolean): TrendPoint {
@@ -211,10 +239,13 @@ function addFutureCheckpoints(
   const days = diffDateDays(startDate, endDate)
   if (days == null || days <= 0) return
 
-  const stepDays = Math.max(1, cadence.stepDays)
-  const maxPoints = Math.max(0, cadence.maxPoints)
+  const stepDays = Math.max(1, Math.round(cadence.stepDays))
+  const maxPoints = Math.max(0, Math.floor(cadence.maxPoints))
+  if (maxPoints <= 0) return
+
+  const effectiveStepDays = Math.max(stepDays, Math.ceil(days / (maxPoints + 1)))
   let added = 0
-  for (let offset = stepDays; offset < days && added < maxPoints; offset += stepDays) {
+  for (let offset = effectiveStepDays; offset < days && added < maxPoints; offset += effectiveStepDays) {
     const next = addDaysToDateKey(startDate, offset)
     if (next && next > startDate && next < endDate) ensurePoint(next)
     added += 1
@@ -237,18 +268,22 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
     if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label, showYear))
   }
 
-  ensurePoint(goal.targetDate, '目标')
+  const forecastStartDate = summary.latestDate ?? points[points.length - 1]?.dateKey
+  const targetTrendEnd = forecastStartDate ? getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence) : goal.targetDate
+
+  ensurePoint(targetTrendEnd, targetTrendEnd === goal.targetDate ? '目标' : '展望')
   if (goal.startDate >= firstDate) ensurePoint(goal.startDate)
-  if (summary.latestDate) addFutureCheckpoints(ensurePoint, summary.latestDate, goal.targetDate, futureCadence)
+  if (summary.latestDate) addFutureCheckpoints(ensurePoint, summary.latestDate, targetTrendEnd, futureCadence)
 
   let projectionEnd: string | null = null
   if (summary.latestDate && summary.avgDailyNetChange != null) {
-    projectionEnd = goal.targetDate
+    let requestedProjectionEnd = goal.targetDate
     if (summary.projectedDate && summary.projectedDate > summary.latestDate && summary.projectedDate < goal.targetDate) {
-      projectionEnd = summary.projectedDate
+      requestedProjectionEnd = summary.projectedDate
     }
+    projectionEnd = getForecastEndDate(summary.latestDate, requestedProjectionEnd, futureCadence)
     ensurePoint(summary.latestDate)
-    ensurePoint(projectionEnd, projectionEnd === goal.targetDate ? '目标' : '预计')
+    ensurePoint(projectionEnd, getProjectionEndLabel(projectionEnd, goal, summary))
     addFutureCheckpoints(ensurePoint, summary.latestDate, projectionEnd, futureCadence)
   }
 
