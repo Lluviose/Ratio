@@ -160,6 +160,23 @@ function formatGoalDate(dateKey: string | null | undefined) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
+function formatShortGoalDate(dateKey: string | null | undefined) {
+  if (!dateKey) return '未设置'
+  const d = new Date(`${dateKey}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return dateKey
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+function formatCompactDateRange(startDateKey: string, endDateKey: string) {
+  const start = new Date(`${startDateKey}T00:00:00`)
+  const end = new Date(`${endDateKey}T00:00:00`)
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return `${startDateKey} 至 ${endDateKey}`
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${start.getFullYear()}/${start.getMonth() + 1}/${start.getDate()}-${end.getMonth() + 1}/${end.getDate()}`
+  }
+  return `${start.getFullYear()}/${start.getMonth() + 1}/${start.getDate()}-${end.getFullYear()}/${end.getMonth() + 1}/${end.getDate()}`
+}
+
 function parseMoneyInput(value: string) {
   const normalized = value.replace(/[,\s￥¥]/g, '')
   const parsed = Number(normalized)
@@ -211,7 +228,7 @@ function SavingsStatusCard(props: {
   onEdit: () => void
 }) {
   const { summary, latestNetWorth, rangeDeltaNet, startDate, endDate, selectedCount, color, onEdit } = props
-  const rangeLabel = selectedCount >= 2 ? `${startDate} 至 ${endDate}` : endDate
+  const rangeLabel = selectedCount >= 2 ? formatCompactDateRange(startDate, endDate) : formatShortGoalDate(endDate)
 
   if (!summary) {
     return (
@@ -226,6 +243,7 @@ function SavingsStatusCard(props: {
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 8 }}>当前净资产</div>
               <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}>{formatCny(latestNetWorth)}</div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
                 设置目标后，这里会显示本周需要存多少和目标节奏。
@@ -277,6 +295,7 @@ function SavingsStatusCard(props: {
   const targetDeltaValue = targetDelta == null ? '—' : formatCny(Math.abs(targetDelta))
   const targetDeltaTone = targetDelta == null ? undefined : targetDelta >= 0 ? '#10b981' : '#ef4444'
   const progressPct = `${Math.round(progress * 1000) / 10}%`
+  const projectionSub = selectedCount >= 2 ? `${selectedCount}条快照` : rangeLabel
 
   return (
     <motion.div
@@ -299,22 +318,8 @@ function SavingsStatusCard(props: {
         }}
       />
       <div className="cardInner" style={{ position: 'relative' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
-            <motion.div
-              key={heroValue}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              style={{ fontSize: 28, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}
-            >
-              {heroValue}
-            </motion.div>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
-              {heroLabel} · 距离目标还差 {formatCny(summary.remaining)}
-            </div>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>今日储蓄状态</div>
           <div
             style={{
               flex: '0 0 auto',
@@ -325,10 +330,24 @@ function SavingsStatusCard(props: {
               color: statusTone,
               fontSize: 11,
               fontWeight: 950,
+              whiteSpace: 'nowrap',
             }}
           >
             {statusText}
           </div>
+        </div>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 10 }}>{heroLabel}</div>
+        <motion.div
+          key={heroValue}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          style={{ fontSize: 31, fontWeight: 950, marginTop: 5, letterSpacing: 0, overflowWrap: 'normal', wordBreak: 'keep-all' }}
+        >
+          {heroValue}
+        </motion.div>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+          距离目标还差 {formatCny(summary.remaining)}
         </div>
 
         <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
@@ -347,87 +366,11 @@ function SavingsStatusCard(props: {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
-          <MetricTile label={targetDeltaLabel} value={targetDeltaValue} valueColor={targetDeltaTone} sub={summary.latestDate ? `截至 ${formatGoalDate(summary.latestDate)}` : '等待快照'} />
-          <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatGoalDate(summary.projectedDate) : '暂无预测'} sub={rangeLabel} />
+          <MetricTile label={targetDeltaLabel} value={targetDeltaValue} valueColor={targetDeltaTone} sub={summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate)}` : '等待快照'} />
+          <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate) : '暂无预测'} sub={projectionSub} />
         </div>
       </div>
     </motion.div>
-  )
-}
-
-function ProgressRing(props: { progress: number; color: string }) {
-  const { progress, color } = props
-  const size = 112
-  const stroke = 11
-  const radius = (size - stroke) / 2
-  const circumference = 2 * Math.PI * radius
-  const safeProgress = Math.max(0, Math.min(1, progress))
-  const pct = Math.round(safeProgress * 100)
-
-  return (
-    <div style={{ width: size, height: size, position: 'relative', flex: '0 0 auto' }}>
-      <motion.div
-        aria-hidden="true"
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{
-          opacity: safeProgress >= 0.75 ? 0.12 : 0.06,
-          scale: safeProgress >= 0.75 ? [1, 1.05, 1] : 1,
-        }}
-        transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-        style={{
-          position: 'absolute',
-          inset: 10,
-          borderRadius: 999,
-          background: color,
-          filter: 'blur(10px)',
-        }}
-      />
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="rgba(15,23,42,0.08)"
-          strokeWidth={stroke}
-        />
-        <motion.circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: circumference * (1 - safeProgress) }}
-          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-          style={{ rotate: -90, transformOrigin: '50% 50%', filter: safeProgress >= 1 ? `drop-shadow(0 0 8px ${color})` : undefined }}
-        />
-      </svg>
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flexDirection: 'column',
-        }}
-      >
-        <motion.div
-          key={pct}
-          initial={{ opacity: 0, y: 5, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-          style={{ fontSize: 24, fontWeight: 950, lineHeight: 1 }}
-        >
-          {pct}%
-        </motion.div>
-        <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)', marginTop: 4 }}>进度</div>
-      </div>
-    </div>
   )
 }
 
@@ -505,66 +448,12 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
           />
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, fontWeight: 850 }}>
-        <span className="muted">{subtitle}</span>
-        <span style={{ color: 'var(--muted-text)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, fontWeight: 850, flexWrap: 'wrap' }}>
+        <span className="muted" style={{ minWidth: 0, flex: '1 1 176px' }}>{subtitle}</span>
+        <span style={{ color: 'var(--muted-text)', flex: '0 0 auto' }}>
           {GOAL_MILESTONES.map((milestone) => `${Math.round(milestone * 100)}%`).join(' · ')}
         </span>
       </div>
-    </div>
-  )
-}
-
-function SavingsActionPanel(props: { summary: SavingsGoalSummary; color: string }) {
-  const { summary, color } = props
-
-  if (summary.isComplete) {
-    return (
-      <div style={{ marginTop: 12, borderRadius: 18, padding: 12, background: 'rgb(var(--primary-rgb) / 0.06)', fontSize: 12, fontWeight: 900 }}>
-        目标已经完成，可以设置下一阶段目标。
-      </div>
-    )
-  }
-
-  const targetDelta = summary.targetDeltaAtLatest
-  const projectedGap = summary.projectedNetAtTargetDate == null
-    ? null
-    : normalizeMoney(summary.projectedNetAtTargetDate - summary.targetAmount)
-
-  const items = [
-    {
-      label: '每天需要',
-      value: summary.requiredDaily == null ? '—' : formatCny(summary.requiredDaily),
-      sub: summary.isPastDue ? '目标已逾期' : summary.isDueToday ? '今日到期' : '从今天起',
-    },
-    {
-      label: '每周需要',
-      value: summary.requiredDaily == null ? '—' : formatCny(summary.requiredDaily * 7),
-      sub: '按 7 天估算',
-    },
-    {
-      label: targetDelta == null || targetDelta >= 0 ? '领先目标' : '落后目标',
-      value: targetDelta == null ? '—' : formatAbsCny(targetDelta),
-      sub: summary.latestDate ? `截至 ${formatGoalDate(summary.latestDate)}` : '等待快照',
-      tone: targetDelta == null ? 'var(--muted-text)' : targetDelta >= 0 ? '#10b981' : '#ef4444',
-    },
-    {
-      label: projectedGap == null || projectedGap >= 0 ? '目标日余量' : '目标日缺口',
-      value: projectedGap == null ? '—' : formatAbsCny(projectedGap),
-      sub: summary.projectedNetAtTargetDate == null ? '等待更多快照' : '按当前速度',
-      tone: projectedGap == null ? 'var(--muted-text)' : projectedGap >= 0 ? '#10b981' : '#ef4444',
-    },
-  ]
-
-  return (
-    <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8 }}>
-      {items.map((item) => (
-        <div key={item.label} style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
-          <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{item.label}</div>
-          <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: item.tone ?? color, overflowWrap: 'anywhere' }}>{item.value}</div>
-          <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{item.sub}</div>
-        </div>
-      ))}
     </div>
   )
 }
@@ -592,22 +481,22 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
 
   let projectionTile: FeedbackTile = {
     label: '预计达成',
-    value: summary.projectedDate ? formatGoalDate(summary.projectedDate) : '继续记录',
+    value: summary.projectedDate ? formatShortGoalDate(summary.projectedDate) : '继续记录',
     sub: '需要更多快照',
     tone: 'var(--muted-text)',
   }
   if (summary.isComplete) {
-    projectionTile = { label: '预计达成', value: '已达成', sub: formatGoalDate(latest.date), tone: '#10b981' }
+    projectionTile = { label: '预计达成', value: '已达成', sub: formatShortGoalDate(latest.date), tone: '#10b981' }
   } else if (previousSummary.projectedDate && summary.projectedDate) {
     const shift = diffDateDays(summary.projectedDate, previousSummary.projectedDate)
     projectionTile = {
       label: '预计达成',
       value: shift == null || shift === 0 ? '日期稳定' : shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
-      sub: formatGoalDate(summary.projectedDate),
+      sub: formatShortGoalDate(summary.projectedDate),
       tone: shift == null || shift === 0 ? 'var(--text)' : shift > 0 ? '#10b981' : '#ef4444',
     }
   } else if (summary.projectedDate) {
-    projectionTile = { label: '预计达成', value: formatGoalDate(summary.projectedDate), sub: '已形成预测', tone: '#10b981' }
+    projectionTile = { label: '预计达成', value: formatShortGoalDate(summary.projectedDate), sub: '已形成预测', tone: '#10b981' }
   }
 
   let milestoneTile: FeedbackTile = {
@@ -643,7 +532,7 @@ function buildSnapshotFeedback(goal: SavingsGoal, snapshots: Snapshot[], summary
       {
         label: '本次净资产',
         value: formatDelta(netDelta),
-        sub: `较 ${formatGoalDate(previous.date)}`,
+        sub: `较 ${formatShortGoalDate(previous.date)}`,
         tone: netDelta === 0 ? 'var(--text)' : netDelta > 0 ? '#10b981' : '#ef4444',
       },
       {
@@ -672,7 +561,7 @@ function SnapshotFeedbackCard(props: { feedback: { latestDate: string; tiles: Fe
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div>
             <div style={{ fontWeight: 950, fontSize: 14 }}>快照反馈</div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>{formatGoalDate(feedback.latestDate)}</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>{formatShortGoalDate(feedback.latestDate)}</div>
           </div>
           <Sparkles size={18} strokeWidth={2.6} color="var(--primary)" />
         </div>
@@ -695,19 +584,19 @@ function formatProjectionShift(simulatedDate: string | null, summary: SavingsGoa
 
   if (summary.projectedDate) {
     const shift = diffDateDays(simulatedDate, summary.projectedDate)
-    if (shift == null || shift === 0) return { text: '预测不变', sub: formatGoalDate(simulatedDate), tone: 'var(--text)' }
+    if (shift == null || shift === 0) return { text: '预测不变', sub: formatShortGoalDate(simulatedDate), tone: 'var(--text)' }
     return {
       text: shift > 0 ? `提前 ${shift} 天` : `延后 ${Math.abs(shift)} 天`,
-      sub: formatGoalDate(simulatedDate),
+      sub: formatShortGoalDate(simulatedDate),
       tone: shift > 0 ? '#10b981' : '#ef4444',
     }
   }
 
   const targetShift = diffDateDays(simulatedDate, summary.targetDate)
-  if (targetShift == null || targetShift === 0) return { text: '踩中目标日', sub: formatGoalDate(simulatedDate), tone: '#10b981' }
+  if (targetShift == null || targetShift === 0) return { text: '踩中目标日', sub: formatShortGoalDate(simulatedDate), tone: '#10b981' }
   return {
     text: targetShift > 0 ? `早 ${targetShift} 天` : `晚 ${Math.abs(targetShift)} 天`,
-    sub: formatGoalDate(simulatedDate),
+    sub: formatShortGoalDate(simulatedDate),
     tone: targetShift > 0 ? '#10b981' : '#ef4444',
   }
 }
@@ -844,7 +733,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>模拟达成</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: shift.tone, overflowWrap: 'anywhere' }}>
-              {simulatedDate ? formatGoalDate(simulatedDate) : '暂不可达'}
+              {simulatedDate ? formatShortGoalDate(simulatedDate) : '暂不可达'}
             </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
           </div>
@@ -972,23 +861,11 @@ function SavingsGoalCard(props: {
     )
   }
 
-  const statusText = summary.isComplete
-    ? '已达成'
-    : summary.isPastDue
-      ? '已逾期'
-      : summary.isDueToday
-        ? '今日到期'
-        : summary.isOnTrack === true
-          ? '节奏正常'
-          : summary.isOnTrack === false
-            ? '需要提速'
-            : '等待更多快照'
-
-  const projectedText = summary.isComplete
-    ? '已达成'
-    : summary.projectedDate
-      ? formatGoalDate(summary.projectedDate)
-      : '暂无预测'
+  const latestText = summary.latestDate ? `截至 ${formatShortGoalDate(summary.latestDate)}` : '等待快照'
+  const gainedSinceStart = normalizeMoney(summary.currentNetWorth - summary.startNetWorth)
+  const gainedTone = gainedSinceStart >= 0 ? color : '#ef4444'
+  const safeProgress = clampProgress(summary.progress)
+  const progressText = `${Math.round(safeProgress * 100)}%`
 
   return (
     <motion.div
@@ -1017,7 +894,7 @@ function SavingsGoalCard(props: {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 950, fontSize: 15 }}>储蓄目标</div>
               <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 2 }}>
-                目标日 {formatGoalDate(summary.targetDate)}
+                目标日 {formatShortGoalDate(summary.targetDate)}
               </div>
             </div>
           </div>
@@ -1026,49 +903,59 @@ function SavingsGoalCard(props: {
           </button>
         </div>
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginTop: 16 }}>
-          <ProgressRing progress={summary.progress} color={color} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 900 }}>目标净资产</div>
-            <div style={{ fontSize: 22, fontWeight: 950, marginTop: 3, overflowWrap: 'anywhere' }}>{formatCny(summary.targetAmount)}</div>
-            <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, fontWeight: 850 }}>
-                <span className="muted">还差</span>
-                <span>{formatCny(summary.remaining)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, fontWeight: 850 }}>
-                <span className="muted">每月需存</span>
-                <span>{summary.requiredMonthly == null ? '—' : formatCny(summary.requiredMonthly)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12, fontWeight: 850 }}>
-                <span className="muted">预计达成</span>
-                <span>{projectedText}</span>
-              </div>
+        <div
+          style={{
+            marginTop: 12,
+            borderRadius: 16,
+            border: '1px solid var(--hairline)',
+            padding: 12,
+            background: 'var(--bg)',
+            display: 'grid',
+            gap: 10,
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 0 }}>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 900 }}>目标净资产</div>
+              <div style={{ fontSize: 21, fontWeight: 950, marginTop: 3, overflowWrap: 'anywhere' }}>{formatCny(summary.targetAmount)}</div>
+            </div>
+            <div style={{ flex: '0 0 auto', textAlign: 'right' }}>
+              <motion.div
+                key={progressText}
+                initial={{ opacity: 0, y: 5, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                style={{ fontSize: 24, fontWeight: 950, lineHeight: 1, color }}
+              >
+                {progressText}
+              </motion.div>
+              <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)', marginTop: 4 }}>已完成</div>
+            </div>
+          </div>
+
+          <div style={{ height: 1, background: 'var(--hairline)' }} />
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 850 }}>
+              <span className="muted">当前净资产</span>
+              <span style={{ fontSize: 15, fontWeight: 950, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatCny(summary.currentNetWorth)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 850 }}>
+              <span className="muted">距离目标</span>
+              <span style={{ fontSize: 15, fontWeight: 950, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatCny(summary.remaining)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 850 }}>
+              <span className="muted">起点以来</span>
+              <span style={{ color: gainedTone, fontSize: 15, fontWeight: 950, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatDelta(gainedSinceStart)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 850, flexWrap: 'wrap' }}>
+              <span className="muted">{latestText}</span>
+              <span className="muted">起点 {formatShortGoalDate(summary.startDate)}</span>
             </div>
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: 14,
-            borderRadius: 18,
-            border: '1px solid var(--hairline)',
-            padding: '10px 12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 12,
-            alignItems: 'center',
-            background: 'rgb(var(--primary-rgb) / 0.05)',
-          }}
-        >
-          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>{statusText}</div>
-          <div style={{ fontSize: 12, fontWeight: 950, color }}>
-            {summary.paceDailyDelta == null ? '继续记录快照' : `${summary.paceDailyDelta >= 0 ? '+' : ''}${formatCny(summary.paceDailyDelta)}/天`}
-          </div>
-        </div>
-
         <SavingsMilestoneStrip summary={summary} color={color} />
-        <SavingsActionPanel summary={summary} color={color} />
       </div>
     </motion.div>
   )
@@ -1321,12 +1208,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           {view ? (
             view.selectedCount >= 2 ? (
               <>
-                {view.start.date} 至 {view.end.date} · 净资产变化{' '}
+                {formatCompactDateRange(view.start.date, view.end.date)} · 净资产{' '}
                 <span style={{ color: 'var(--text)' }}>{formatDelta(view.delta.net)}</span>
               </>
             ) : (
               <>
-                {view.end.date} · 净资产 <span style={{ color: 'var(--text)' }}>{formatCny(view.end.net)}</span>
+                {formatShortGoalDate(view.end.date)} · 净资产 <span style={{ color: 'var(--text)' }}>{formatCny(view.end.net)}</span>
               </>
             )
           ) : (
