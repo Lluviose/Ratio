@@ -634,6 +634,18 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       />
                       <Line
                         type="linear"
+                        dataKey="projectedBridgeNet"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        strokeDasharray="4 5"
+                        dot={false}
+                        activeDot={false}
+                        connectNulls={false}
+                        animationDuration={700}
+                        animationEasing="ease-out"
+                      />
+                      <Line
+                        type="linear"
                         dataKey="projectedNet"
                         stroke="#10b981"
                         strokeWidth={3}

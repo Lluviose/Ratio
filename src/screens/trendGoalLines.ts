@@ -20,6 +20,7 @@ export type TrendPoint = {
   receivable: number | null
   goalTarget?: number | null
   goalComparison?: number | null
+  projectedBridgeNet?: number | null
   projectedNet?: number | null
 }
 
@@ -63,6 +64,7 @@ function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
     receivable: null,
     goalTarget: null,
     goalComparison: null,
+    projectedBridgeNet: null,
     projectedNet: null,
   }
 }
@@ -103,7 +105,7 @@ export function withGoalTrendLines(
 
   const byDate = new Map<string, TrendPoint>()
   for (const point of points) {
-    byDate.set(point.dateKey, { ...point, goalTarget: null, goalComparison: null, projectedNet: null })
+    byDate.set(point.dateKey, { ...point, goalTarget: null, goalComparison: null, projectedBridgeNet: null, projectedNet: null })
   }
 
   const ensurePoint = (dateKey: string, label?: string) => {
@@ -137,13 +139,19 @@ export function withGoalTrendLines(
 
     if (projectionEnd && projectionAnchorDate && summary.avgDailyNetChange != null) {
       if (point.dateKey === projectionAnchorDate) {
-        point.projectedNet = summary.currentNetWorth
+        point.projectedBridgeNet = summary.currentNetWorth
+        if (point.dateKey === forecastStartDate) point.projectedNet = summary.currentNetWorth
         continue
       }
 
       const daysFromForecastStart = diffDateDays(forecastStartDate, point.dateKey)
-      if (daysFromForecastStart != null && daysFromForecastStart >= 0 && point.dateKey <= projectionEnd) {
-        point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromForecastStart
+      if (daysFromForecastStart != null && point.dateKey <= projectionEnd) {
+        if (daysFromForecastStart >= 0) {
+          point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromForecastStart
+        }
+        if (point.dateKey === forecastStartDate) {
+          point.projectedBridgeNet = summary.currentNetWorth
+        }
       }
     }
   }

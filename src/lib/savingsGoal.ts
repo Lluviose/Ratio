@@ -28,6 +28,7 @@ export type SavingsGoalSummary = {
   currentPeriodStartDate: string
   currentPeriodStartNetWorth: number
   currentPeriodActual: number
+  currentPeriodTargetNetWorth: number | null
   currentPeriodTarget: number | null
   currentPeriodRemaining: number | null
   currentPeriodDelta: number | null
@@ -496,6 +497,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const requiredDaily = !isComplete && daysLeft && daysLeft > 0 ? remaining / daysLeft : null
   const requiredMonthly = requiredDaily == null ? null : requiredDaily * 30.4375
   const currentPeriodTargetValue = currentPeriodEndDate ? getGoalComparisonValue(goal, currentPeriodEndDate) : null
+  const currentPeriodTargetNetWorth = currentPeriodTargetValue == null ? null : normalizeMoney(currentPeriodTargetValue)
   const currentPeriodTarget = !isComplete && currentPeriodTargetValue != null
     ? Math.max(0, normalizeMoney(currentPeriodTargetValue - currentPeriodStartNetWorth))
     : null
@@ -539,6 +541,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
     currentPeriodStartDate,
     currentPeriodStartNetWorth,
     currentPeriodActual,
+    currentPeriodTargetNetWorth,
     currentPeriodTarget: currentPeriodTarget == null ? null : normalizeMoney(currentPeriodTarget),
     currentPeriodRemaining,
     currentPeriodDelta: currentPeriodDelta == null ? null : normalizeMoney(currentPeriodDelta),

@@ -112,6 +112,10 @@ function formatSummaryPaceSource(summary: SavingsGoalSummary) {
   return formatPaceSource(summary.avgDailyNetChangeMethod, summary.avgDailyNetChangeSnapshotCount, summary.avgDailyNetChangeSampleDays)
 }
 
+function formatSignedFormulaMoney(value: number) {
+  return value < 0 ? `- ${formatCny(Math.abs(value))}` : `+ ${formatCny(value)}`
+}
+
 function debtAmountTone(value: number) {
   return value > 0 ? '#ef4444' : undefined
 }
@@ -296,6 +300,7 @@ function SavingsStatusCard(props: {
   onEdit: () => void
 }) {
   const { summary, latestNetWorth, snapshotCount, color, onEdit } = props
+  const [explainOpen, setExplainOpen] = useState(false)
 
   if (!summary) {
     return (
@@ -384,6 +389,19 @@ function SavingsStatusCard(props: {
   const progressPct = `${Math.round(progress * 1000) / 10}%`
   const projectionSub = summary.avgDailyNetChange != null ? formatSummaryPaceSource(summary) : '等待更多快照'
   const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
+  const periodDateContext = [summary.currentPeriodStartDate, summary.currentPeriodEndDate, summary.startDate, summary.targetDate]
+  const periodStartLabel = formatShortGoalDate(summary.currentPeriodStartDate, periodDateContext)
+  const periodEndLabel = summary.currentPeriodEndDate ? formatShortGoalDate(summary.currentPeriodEndDate, periodDateContext) : '目标已结束'
+  const periodExplain = summary.currentPeriodTargetNetWorth == null
+    ? null
+    : {
+        startLabel: periodStartLabel,
+        endLabel: periodEndLabel,
+        targetNetWorth: summary.currentPeriodTargetNetWorth,
+        targetFormula: `取 0 和（${formatCny(summary.currentPeriodTargetNetWorth)} - ${formatCny(summary.currentPeriodStartNetWorth)}）中较大值 = ${formatCny(summary.currentPeriodTarget ?? 0)}`,
+        actualFormula: `${formatCny(summary.currentNetWorth)} - ${formatCny(summary.currentPeriodStartNetWorth)} = ${formatDelta(summary.currentPeriodActual)}`,
+        remainingFormula: `${formatCny(summary.currentPeriodTargetNetWorth)} - ${formatCny(summary.currentNetWorth)} = ${formatSignedFormulaMoney(normalizeMoney(summary.currentPeriodTargetNetWorth - summary.currentNetWorth))}`,
+      }
 
   return (
     <motion.div
@@ -391,7 +409,7 @@ function SavingsStatusCard(props: {
       initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      style={{ overflow: 'hidden', position: 'relative' }}
+      style={{ overflow: 'visible', position: 'relative' }}
     >
       <motion.div
         aria-hidden="true"
@@ -402,12 +420,37 @@ function SavingsStatusCard(props: {
           position: 'absolute',
           inset: 0,
           background: `linear-gradient(135deg, ${color}, transparent 62%)`,
+          borderRadius: 'inherit',
           pointerEvents: 'none',
         }}
       />
       <div className="cardInner" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本期储蓄状态</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本期储蓄状态</div>
+            <button
+              type="button"
+              onClick={() => setExplainOpen((open) => !open)}
+              aria-label="查看本期储蓄状态计算"
+              aria-expanded={explainOpen}
+              aria-controls="savings-period-explain"
+              title="查看本期储蓄状态计算"
+              style={{
+                width: 25,
+                height: 25,
+                borderRadius: 999,
+                border: '1px solid var(--hairline)',
+                background: 'rgb(255 255 255 / 0.72)',
+                color: 'var(--muted-text)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: '0 0 auto',
+              }}
+            >
+              <Info size={14} strokeWidth={2.5} />
+            </button>
+          </div>
           <div
             style={{
               flex: '0 0 auto',
@@ -424,6 +467,43 @@ function SavingsStatusCard(props: {
             {statusText}
           </div>
         </div>
+        {explainOpen && periodExplain ? (
+          <motion.div
+            id="savings-period-explain"
+            role="tooltip"
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            style={{
+              position: 'absolute',
+              top: 43,
+              left: 0,
+              right: 0,
+              zIndex: 12,
+              borderRadius: 16,
+              padding: 12,
+              background: 'var(--card)',
+              border: '1px solid var(--hairline)',
+              boxShadow: '0 18px 44px rgb(15 23 42 / 0.18)',
+              backdropFilter: 'blur(16px)',
+              display: 'grid',
+              gap: 8,
+              fontSize: 11,
+              fontWeight: 850,
+              color: 'var(--muted-text)',
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 950, color: 'var(--text)' }}>
+              {periodExplain.startLabel} 到 {periodExplain.endLabel}
+            </div>
+            <div>目标路径：起点 {formatCny(summary.startNetWorth)} 到目标 {formatCny(summary.targetAmount)}，按日期平均推进。</div>
+            <div>本期起点净资产：{formatCny(summary.currentPeriodStartNetWorth)}</div>
+            <div>本期期末目标净资产：{formatCny(periodExplain.targetNetWorth)}</div>
+            <div>本期目标：{periodExplain.targetFormula}</div>
+            <div>本期已增：{periodExplain.actualFormula}</div>
+            <div>本期还需：{periodRemaining && periodRemaining > 0 ? periodExplain.remainingFormula : '当前净资产已覆盖本期期末目标'}</div>
+          </motion.div>
+        ) : null}
         <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 10 }}>{heroLabel}</div>
         <motion.div
           key={heroValue}
