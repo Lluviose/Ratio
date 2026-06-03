@@ -299,9 +299,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const latestDate = latest?.date ?? null
   const activeDate = activeDateFromLatest(latestDate)
 
-  const totalNeeded = goal.targetAmount - goal.startNetWorth
-  const gained = currentNetWorth - goal.startNetWorth
-  const rawProgress = totalNeeded <= 0 ? (currentNetWorth >= goal.targetAmount ? 1 : 0) : gained / totalNeeded
+  const rawProgress = goal.targetAmount <= 0 ? 0 : currentNetWorth / goal.targetAmount
   const progress = Math.max(0, Math.min(1, Number.isFinite(rawProgress) ? rawProgress : 0))
   const remaining = Math.max(0, normalizeMoney(goal.targetAmount - currentNetWorth))
   const isComplete = remaining <= 0

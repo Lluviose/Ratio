@@ -47,7 +47,7 @@ describe('savingsGoal', () => {
     expect(getGoalComparisonValue(goal, '2027-01-31')).toBe(200000)
   })
 
-  it('summarizes progress and projected completion from snapshots', () => {
+  it('summarizes progress from current net worth and projected completion from snapshots', () => {
     const today = todayDateKey()
     const startDate = addDaysToDateKey(today, -30)!
     const targetDate = addDaysToDateKey(today, 365)!
@@ -57,12 +57,20 @@ describe('savingsGoal', () => {
       snapshot(today, 130000),
     ])
 
-    expect(summary?.progress).toBe(0.3)
+    expect(summary?.progress).toBe(0.65)
     expect(summary?.remaining).toBe(70000)
     expect(summary?.avgDailyNetChange).toBe(1000)
     expect(summary?.projectedDate).toBe(addDaysToDateKey(today, 70))
     expect(summary?.targetValueAtLatest).toBeCloseTo(107594.94)
     expect(summary?.targetDeltaAtLatest).toBeCloseTo(22405.06)
+  })
+
+  it('counts existing net worth toward goal progress', () => {
+    const summary = getSavingsGoalSummary(goal, [snapshot(goal.startDate, goal.startNetWorth)])
+
+    expect(summary?.progress).toBe(0.5)
+    expect(summary?.remaining).toBe(100000)
+    expect(summary?.isComplete).toBe(false)
   })
 
   it('projects stale snapshots from today instead of the old snapshot date', () => {

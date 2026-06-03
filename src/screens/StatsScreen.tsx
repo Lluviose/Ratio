@@ -138,14 +138,13 @@ function clampProgress(value: number) {
 }
 
 function getNextGoalMilestone(summary: SavingsGoalSummary): GoalMilestoneInfo | null {
-  const totalNeeded = summary.targetAmount - summary.startNetWorth
-  if (totalNeeded <= 0) return null
+  if (summary.targetAmount <= 0) return null
 
   const currentProgress = clampProgress(summary.progress)
   const nextProgress = summary.isComplete
     ? 1
     : GOAL_MILESTONES.find((milestone) => currentProgress < milestone - 0.0001) ?? 1
-  const amount = normalizeMoney(summary.startNetWorth + totalNeeded * nextProgress)
+  const amount = normalizeMoney(summary.targetAmount * nextProgress)
 
   return {
     progress: nextProgress,
