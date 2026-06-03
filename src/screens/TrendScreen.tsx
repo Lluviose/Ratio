@@ -116,6 +116,14 @@ function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDa
   return pickedKeys.map((key) => ({ monthKey: key, snapshot: byMonth.get(key)! }))
 }
 
+function getRangeCutoffKey(range: Exclude<RangeId, 'custom'>) {
+  const cutoff = new Date()
+  if (range === '30d') cutoff.setDate(cutoff.getDate() - 30)
+  if (range === '6m') cutoff.setMonth(cutoff.getMonth() - 6)
+  if (range === '1y') cutoff.setFullYear(cutoff.getFullYear() - 1)
+  return toDateKey(cutoff)
+}
+
 function toPoint(s: Snapshot, idx: number, label: string): TrendPoint {
   return {
     date: label,
@@ -380,14 +388,13 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     let showYear = false
 
     if (range === '30d') {
-      const cutoff = new Date()
-      cutoff.setDate(cutoff.getDate() - 30)
-      const cutoffKey = toDateKey(cutoff)
+      const cutoffKey = getRangeCutoffKey(range)
       selected = sorted.filter((s) => s.date >= cutoffKey)
       showYear = shouldShowYearForDateKeys(selected.map((s) => s.date))
       labels = selected.map((s) => formatLabel(s.date, { showYear }))
     } else if (range === '6m') {
-      const picked = pickMonthlyLast(sorted, 6, monthStartDay)
+      const cutoffKey = getRangeCutoffKey(range)
+      const picked = pickMonthlyLast(sorted.filter((s) => s.date >= cutoffKey), 6, monthStartDay)
       selected = picked.map((x) => x.snapshot)
       showYear = shouldShowYearForDateKeys(picked.map((x) => x.monthKey))
       labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))
@@ -396,7 +403,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       showYear = shouldShowYearForDateKeys(selected.map((s) => s.date))
       labels = selected.map((s) => formatLabel(s.date, { showYear }))
     } else {
-      const picked = pickMonthlyLast(sorted, 12, monthStartDay)
+      const cutoffKey = getRangeCutoffKey(range)
+      const picked = pickMonthlyLast(sorted.filter((s) => s.date >= cutoffKey), 12, monthStartDay)
       selected = picked.map((x) => x.snapshot)
       showYear = shouldShowYearForDateKeys(picked.map((x) => x.monthKey))
       labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))

@@ -1,5 +1,5 @@
 import type { Account, AccountGroupId, AccountTypeId } from './accounts'
-import { getGroupIdByAccountType } from './accounts'
+import { getAccountTypeOption, getGroupIdByAccountType } from './accounts'
 import { normalizeStoredAccountBalance } from './accountBalance'
 import { addMoney, normalizeMoney } from './money'
 
@@ -25,6 +25,28 @@ function toFiniteMoney(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? normalizeMoney(value) : 0
 }
 
+export function isSnapshotDateKey(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (![year, month, day].every((v) => Number.isInteger(v))) return false
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+function isAccountTypeId(value: unknown): value is AccountTypeId {
+  if (typeof value !== 'string') return false
+  try {
+    getAccountTypeOption(value as AccountTypeId)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function normalizeSnapshotGroupAmount(groupId: AccountGroupId, value: unknown): number {
   const normalized = toFiniteMoney(value)
   if (normalized >= 0) return normalized
@@ -38,7 +60,7 @@ export function normalizeSnapshot(s: Snapshot): Snapshot {
   const accounts = Array.isArray(accountsRaw)
     ? accountsRaw
         .map((a) => a as Record<string, unknown>)
-        .filter((a) => typeof a.id === 'string' && typeof a.type === 'string' && typeof a.name === 'string')
+        .filter((a) => typeof a.id === 'string' && isAccountTypeId(a.type) && typeof a.name === 'string')
         .map((a) => ({
           id: a.id as string,
           type: a.type as AccountTypeId,
@@ -114,7 +136,10 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
 
 export function upsertSnapshot(snapshots: readonly Snapshot[], next: Snapshot): Snapshot[] {
   const normalizedNext = normalizeSnapshot(next)
-  const copy = snapshots.map((s) => normalizeSnapshot(s)).filter((s) => s.date !== normalizedNext.date)
+  const copy = snapshots
+    .map((s) => normalizeSnapshot(s))
+    .filter((s) => isSnapshotDateKey(s.date) && s.date !== normalizedNext.date)
+  if (!isSnapshotDateKey(normalizedNext.date)) return copy
   copy.push(normalizedNext)
   copy.sort((a, b) => a.date.localeCompare(b.date))
   return copy

@@ -1,11 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import type { Account } from './accounts'
 import { useLocalStorageState } from './useLocalStorageState'
-import { buildSnapshot, normalizeSnapshot, todayDateKey, upsertSnapshot, type Snapshot } from './snapshots'
+import { buildSnapshot, isSnapshotDateKey, normalizeSnapshot, todayDateKey, upsertSnapshot, type Snapshot } from './snapshots'
 
 function coerceSnapshots(value: unknown): Snapshot[] {
   if (!Array.isArray(value)) return []
-  return value.map((item) => normalizeSnapshot(item as Snapshot))
+  return value.map((item) => normalizeSnapshot(item as Snapshot)).filter((s) => isSnapshotDateKey(s.date))
 }
 
 export function useSnapshots() {
@@ -13,7 +13,7 @@ export function useSnapshots() {
     coerce: coerceSnapshots,
   })
 
-  const normalized = useMemo(() => snapshots.map((s) => normalizeSnapshot(s)), [snapshots])
+  const normalized = useMemo(() => snapshots.map((s) => normalizeSnapshot(s)).filter((s) => isSnapshotDateKey(s.date)), [snapshots])
 
   const upsertFromAccounts = useCallback(
     (accounts: Account[], date: string = todayDateKey()) => {

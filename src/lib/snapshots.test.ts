@@ -31,6 +31,7 @@ describe('normalizeSnapshot', () => {
         { id: 'a', type: 'fund', name: '基金', balance: 100 },
         { id: 'b', type: 'fund', name: '基金2', balance: 'nope' },
         { id: 'bad', type: 1, name: 'x', balance: 1 },
+        { id: 'bad-type', type: 'unknown_type', name: 'Unknown', balance: 1 },
       ],
     } as unknown as Snapshot
 
@@ -94,5 +95,18 @@ describe('normalizeSnapshot', () => {
       debt: 20000,
       cash: 150000,
     })
+  })
+
+  it('drops stored snapshots with invalid dates when merging live balances', () => {
+    const merged = withAccountSnapshot(
+      [
+        { date: 'bad-date', net: 99999, debt: 0, cash: 99999, invest: 0, fixed: 0, receivable: 0 },
+        { date: '2026-06-02', net: 90000, debt: 0, cash: 90000, invest: 0, fixed: 0, receivable: 0 },
+      ],
+      [],
+      '2026-06-03',
+    )
+
+    expect(merged.map((s) => s.date)).toEqual(['2026-06-02', '2026-06-03'])
   })
 })
