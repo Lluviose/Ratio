@@ -11,6 +11,7 @@ import {
   coerceSavingsGoal,
   defaultGoalDate,
   diffDateDays,
+  getActiveSavingsGoalDate,
   getNetChangePace,
   getSavingsGoalSummary,
   isDateKey,
@@ -609,8 +610,7 @@ type SavingsSimulationPlan = {
 }
 
 function getActiveGoalDate(summary: SavingsGoalSummary) {
-  const today = todayDateKey()
-  return summary.latestDate && summary.latestDate > today ? summary.latestDate : today
+  return getActiveSavingsGoalDate(summary.latestDate)
 }
 
 function buildSavingsSimulationPlan(summary: SavingsGoalSummary, monthlyExtra: number, oneTime: number): SavingsSimulationPlan {
@@ -1221,11 +1221,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     const cutoffKey = toDateKey(cutoff)
     let selected = sorted.filter((s) => s.date >= cutoffKey)
-    const rangeFallback = selected.length < 2 && sorted.length >= 2
+    const rangeFallback = selected.length < 2 && sorted.length > selected.length
     if (rangeFallback) selected = sorted
 
     const start = selected[0]
     const end = selected[selected.length - 1]
+    if (!start || !end) return null
 
     const assetsStart = sumAssets(start)
     const assetsEnd = sumAssets(end)

@@ -14,6 +14,7 @@ import {
   addDaysToDateKey,
   coerceSavingsGoal,
   diffDateDays,
+  getActiveSavingsGoalDate,
   getGoalComparisonValue,
   getLinearGoalValue,
   getSavingsGoalSummary,
@@ -213,6 +214,11 @@ function getProjectionEndLabel(endDate: string, goal: SavingsGoal, summary: Savi
   return '展望'
 }
 
+function getProjectionRequestEndDate(goal: SavingsGoal, summary: SavingsGoalSummary, forecastStartDate: string) {
+  if (summary.projectedDate && summary.projectedDate > forecastStartDate) return summary.projectedDate
+  return goal.targetDate > forecastStartDate ? goal.targetDate : forecastStartDate
+}
+
 function makeGoalPoint(dateKey: string, label?: string, showYear?: boolean): TrendPoint {
   return {
     date: label ?? formatLabel(dateKey, { showYear: showYear || shouldShowYearForDateKeys([dateKey]) }),
@@ -268,23 +274,20 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
     if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label, showYear))
   }
 
-  const forecastStartDate = summary.latestDate ?? points[points.length - 1]?.dateKey
-  const targetTrendEnd = forecastStartDate ? getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence) : goal.targetDate
+  const forecastStartDate = getActiveSavingsGoalDate(summary.latestDate)
+  const targetTrendEnd = getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence)
 
   ensurePoint(targetTrendEnd, targetTrendEnd === goal.targetDate ? '目标' : '展望')
   if (goal.startDate >= firstDate) ensurePoint(goal.startDate)
-  if (summary.latestDate) addFutureCheckpoints(ensurePoint, summary.latestDate, targetTrendEnd, futureCadence)
+  if (targetTrendEnd > forecastStartDate) addFutureCheckpoints(ensurePoint, forecastStartDate, targetTrendEnd, futureCadence)
 
   let projectionEnd: string | null = null
-  if (summary.latestDate && summary.avgDailyNetChange != null) {
-    let requestedProjectionEnd = goal.targetDate
-    if (summary.projectedDate && summary.projectedDate > summary.latestDate && summary.projectedDate < goal.targetDate) {
-      requestedProjectionEnd = summary.projectedDate
-    }
-    projectionEnd = getForecastEndDate(summary.latestDate, requestedProjectionEnd, futureCadence)
-    ensurePoint(summary.latestDate)
+  if (summary.avgDailyNetChange != null) {
+    const requestedProjectionEnd = getProjectionRequestEndDate(goal, summary, forecastStartDate)
+    projectionEnd = getForecastEndDate(forecastStartDate, requestedProjectionEnd, futureCadence)
+    ensurePoint(forecastStartDate)
     ensurePoint(projectionEnd, getProjectionEndLabel(projectionEnd, goal, summary))
-    addFutureCheckpoints(ensurePoint, summary.latestDate, projectionEnd, futureCadence)
+    addFutureCheckpoints(ensurePoint, forecastStartDate, projectionEnd, futureCadence)
   }
 
   const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
@@ -292,10 +295,10 @@ function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summ
     point.goalTarget = getLinearGoalValue(goal, point.dateKey)
     point.goalComparison = point.dateKey >= goal.startDate ? getGoalComparisonValue(goal, point.dateKey) : null
 
-    if (summary.latestDate && projectionEnd && summary.avgDailyNetChange != null) {
-      const daysFromLatest = diffDateDays(summary.latestDate, point.dateKey)
-      if (daysFromLatest != null && daysFromLatest >= 0 && point.dateKey <= projectionEnd) {
-        point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromLatest
+    if (projectionEnd && summary.avgDailyNetChange != null) {
+      const daysFromForecastStart = diffDateDays(forecastStartDate, point.dateKey)
+      if (daysFromForecastStart != null && daysFromForecastStart >= 0 && point.dateKey <= projectionEnd) {
+        point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromForecastStart
       }
     }
   }
@@ -730,7 +733,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     <>
                       <Line
                         type="monotone"
-                        dataKey="goalTarget"
+                        dataKey="goalComparison"
                         stroke="rgba(15, 23, 42, 0.42)"
                         strokeWidth={2.5}
                         strokeDasharray="7 7"

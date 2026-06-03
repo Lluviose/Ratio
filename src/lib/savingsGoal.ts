@@ -159,7 +159,7 @@ function latestSnapshot(snapshots: Snapshot[]): Snapshot | null {
   }, null)
 }
 
-function activeDateFromLatest(latestDate: string | null) {
+export function getActiveSavingsGoalDate(latestDate: string | null) {
   const today = todayDateKey()
   return latestDate && latestDate > today ? latestDate : today
 }
@@ -297,7 +297,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const latest = latestSnapshot(snapshots)
   const currentNetWorth = latest ? normalizeMoney(latest.net) : normalizeMoney(goal.startNetWorth)
   const latestDate = latest?.date ?? null
-  const activeDate = activeDateFromLatest(latestDate)
+  const activeDate = getActiveSavingsGoalDate(latestDate)
 
   const rawProgress = goal.targetAmount <= 0 ? 0 : currentNetWorth / goal.targetAmount
   const progress = Math.max(0, Math.min(1, Number.isFinite(rawProgress) ? rawProgress : 0))
