@@ -659,6 +659,11 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
   const [oneTimeValue, setOneTimeValue] = useState(0)
   const [helpOpen, setHelpOpen] = useState(false)
 
+  useEffect(() => {
+    setMonthlyExtraValue(0)
+    setOneTimeValue(0)
+  }, [summary.currentNetWorth, summary.startDate, summary.startNetWorth, summary.targetAmount, summary.targetDate])
+
   if (summary.isComplete) return null
 
   const baseDate = getActiveGoalDate(summary)
@@ -1216,7 +1221,8 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     const cutoffKey = toDateKey(cutoff)
     let selected = sorted.filter((s) => s.date >= cutoffKey)
-    if (selected.length < 2) selected = sorted
+    const rangeFallback = selected.length < 2 && sorted.length >= 2
+    if (rangeFallback) selected = sorted
 
     const start = selected[0]
     const end = selected[selected.length - 1]
@@ -1236,23 +1242,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     const days = diffDays(start.date, end.date)
 
-    const currentAssets = addMoney(addMoney(end.cash, end.invest), end.receivable)
-    const quickAssets = addMoney(end.cash, end.invest)
-    const netLiquid = subtractMoney(currentAssets, end.debt)
-
-    const ratios = {
-      debtToAssets: safeDiv(end.debt, assetsEnd),
-      netToAssets: safeDiv(end.net, assetsEnd),
-      debtToNet: end.net > 0 ? safeDiv(end.debt, end.net) : null,
-      equityMultiplier: end.net > 0 ? safeDiv(assetsEnd, end.net) : null,
-    }
-
-    const coverage = {
-      current: safeDiv(currentAssets, end.debt),
-      quick: safeDiv(quickAssets, end.debt),
-      cash: safeDiv(end.cash, end.debt),
-    }
-
     const netPace = getNetChangePace(selected, { monthStartDay })
 
     const growth = {
@@ -1266,14 +1255,10 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       start,
       end,
       selectedCount: selected.length,
+      rangeFallback,
       assetsStart,
-      assetsEnd,
-      currentAssets,
-      netLiquid,
       delta,
       days,
-      ratios,
-      coverage,
       growth,
       netPace,
     }
@@ -1288,6 +1273,32 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     }, null)
   }, [snapshots])
   const latestNetWorth = goalSummary?.currentNetWorth ?? latestSnapshot?.net ?? 0
+  const currentStats = useMemo(() => {
+    if (!latestSnapshot) return null
+
+    const assets = sumAssets(latestSnapshot)
+    const currentAssets = addMoney(addMoney(latestSnapshot.cash, latestSnapshot.invest), latestSnapshot.receivable)
+    const quickAssets = addMoney(latestSnapshot.cash, latestSnapshot.invest)
+    const netLiquid = subtractMoney(currentAssets, latestSnapshot.debt)
+
+    return {
+      snapshot: latestSnapshot,
+      assets,
+      currentAssets,
+      netLiquid,
+      ratios: {
+        debtToAssets: safeDiv(latestSnapshot.debt, assets),
+        netToAssets: safeDiv(latestSnapshot.net, assets),
+        debtToNet: latestSnapshot.net > 0 ? safeDiv(latestSnapshot.debt, latestSnapshot.net) : null,
+        equityMultiplier: latestSnapshot.net > 0 ? safeDiv(assets, latestSnapshot.net) : null,
+      },
+      coverage: {
+        current: safeDiv(currentAssets, latestSnapshot.debt),
+        quick: safeDiv(quickAssets, latestSnapshot.debt),
+        cash: safeDiv(latestSnapshot.cash, latestSnapshot.debt),
+      },
+    }
+  }, [latestSnapshot])
 
   useEffect(() => {
     if (!goal || !goalSummary) {
@@ -1344,14 +1355,61 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
           {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
 
+          {currentStats ? (
+            <>
+              <motion.div
+                className="card"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.05 }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产负债概览</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <MetricTile label="总资产" value={formatCny(currentStats.assets)} />
+                    <MetricTile label="净资产" value={formatCny(currentStats.snapshot.net)} />
+                    <MetricTile label="负债" value={formatCny(currentStats.snapshot.debt)} valueColor={debtAmountTone(currentStats.snapshot.debt)} />
+                    <MetricTile label="资产负债率" value={formatPct(currentStats.ratios.debtToAssets)} />
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="card"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性与杠杆</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <MetricTile label="流动资产" value={formatCny(currentStats.currentAssets)} />
+                    <MetricTile label="净流动资产" value={formatCny(currentStats.netLiquid)} />
+                    <MetricTile label="流动比" value={formatCoverageRatio(currentStats.coverage.current, currentStats.snapshot.debt)} sub={formatCoverageSub('流动资产/负债', currentStats.snapshot.debt)} />
+                    <MetricTile label="速动比" value={formatCoverageRatio(currentStats.coverage.quick, currentStats.snapshot.debt)} sub={formatCoverageSub('(现金+投资)/负债', currentStats.snapshot.debt)} />
+                    <MetricTile label="现金覆盖" value={formatCoverageRatio(currentStats.coverage.cash, currentStats.snapshot.debt)} sub={formatCoverageSub('现金/负债', currentStats.snapshot.debt)} />
+                    <MetricTile label="负债/净资产" value={formatX(currentStats.ratios.debtToNet)} />
+                    <MetricTile label="净资产率" value={formatPct(currentStats.ratios.netToAssets)} />
+                    <MetricTile label="权益乘数" value={formatX(currentStats.ratios.equityMultiplier)} />
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          ) : null}
+
           {view ? (
             <>
               <div style={{ display: 'grid', gap: 9, marginTop: 2 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ minWidth: 0, flex: '1 1 160px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 950 }}>资产统计区间</div>
+                    <div style={{ fontSize: 12, fontWeight: 950 }}>区间统计范围</div>
                     <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
-                      {view.selectedCount >= 2 ? (
+                      {view.rangeFallback ? (
+                        <>
+                          所选区间不足 2 条快照，已显示 {formatCompactDateRange(view.start.date, view.end.date)} · 净资产{' '}
+                          <span style={{ color: 'var(--text)' }}>{formatDelta(view.delta.net)}</span>
+                        </>
+                      ) : view.selectedCount >= 2 ? (
                         <>
                           {formatCompactDateRange(view.start.date, view.end.date)} · 净资产{' '}
                           <span style={{ color: 'var(--text)' }}>{formatDelta(view.delta.net)}</span>
@@ -1383,44 +1441,6 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 className="card"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.05 }}
-              >
-                <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产负债概览</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-                    <MetricTile label="总资产" value={formatCny(view.assetsEnd)} />
-                    <MetricTile label="净资产" value={formatCny(view.end.net)} />
-                    <MetricTile label="负债" value={formatCny(view.end.debt)} valueColor={debtAmountTone(view.end.debt)} />
-                    <MetricTile label="资产负债率" value={formatPct(view.ratios.debtToAssets)} />
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                className="card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-              >
-                <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性与杠杆</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-                    <MetricTile label="流动资产" value={formatCny(view.currentAssets)} />
-                    <MetricTile label="净流动资产" value={formatCny(view.netLiquid)} />
-                    <MetricTile label="流动比" value={formatCoverageRatio(view.coverage.current, view.end.debt)} sub={formatCoverageSub('流动资产/负债', view.end.debt)} />
-                    <MetricTile label="速动比" value={formatCoverageRatio(view.coverage.quick, view.end.debt)} sub={formatCoverageSub('(现金+投资)/负债', view.end.debt)} />
-                    <MetricTile label="现金覆盖" value={formatCoverageRatio(view.coverage.cash, view.end.debt)} sub={formatCoverageSub('现金/负债', view.end.debt)} />
-                    <MetricTile label="负债/净资产" value={formatX(view.ratios.debtToNet)} />
-                    <MetricTile label="净资产率" value={formatPct(view.ratios.netToAssets)} />
-                    <MetricTile label="权益乘数" value={formatX(view.ratios.equityMultiplier)} />
-                  </div>
-                </div>
-              </motion.div>
-
-              <motion.div
-                className="card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.2 }}
               >
                 <div className="cardInner">
@@ -1436,7 +1456,11 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     <MetricTile label="投资" value={formatDelta(view.delta.invest)} valueColor={colors.invest} />
                     <MetricTile label="固定资产" value={formatDelta(view.delta.fixed)} valueColor={colors.fixed} />
                     <MetricTile label="应收款" value={formatDelta(view.delta.receivable)} valueColor={colors.receivable} />
-                    <MetricTile label="快照数量" value={`${view.selectedCount}条`} sub={view.days != null ? `跨度 ${view.days} 天` : undefined} />
+                    <MetricTile
+                      label="快照数量"
+                      value={`${view.selectedCount}条`}
+                      sub={view.rangeFallback ? '所选区间不足 2 条，已显示全部' : view.days != null ? `跨度 ${view.days} 天` : undefined}
+                    />
                   </div>
                 </div>
               </motion.div>
