@@ -7,8 +7,10 @@ import { formatCny } from '../lib/format'
 import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
+  SAVINGS_PACE_ALGORITHM_KEY,
   addDaysToDateKey,
   coerceSavingsGoal,
+  coerceSavingsPaceAlgorithm,
   defaultGoalDate,
   diffDateDays,
   getActiveSavingsGoalDate,
@@ -19,6 +21,7 @@ import {
   type NetChangePace,
   type SavingsGoal,
   type SavingsGoalSummary,
+  type SavingsPaceAlgorithm,
 } from '../lib/savingsGoal'
 import { DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY, clampMonthStartDay } from '../lib/monthStart'
 import type { ThemeColors } from '../lib/themes'
@@ -92,7 +95,12 @@ function formatAbsCny(value: number) {
 
 function formatPaceSource(method: NetChangePace['method'] | null | undefined, snapshotCount: number | null | undefined, sampleDays: number | null | undefined) {
   if (!method || !snapshotCount || !sampleDays) return '样本跨度不足，暂不估算'
-  const methodText = method === 'monthly-close' ? '按月度快照估算' : '按快照跨度估算'
+  const methodText = {
+    'recent-window': '按近期快照估算',
+    'monthly-close': '按月度收盘估算',
+    'monthly-smoothed': '按月度波动平滑',
+    'long-window': '按长期跨度估算',
+  }[method]
   return `${methodText} · ${snapshotCount}条/${sampleDays}天`
 }
 
@@ -126,6 +134,17 @@ const GOAL_MILESTONES = [0.25, 0.5, 0.75, 1] as const
 const MILESTONE_STORAGE_PREFIX = 'ratio.savingsGoal.maxMilestone.'
 const DAYS_PER_MONTH = 30.4375
 const TARGET_GAP_TOLERANCE = 1
+const PACE_ALGORITHM_OPTIONS: Array<{
+  value: SavingsPaceAlgorithm
+  label: string
+  sub: string
+}> = [
+  { value: 'smart', label: '智能选择', sub: '按记录密度和波动自动取口径' },
+  { value: 'recent-window', label: '近期快照', sub: '最近约半年一头一尾' },
+  { value: 'monthly-close', label: '月度收盘', sub: '最近月度快照一头一尾' },
+  { value: 'monthly-smoothed', label: '月度平滑', sub: '按月变化中位数抗波动' },
+  { value: 'long-window', label: '长期平均', sub: '全部快照一头一尾' },
+]
 
 type GoalMilestoneInfo = {
   progress: number
@@ -869,6 +888,52 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
   )
 }
 
+function SavingsPaceAlgorithmCard(props: {
+  algorithm: SavingsPaceAlgorithm
+  summary: SavingsGoalSummary | null
+  onChange: (algorithm: SavingsPaceAlgorithm) => void
+}) {
+  const { algorithm, summary, onChange } = props
+  const activeOption = PACE_ALGORITHM_OPTIONS.find((option) => option.value === algorithm) ?? PACE_ALGORITHM_OPTIONS[0]
+  const paceText = summary?.avgDailyNetChange == null
+    ? '样本不足'
+    : `${formatDelta(summary.avgDailyNetChange * DAYS_PER_MONTH)}/月`
+  const paceSub = summary ? formatSummaryPaceSource(summary) : '设置目标后用于预计达成'
+
+  return (
+    <motion.div
+      className="card"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <div className="cardInner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 950, fontSize: 14 }}>预估算法</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>{activeOption.sub}</div>
+          </div>
+          <div style={{ flex: '0 0 auto', textAlign: 'right' }}>
+            <div style={{ fontSize: 13, fontWeight: 950, color: summary?.avgDailyNetChange == null ? 'var(--muted-text)' : 'var(--text)' }}>{paceText}</div>
+            <div className="muted" style={{ fontSize: 10, fontWeight: 850, marginTop: 3 }}>当前基础增速</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 12, overflowX: 'auto', paddingBottom: 2 }}>
+          <PillTabs
+            ariaLabel="savings pace algorithm"
+            options={PACE_ALGORITHM_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            value={algorithm}
+            onChange={onChange}
+          />
+        </div>
+
+        <div className="muted" style={{ marginTop: 10, fontSize: 11, fontWeight: 850 }}>{paceSub}</div>
+      </div>
+    </motion.div>
+  )
+}
+
 function SavingsMilestoneCelebration(props: { milestone: number; color: string }) {
   const { milestone, color } = props
   const pct = Math.round(milestone * 100)
@@ -1200,6 +1265,9 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const { snapshots, colors } = props
   const [range, setRange] = useState<RangeId>('6m')
   const [monthStartDayRaw] = useLocalStorageState<number>(MONTH_START_DAY_KEY, DEFAULT_MONTH_START_DAY)
+  const [paceAlgorithm, setPaceAlgorithm] = useLocalStorageState<SavingsPaceAlgorithm>(SAVINGS_PACE_ALGORITHM_KEY, 'smart', {
+    coerce: coerceSavingsPaceAlgorithm,
+  })
   const [goal, setGoal] = useLocalStorageState<SavingsGoal | null>(SAVINGS_GOAL_KEY, null, {
     coerce: coerceSavingsGoal,
   })
@@ -1243,7 +1311,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     const days = diffDays(start.date, end.date)
 
-    const netPace = getNetChangePace(selected, { monthStartDay })
+    const netPace = getNetChangePace(selected, { monthStartDay, algorithm: paceAlgorithm })
 
     const growth = {
       net: safeGrowth(delta.net, start.net),
@@ -1263,9 +1331,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       growth,
       netPace,
     }
-  }, [monthStartDay, range, snapshots])
+  }, [monthStartDay, paceAlgorithm, range, snapshots])
 
-  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
+  const goalSummary = useMemo(
+    () => getSavingsGoalSummary(goal, snapshots, { monthStartDay, algorithm: paceAlgorithm }),
+    [goal, monthStartDay, paceAlgorithm, snapshots],
+  )
   const latestSnapshot = useMemo(() => {
     if (snapshots.length === 0) return null
     return snapshots.reduce<Snapshot | null>((best, snapshot) => {
@@ -1348,6 +1419,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             summary={goalSummary}
             color={colors.invest}
             onEdit={() => setGoalSheetOpen(true)}
+          />
+
+          <SavingsPaceAlgorithmCard
+            algorithm={paceAlgorithm}
+            summary={goalSummary}
+            onChange={setPaceAlgorithm}
           />
 
           {celebrationMilestone != null ? (

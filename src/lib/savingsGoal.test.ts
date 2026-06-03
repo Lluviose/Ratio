@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addDaysToDateKey,
   coerceSavingsGoal,
+  coerceSavingsPaceAlgorithm,
   getAverageDailyNetChange,
   getGoalComparisonValue,
   getLinearGoalValue,
@@ -60,6 +61,7 @@ describe('savingsGoal', () => {
     expect(summary?.progress).toBe(0.65)
     expect(summary?.remaining).toBe(70000)
     expect(summary?.avgDailyNetChange).toBe(1000)
+    expect(summary?.avgDailyNetChangeMethod).toBe('monthly-close')
     expect(summary?.projectedDate).toBe(addDaysToDateKey(today, 70))
     expect(summary?.targetValueAtLatest).toBeCloseTo(107594.94)
     expect(summary?.targetDeltaAtLatest).toBeCloseTo(22405.06)
@@ -106,6 +108,77 @@ describe('savingsGoal', () => {
     expect(pace?.sampleDays).toBe(59)
     expect(pace?.snapshotCount).toBe(3)
     expect(pace?.avgDaily).toBeCloseTo(847.46)
+  })
+
+  it('can manually use the recent snapshot window for dense records', () => {
+    const pace = getNetChangePace([
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-01-04', 103000),
+      snapshot('2026-01-08', 108000),
+      snapshot('2026-01-11', 111000),
+    ], { algorithm: 'recent-window' })
+
+    expect(pace?.method).toBe('recent-window')
+    expect(pace?.sampleDays).toBe(10)
+    expect(pace?.snapshotCount).toBe(4)
+    expect(pace?.avgDaily).toBe(1100)
+  })
+
+  it('can manually use the long window instead of recent records', () => {
+    const pace = getNetChangePace([
+      snapshot('2025-01-01', 100000),
+      snapshot('2026-01-01', 140000),
+      snapshot('2026-06-01', 160000),
+    ], { algorithm: 'long-window' })
+
+    expect(pace?.method).toBe('long-window')
+    expect(pace?.startDate).toBe('2025-01-01')
+    expect(pace?.endDate).toBe('2026-06-01')
+    expect(pace?.avgDaily).toBeCloseTo(116.28)
+  })
+
+  it('can manually smooth volatile monthly records with the median monthly pace', () => {
+    const pace = getNetChangePace([
+      snapshot('2026-01-31', 100000),
+      snapshot('2026-02-28', 120000),
+      snapshot('2026-03-31', 90000),
+      snapshot('2026-04-30', 125000),
+      snapshot('2026-05-31', 130000),
+    ], { algorithm: 'monthly-smoothed' })
+
+    expect(pace?.method).toBe('monthly-smoothed')
+    expect(pace?.snapshotCount).toBe(5)
+    expect(pace?.sampleDays).toBe(120)
+    expect(pace?.avgDaily).toBeCloseTo(437.79)
+  })
+
+  it('smart mode smooths large month-to-month swings', () => {
+    const pace = getNetChangePace([
+      snapshot('2026-01-31', 100000),
+      snapshot('2026-02-28', 120000),
+      snapshot('2026-03-31', 90000),
+      snapshot('2026-04-30', 125000),
+      snapshot('2026-05-31', 130000),
+    ])
+
+    expect(pace?.method).toBe('monthly-smoothed')
+    expect(pace?.avgDaily).toBeCloseTo(437.79)
+  })
+
+  it('keeps short sparse samples unestimated in smart mode', () => {
+    expect(getNetChangePace([
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-01-15', 130000),
+    ])).toBeNull()
+  })
+
+  it('coerces invalid pace algorithm settings back to smart', () => {
+    expect(coerceSavingsPaceAlgorithm('monthly-smoothed')).toBe('monthly-smoothed')
+    expect(coerceSavingsPaceAlgorithm('bad')).toBe('smart')
+    expect(getNetChangePace([
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-01-31', 130000),
+    ], { algorithm: 'bad' as never })?.method).toBe('recent-window')
   })
 
   it('prefers monthly pace when record gaps mix clusters and long pauses', () => {

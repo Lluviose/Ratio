@@ -11,8 +11,10 @@ import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
 import {
   SAVINGS_GOAL_KEY,
+  SAVINGS_PACE_ALGORITHM_KEY,
   addDaysToDateKey,
   coerceSavingsGoal,
+  coerceSavingsPaceAlgorithm,
   diffDateDays,
   getActiveSavingsGoalDate,
   getGoalComparisonValue,
@@ -20,6 +22,7 @@ import {
   getSavingsGoalSummary,
   type SavingsGoal,
   type SavingsGoalSummary,
+  type SavingsPaceAlgorithm,
 } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -152,7 +155,12 @@ function formatMaybeCny(value: number | null | undefined) {
 
 function formatGoalPaceSource(summary: SavingsGoalSummary) {
   if (summary.avgDailyNetChange == null || !summary.avgDailyNetChangeMethod) return '速度等待更多快照'
-  const methodText = summary.avgDailyNetChangeMethod === 'monthly-close' ? '月度估算' : '快照估算'
+  const methodText = {
+    'recent-window': '近期估算',
+    'monthly-close': '月度估算',
+    'monthly-smoothed': '平滑估算',
+    'long-window': '长期估算',
+  }[summary.avgDailyNetChangeMethod]
   return `${methodText} ${formatDelta(summary.avgDailyNetChange * DAYS_PER_MONTH)}/月`
 }
 
@@ -349,6 +357,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const [mode, setMode] = useState<TrendMode>('netDebt')
   const [range, setRange] = useState<RangeId>('1y')
   const [monthStartDayRaw] = useLocalStorageState<number>(MONTH_START_DAY_KEY, DEFAULT_MONTH_START_DAY)
+  const [paceAlgorithm] = useLocalStorageState<SavingsPaceAlgorithm>(SAVINGS_PACE_ALGORITHM_KEY, 'smart', {
+    coerce: coerceSavingsPaceAlgorithm,
+  })
   const [goal] = useLocalStorageState<SavingsGoal | null>(SAVINGS_GOAL_KEY, null, {
     coerce: coerceSavingsGoal,
   })
@@ -420,7 +431,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     }
   }, [monthStartDay, range, snapshots])
 
-  const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
+  const goalSummary = useMemo(
+    () => getSavingsGoalSummary(goal, snapshots, { monthStartDay, algorithm: paceAlgorithm }),
+    [goal, monthStartDay, paceAlgorithm, snapshots],
+  )
   const goalTrendPoints = useMemo(
     () => withGoalTrendLines(view.points, goal, goalSummary, view.showYear, view.futureCadence),
     [goal, goalSummary, view.futureCadence, view.points, view.showYear],
