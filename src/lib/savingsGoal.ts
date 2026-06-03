@@ -226,6 +226,14 @@ function latestSnapshotOnOrBefore(snapshots: Snapshot[], dateKey: string) {
   return best
 }
 
+function getPeriodStartNetWorth(goal: SavingsGoal, snapshots: Snapshot[], periodStartDate: string) {
+  const snapshot = latestSnapshotOnOrBefore(snapshots, periodStartDate)
+  if (periodStartDate <= goal.startDate || !snapshot || snapshot.date < goal.startDate) {
+    return normalizeMoney(goal.startNetWorth)
+  }
+  return normalizeMoney(snapshot.net)
+}
+
 function pickGrowthWindow(snapshots: Snapshot[], latestDate: string) {
   const sorted = sortValidSnapshots(snapshots)
   if (sorted.length < 2) return []
@@ -473,8 +481,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const currentPeriodEndDate = nextPeriodStartDate
     ? goal.targetDate > currentPeriodStartDate ? minDateKey(nextPeriodStartDate, goal.targetDate) : null
     : null
-  const periodStartSnapshot = latestSnapshotOnOrBefore(sortedSnapshots, currentPeriodStartDate)
-  const currentPeriodStartNetWorth = normalizeMoney(periodStartSnapshot?.net ?? goal.startNetWorth)
+  const currentPeriodStartNetWorth = getPeriodStartNetWorth(goal, sortedSnapshots, currentPeriodStartDate)
   const currentPeriodActual = normalizeMoney(currentNetWorth - currentPeriodStartNetWorth)
 
   const rawProgress = goal.targetAmount <= 0 ? 0 : currentNetWorth / goal.targetAmount
@@ -492,8 +499,12 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const currentPeriodTarget = !isComplete && currentPeriodTargetValue != null
     ? Math.max(0, normalizeMoney(currentPeriodTargetValue - currentPeriodStartNetWorth))
     : null
-  const currentPeriodDelta = currentPeriodTarget == null ? null : currentPeriodActual - currentPeriodTarget
-  const currentPeriodRemaining = currentPeriodTarget == null ? null : Math.max(0, normalizeMoney(currentPeriodTarget - currentPeriodActual))
+  const currentPeriodDelta = !isComplete && currentPeriodTargetValue != null
+    ? normalizeMoney(currentNetWorth - currentPeriodTargetValue)
+    : null
+  const currentPeriodRemaining = !isComplete && currentPeriodTargetValue != null
+    ? Math.max(0, normalizeMoney(currentPeriodTargetValue - currentNetWorth))
+    : null
   const currentPeriodIsOnTrack = isComplete ? true : currentPeriodDelta == null ? null : currentPeriodDelta >= 0
 
   const netChangePace = getNetChangePace(snapshots, options)

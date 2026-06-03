@@ -126,6 +126,54 @@ describe('savingsGoal', () => {
     expect(high?.currentPeriodIsOnTrack).toBe(true)
   })
 
+  it('uses the saved goal start net worth when the first period has older snapshots', () => {
+    const summary = getSavingsGoalSummary(
+      {
+        ...goal,
+        targetAmount: 124000,
+        startDate: '2026-06-15',
+        startNetWorth: 110000,
+        targetDate: '2026-12-31',
+      },
+      [
+        snapshot('2026-06-01', 90000),
+        snapshot('2026-06-20', 110200),
+      ],
+      { monthStartDay: 1 },
+    )
+
+    expect(summary?.currentPeriodStartDate).toBe('2026-06-15')
+    expect(summary?.currentPeriodStartNetWorth).toBe(110000)
+    expect(summary?.currentPeriodActual).toBe(200)
+    expect(summary?.currentPeriodTarget).toBeCloseTo(1125.63)
+    expect(summary?.currentPeriodRemaining).toBeCloseTo(925.63)
+    expect(summary?.currentPeriodDelta).toBeCloseTo(-925.63)
+  })
+
+  it('keeps an ahead-of-path period on track even if net worth dips slightly', () => {
+    const summary = getSavingsGoalSummary(
+      {
+        ...goal,
+        targetAmount: 124000,
+        startDate: '2026-01-01',
+        startNetWorth: 100000,
+        targetDate: '2026-12-31',
+      },
+      [
+        snapshot('2026-01-01', 100000),
+        snapshot('2026-06-01', 120000),
+        snapshot('2026-06-15', 119000),
+      ],
+      { monthStartDay: 1 },
+    )
+
+    expect(summary?.currentPeriodActual).toBe(-1000)
+    expect(summary?.currentPeriodTarget).toBe(0)
+    expect(summary?.currentPeriodRemaining).toBe(0)
+    expect(summary?.currentPeriodDelta).toBeCloseTo(7065.93)
+    expect(summary?.currentPeriodIsOnTrack).toBe(true)
+  })
+
   it('projects stale snapshots from today instead of the old snapshot date', () => {
     const today = todayDateKey()
     const startDate = addDaysToDateKey(today, -90)!
