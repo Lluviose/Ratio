@@ -112,10 +112,6 @@ function formatSummaryPaceSource(summary: SavingsGoalSummary) {
   return formatPaceSource(summary.avgDailyNetChangeMethod, summary.avgDailyNetChangeSnapshotCount, summary.avgDailyNetChangeSampleDays)
 }
 
-function formatSignedFormulaMoney(value: number) {
-  return value < 0 ? `- ${formatCny(Math.abs(value))}` : `+ ${formatCny(value)}`
-}
-
 function debtAmountTone(value: number) {
   return value > 0 ? '#ef4444' : undefined
 }
@@ -392,15 +388,18 @@ function SavingsStatusCard(props: {
   const periodDateContext = [summary.currentPeriodStartDate, summary.currentPeriodEndDate, summary.startDate, summary.targetDate]
   const periodStartLabel = formatShortGoalDate(summary.currentPeriodStartDate, periodDateContext)
   const periodEndLabel = summary.currentPeriodEndDate ? formatShortGoalDate(summary.currentPeriodEndDate, periodDateContext) : '目标已结束'
+  const currentLabel = summary.latestDate ? formatShortGoalDate(summary.latestDate, periodDateContext) : '当前'
   const periodExplain = summary.currentPeriodTargetNetWorth == null
     ? null
     : {
         startLabel: periodStartLabel,
         endLabel: periodEndLabel,
+        currentLabel,
         targetNetWorth: summary.currentPeriodTargetNetWorth,
-        targetFormula: `取 0 和（${formatCny(summary.currentPeriodTargetNetWorth)} - ${formatCny(summary.currentPeriodStartNetWorth)}）中较大值 = ${formatCny(summary.currentPeriodTarget ?? 0)}`,
-        actualFormula: `${formatCny(summary.currentNetWorth)} - ${formatCny(summary.currentPeriodStartNetWorth)} = ${formatDelta(summary.currentPeriodActual)}`,
-        remainingFormula: `${formatCny(summary.currentPeriodTargetNetWorth)} - ${formatCny(summary.currentNetWorth)} = ${formatSignedFormulaMoney(normalizeMoney(summary.currentPeriodTargetNetWorth - summary.currentNetWorth))}`,
+        targetIncrease: normalizeMoney(summary.currentPeriodTargetNetWorth - summary.currentPeriodStartNetWorth),
+        periodTarget: summary.currentPeriodTarget ?? 0,
+        actual: summary.currentPeriodActual,
+        remaining: periodRemaining ?? 0,
       }
 
   return (
@@ -496,12 +495,21 @@ function SavingsStatusCard(props: {
             <div style={{ fontSize: 12, fontWeight: 950, color: 'var(--text)' }}>
               {periodExplain.startLabel} 到 {periodExplain.endLabel}
             </div>
-            <div>目标路径：起点 {formatCny(summary.startNetWorth)} 到目标 {formatCny(summary.targetAmount)}，按日期平均推进。</div>
-            <div>本期起点净资产：{formatCny(summary.currentPeriodStartNetWorth)}</div>
-            <div>本期期末目标净资产：{formatCny(periodExplain.targetNetWorth)}</div>
-            <div>本期目标：{periodExplain.targetFormula}</div>
-            <div>本期已增：{periodExplain.actualFormula}</div>
-            <div>本期还需：{periodRemaining && periodRemaining > 0 ? periodExplain.remainingFormula : '当前净资产已覆盖本期期末目标'}</div>
+            <div>这是当前月度周期；周期终点取下一个月度开始日和目标日里更早的日期。</div>
+            <div>总目标路径：{formatShortGoalDate(summary.startDate, periodDateContext)} 从 {formatCny(summary.startNetWorth)} 出发，到 {formatShortGoalDate(summary.targetDate, periodDateContext)} 达到 {formatCny(summary.targetAmount)}，中间按天平均推进。</div>
+            <div>本期起点：{periodExplain.startLabel} 的净资产按 {formatCny(summary.currentPeriodStartNetWorth)} 计算。</div>
+            <div>本期期末应达到：{periodExplain.endLabel} 的目标净资产是 {formatCny(periodExplain.targetNetWorth)}。</div>
+            {periodExplain.targetIncrease <= 0 ? (
+              <div>本期应增加：期初净资产已经高于本期期末要求，所以本期目标按 ¥0 计算。</div>
+            ) : (
+              <div>本期应增加：{formatCny(periodExplain.targetNetWorth)} - {formatCny(summary.currentPeriodStartNetWorth)} = {formatCny(periodExplain.periodTarget)}。</div>
+            )}
+            <div>当前已增加：{formatCny(summary.currentNetWorth)} - {formatCny(summary.currentPeriodStartNetWorth)} = {formatDelta(periodExplain.actual)}（截至 {periodExplain.currentLabel}）。</div>
+            <div>
+              本期还需：{periodExplain.remaining > 0
+                ? `${formatCny(periodExplain.targetNetWorth)} - ${formatCny(summary.currentNetWorth)} = ${formatCny(periodExplain.remaining)}`
+                : '当前净资产已达到本期期末要求。'}
+            </div>
           </motion.div>
         ) : null}
         <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 10 }}>{heroLabel}</div>

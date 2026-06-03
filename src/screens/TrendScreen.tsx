@@ -8,113 +8,31 @@ import { getGroupIdByAccountType, type AccountGroupId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { subtractMoney } from '../lib/money'
-import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH_START_DAY_KEY, monthKeyForDateKey } from '../lib/monthStart'
+import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import {
   SAVINGS_GOAL_KEY,
   SAVINGS_PACE_ALGORITHM_KEY,
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
-  diffDateDays,
   getSavingsGoalSummary,
   type SavingsGoal,
   type SavingsGoalSummary,
   type SavingsPaceAlgorithm,
 } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
-import { withGoalTrendLines, type FutureCadence, type TrendPoint } from './trendGoalLines'
+import { withGoalTrendLines, type TrendPoint } from './trendGoalLines'
+import { buildTrendView, formatLabel, RECENT_SNAPSHOT_LIMIT, shouldShowYearForDateKeys, type RangeId } from './trendView'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type TrendMode = 'netDebt' | 'cashInvest'
-
-type RangeId = '30d' | '6m' | '1y' | 'custom'
-
-const RECENT_SNAPSHOT_LIMIT = 90
 const DAYS_PER_MONTH = 30.4375
 
-
-const DEFAULT_FUTURE_CADENCE: FutureCadence = {
-  stepDays: Math.round(DAYS_PER_MONTH),
-  maxPoints: 8,
-  horizonDays: Math.round(DAYS_PER_MONTH * 6),
-}
 function toDateKey(d: Date) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
-function getDateYear(dateKey: string | null | undefined) {
-  if (!dateKey) return null
-  const m = /^(\d{4})/.exec(dateKey)
-  if (!m) return null
-  const year = Number(m[1])
-  return Number.isFinite(year) ? year : null
-}
-function shouldShowYearForDateKeys(dateKeys: Array<string | null | undefined>) {
-  const years = new Set<number>()
-  for (const dateKey of dateKeys) {
-    const year = getDateYear(dateKey)
-    if (year != null) years.add(year)
-  }
-  if (years.size > 1) return true
-  const [year] = Array.from(years)
-  return year != null && year !== new Date().getFullYear()
-}
-
-function formatLabel(date: string, options?: { showYear?: boolean }) {
-  // date is stored as YYYY-MM-DD
-  const d = new Date(`${date}T00:00:00`)
-  if (Number.isNaN(d.getTime())) return date
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  const showYear = options?.showYear ?? shouldShowYearForDateKeys([date])
-  if (showYear) return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
-  return `${m}/${day}`
-}
-
-function formatMonthLabel(monthKey: string, showYear: boolean) {
-  const m = /^(\d{4})-(\d{2})$/.exec(monthKey)
-  if (!m) return monthKey
-  if (showYear) return `${Number(m[1])}/${Number(m[2])}`
-  return formatMonthKeyLabel(monthKey)
-}
-
-function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDay: number) {
-  const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
-  const byMonth = new Map<string, Snapshot>()
-
-  for (const s of sorted) {
-    const monthKey = monthKeyForDateKey(s.date, monthStartDay)
-    byMonth.set(monthKey, s)
-  }
-
-  const months = Array.from(byMonth.keys()).sort((a, b) => a.localeCompare(b))
-  const pickedKeys = months.slice(Math.max(0, months.length - monthCount))
-  return pickedKeys.map((key) => ({ monthKey: key, snapshot: byMonth.get(key)! }))
-}
-
-function getRangeCutoffKey(range: Exclude<RangeId, 'custom'>) {
-  const cutoff = new Date()
-  if (range === '30d') cutoff.setDate(cutoff.getDate() - 30)
-  if (range === '6m') cutoff.setMonth(cutoff.getMonth() - 6)
-  if (range === '1y') cutoff.setFullYear(cutoff.getFullYear() - 1)
-  return toDateKey(cutoff)
-}
-
-function toPoint(s: Snapshot, idx: number, label: string): TrendPoint {
-  return {
-    date: label,
-    dateKey: s.date,
-    idx,
-    net: s.net,
-    debt: s.debt,
-    cash: s.cash,
-    invest: s.invest,
-    fixed: s.fixed,
-    receivable: s.receivable,
-  }
-}
-
 function formatDelta(value: number) {
   const abs = Math.abs(value)
   const text = formatCny(abs)
@@ -147,45 +65,6 @@ function accountDeltaTone(delta: number, groupId: AccountGroupId) {
 function formatGoalDate(dateKey: string | null | undefined, contextDateKeys: Array<string | null | undefined> = []) {
   if (!dateKey) return '暂无'
   return formatLabel(dateKey, { showYear: shouldShowYearForDateKeys([dateKey, ...contextDateKeys]) })
-}
-
-function median(values: number[]) {
-  if (values.length === 0) return null
-  const sorted = values.slice().sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  if (sorted.length % 2 === 1) return sorted[mid]
-  return (sorted[mid - 1] + sorted[mid]) / 2
-}
-
-function getTypicalPointGapDays(points: TrendPoint[]) {
-  const gaps: number[] = []
-  for (let i = 1; i < points.length; i += 1) {
-    const gap = diffDateDays(points[i - 1].dateKey, points[i].dateKey)
-    if (gap != null && gap > 0) gaps.push(gap)
-  }
-  return median(gaps)
-}
-
-function getPointSpanDays(points: TrendPoint[]) {
-  const first = points[0]?.dateKey
-  const last = points[points.length - 1]?.dateKey
-  if (!first || !last) return null
-  const days = diffDateDays(first, last)
-  return days != null && days > 0 ? days : null
-}
-
-function getFutureCadence(range: RangeId, points: TrendPoint[]): FutureCadence {
-  if (range === '30d') return { stepDays: 7, maxPoints: 18, horizonDays: 30 }
-  if (range === '6m') return DEFAULT_FUTURE_CADENCE
-  if (range === '1y') return { stepDays: Math.round(DAYS_PER_MONTH), maxPoints: 14, horizonDays: Math.round(DAYS_PER_MONTH * 12) }
-
-  const typicalGap = getTypicalPointGapDays(points) ?? Math.round(DAYS_PER_MONTH)
-  const spanDays = getPointSpanDays(points) ?? typicalGap * 16
-  return {
-    stepDays: Math.max(1, Math.min(45, Math.round(typicalGap))),
-    maxPoints: 16,
-    horizonDays: Math.max(30, Math.min(Math.round(DAYS_PER_MONTH * 12), Math.round(spanDays))),
-  }
 }
 
 
@@ -255,47 +134,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [])
 
   const view = useMemo(() => {
-    if (!snapshots || snapshots.length === 0) {
-      return { points: [] as TrendPoint[], selected: [] as Snapshot[], showYear: false, futureCadence: DEFAULT_FUTURE_CADENCE }
-    }
-
-    const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
-
-    let selected: Snapshot[] = []
-    let labels: string[] = []
-    let showYear = false
-
-    if (range === '30d') {
-      const cutoffKey = getRangeCutoffKey(range)
-      selected = sorted.filter((s) => s.date >= cutoffKey)
-      showYear = shouldShowYearForDateKeys(selected.map((s) => s.date))
-      labels = selected.map((s) => formatLabel(s.date, { showYear }))
-    } else if (range === '6m') {
-      const cutoffKey = getRangeCutoffKey(range)
-      const picked = pickMonthlyLast(sorted.filter((s) => s.date >= cutoffKey), 6, monthStartDay)
-      selected = picked.map((x) => x.snapshot)
-      showYear = shouldShowYearForDateKeys(picked.map((x) => x.monthKey))
-      labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))
-    } else if (range === 'custom') {
-      selected = sorted.slice(Math.max(0, sorted.length - RECENT_SNAPSHOT_LIMIT))
-      showYear = shouldShowYearForDateKeys(selected.map((s) => s.date))
-      labels = selected.map((s) => formatLabel(s.date, { showYear }))
-    } else {
-      const cutoffKey = getRangeCutoffKey(range)
-      const picked = pickMonthlyLast(sorted.filter((s) => s.date >= cutoffKey), 12, monthStartDay)
-      selected = picked.map((x) => x.snapshot)
-      showYear = shouldShowYearForDateKeys(picked.map((x) => x.monthKey))
-      labels = picked.map((x) => formatMonthLabel(x.monthKey, showYear))
-    }
-
-    const points = selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date, { showYear })))
-
-    return {
-      points,
-      selected,
-      showYear,
-      futureCadence: getFutureCadence(range, points),
-    }
+    return buildTrendView(snapshots, range, monthStartDay)
   }, [monthStartDay, range, snapshots])
 
   const goalSummary = useMemo(
@@ -578,7 +417,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           {chartWidth > 0 && data.length > 0 ? (
             <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }} onClick={handleChartClick}>
               <XAxis
-                dataKey="date"
+                dataKey="dateValue"
+                type="number"
+                domain={['dataMin', 'dataMax']}
+                tickFormatter={(value) => getDateTickLabel(value, data, showYearInData)}
                 tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
                 axisLine={false}
                 tickLine={false}
@@ -763,4 +605,16 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       </motion.div>
     </div>
   )
+}
+
+function getDateTickLabel(value: unknown, points: TrendPoint[], showYear: boolean) {
+  const numeric = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numeric)) return ''
+  const rounded = Math.round(numeric)
+  const point = points.find((p) => p.dateValue === rounded)
+  if (point) return point.date
+
+  const d = new Date(rounded * 86400000)
+  if (Number.isNaN(d.getTime())) return ''
+  return formatLabel(toDateKey(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())), { showYear })
 }

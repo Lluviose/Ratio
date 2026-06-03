@@ -1,5 +1,6 @@
 import {
   addDaysToDateKey,
+  dateKeyToUtcDays,
   diffDateDays,
   getActiveSavingsGoalDate,
   getGoalComparisonValue,
@@ -11,6 +12,7 @@ import {
 export type TrendPoint = {
   date: string
   dateKey: string
+  dateValue?: number
   idx: number
   net: number | null
   debt: number | null
@@ -55,6 +57,7 @@ function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
   return {
     date: label ?? dateKey,
     dateKey,
+    dateValue: dateKeyToUtcDays(dateKey) ?? 0,
     idx: -1,
     net: null,
     debt: null,
@@ -67,6 +70,22 @@ function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
     projectedBridgeNet: null,
     projectedNet: null,
   }
+}
+
+function interpolateValue(startValue: number, endValue: number, startDate: string, endDate: string, dateKey: string) {
+  const totalDays = diffDateDays(startDate, endDate)
+  const offsetDays = diffDateDays(startDate, dateKey)
+  if (totalDays == null || offsetDays == null || totalDays <= 0) return endValue
+  return startValue + (endValue - startValue) * (offsetDays / totalDays)
+}
+
+function findLastRecordedPointBefore(points: TrendPoint[], dateKey: string) {
+  let best: TrendPoint | null = null
+  for (const point of points) {
+    if (point.dateKey >= dateKey || typeof point.net !== 'number' || !Number.isFinite(point.net)) continue
+    if (!best || point.dateKey > best.dateKey) best = point
+  }
+  return best
 }
 
 function addFutureCheckpoints(
@@ -105,7 +124,14 @@ export function withGoalTrendLines(
 
   const byDate = new Map<string, TrendPoint>()
   for (const point of points) {
-    byDate.set(point.dateKey, { ...point, goalTarget: null, goalComparison: null, projectedBridgeNet: null, projectedNet: null })
+    byDate.set(point.dateKey, {
+      ...point,
+      dateValue: point.dateValue ?? dateKeyToUtcDays(point.dateKey) ?? 0,
+      goalTarget: null,
+      goalComparison: null,
+      projectedBridgeNet: null,
+      projectedNet: null,
+    })
   }
 
   const ensurePoint = (dateKey: string, label?: string) => {
@@ -122,10 +148,24 @@ export function withGoalTrendLines(
 
   let projectionEnd: string | null = null
   let projectionAnchorDate: string | null = null
+  let bridgeStartDate: string | null = null
+  let bridgeStartNet: number | null = null
   if (summary.avgDailyNetChange != null) {
     const requestedProjectionEnd = getProjectionRequestEndDate(goal, summary, forecastStartDate)
     projectionEnd = getForecastEndDate(forecastStartDate, requestedProjectionEnd, futureCadence)
     projectionAnchorDate = summary.latestDate && summary.latestDate >= firstDate ? summary.latestDate : forecastStartDate
+    const anchorHasRecordedNet = points.some((point) => (
+      point.dateKey === projectionAnchorDate &&
+      typeof point.net === 'number' &&
+      Number.isFinite(point.net)
+    ))
+    if (!anchorHasRecordedNet) {
+      const lastRecordedPoint = findLastRecordedPointBefore(points, projectionAnchorDate)
+      if (lastRecordedPoint) {
+        bridgeStartDate = lastRecordedPoint.dateKey
+        bridgeStartNet = lastRecordedPoint.net
+      }
+    }
     ensurePoint(projectionAnchorDate)
     ensurePoint(forecastStartDate)
     ensurePoint(projectionEnd, getProjectionEndLabel(projectionEnd, goal, summary))
@@ -138,10 +178,10 @@ export function withGoalTrendLines(
     point.goalComparison = point.dateKey >= goal.startDate ? getGoalComparisonValue(goal, point.dateKey) : null
 
     if (projectionEnd && projectionAnchorDate && summary.avgDailyNetChange != null) {
-      if (point.dateKey === projectionAnchorDate) {
+      if (bridgeStartDate && bridgeStartNet != null && point.dateKey >= bridgeStartDate && point.dateKey <= projectionAnchorDate) {
+        point.projectedBridgeNet = interpolateValue(bridgeStartNet, summary.currentNetWorth, bridgeStartDate, projectionAnchorDate, point.dateKey)
+      } else if (point.dateKey >= projectionAnchorDate && point.dateKey <= forecastStartDate) {
         point.projectedBridgeNet = summary.currentNetWorth
-        if (point.dateKey === forecastStartDate) point.projectedNet = summary.currentNetWorth
-        continue
       }
 
       const daysFromForecastStart = diffDateDays(forecastStartDate, point.dateKey)
