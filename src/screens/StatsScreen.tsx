@@ -271,15 +271,11 @@ function getSliderStep(max: number) {
 function SavingsStatusCard(props: {
   summary: SavingsGoalSummary | null
   latestNetWorth: number
-  rangeDeltaNet: number
-  startDate: string
-  endDate: string
-  selectedCount: number
+  snapshotCount: number
   color: string
   onEdit: () => void
 }) {
-  const { summary, latestNetWorth, rangeDeltaNet, startDate, endDate, selectedCount, color, onEdit } = props
-  const rangeLabel = selectedCount >= 2 ? formatCompactDateRange(startDate, endDate) : formatShortGoalDate(endDate, [startDate])
+  const { summary, latestNetWorth, snapshotCount, color, onEdit } = props
 
   if (!summary) {
     return (
@@ -305,8 +301,8 @@ function SavingsStatusCard(props: {
             </button>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
-            <MetricTile label="区间净资产" value={formatDelta(rangeDeltaNet)} sub={rangeLabel} />
-            <MetricTile label="快照数量" value={`${selectedCount}条`} sub="持续记录后会更准确" />
+            <MetricTile label="当前净资产" value={formatCny(latestNetWorth)} sub="目标按净资产计算" />
+            <MetricTile label="快照数量" value={`${snapshotCount}条`} sub="持续记录后会更准确" />
           </div>
         </div>
       </motion.div>
@@ -355,7 +351,7 @@ function SavingsStatusCard(props: {
       : formatCny(monthlyNeed)
   const heroSub = summary.isComplete ? '目标已覆盖' : `距离目标还差 ${formatCny(summary.remaining)}`
   const progressPct = `${Math.round(progress * 1000) / 10}%`
-  const projectionSub = summary.avgDailyNetChange != null || selectedCount >= 2 ? formatSummaryPaceSource(summary) : rangeLabel
+  const projectionSub = summary.avgDailyNetChange != null ? formatSummaryPaceSource(summary) : '等待更多快照'
   const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
 
   return (
@@ -1284,7 +1280,14 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [monthStartDay, range, snapshots])
 
   const goalSummary = useMemo(() => getSavingsGoalSummary(goal, snapshots, { monthStartDay }), [goal, monthStartDay, snapshots])
-  const latestNetWorth = goalSummary?.currentNetWorth ?? view?.end.net ?? 0
+  const latestSnapshot = useMemo(() => {
+    if (snapshots.length === 0) return null
+    return snapshots.reduce<Snapshot | null>((best, snapshot) => {
+      if (!best) return snapshot
+      return snapshot.date > best.date ? snapshot : best
+    }, null)
+  }, [snapshots])
+  const latestNetWorth = goalSummary?.currentNetWorth ?? latestSnapshot?.net ?? 0
 
   useEffect(() => {
     if (!goal || !goalSummary) {
@@ -1319,143 +1322,148 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   return (
     <div className="stack" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
-        <div className="muted" style={{ marginTop: 8, fontSize: 12, fontWeight: 800, textAlign: 'center', opacity: 0.7 }}>
+        <div className="stack" style={{ marginTop: 8 }}>
+          <SavingsStatusCard
+            summary={goalSummary}
+            latestNetWorth={latestNetWorth}
+            snapshotCount={snapshots.length}
+            color={colors.invest}
+            onEdit={() => setGoalSheetOpen(true)}
+          />
+
+          <SavingsGoalCard
+            goal={goal}
+            summary={goalSummary}
+            color={colors.invest}
+            onEdit={() => setGoalSheetOpen(true)}
+          />
+
+          {celebrationMilestone != null ? (
+            <SavingsMilestoneCelebration milestone={celebrationMilestone} color={colors.invest} />
+          ) : null}
+
+          {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
+
           {view ? (
-            view.selectedCount >= 2 ? (
-              <>
-                {formatCompactDateRange(view.start.date, view.end.date)} · 净资产{' '}
-                <span style={{ color: 'var(--text)' }}>{formatDelta(view.delta.net)}</span>
-              </>
-            ) : (
-              <>
-                {formatShortGoalDate(view.end.date, [view.start.date])} · 净资产 <span style={{ color: 'var(--text)' }}>{formatCny(view.end.net)}</span>
-              </>
-            )
+            <>
+              <div style={{ display: 'grid', gap: 9, marginTop: 2 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0, flex: '1 1 160px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 950 }}>资产统计区间</div>
+                    <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
+                      {view.selectedCount >= 2 ? (
+                        <>
+                          {formatCompactDateRange(view.start.date, view.end.date)} · 净资产{' '}
+                          <span style={{ color: 'var(--text)' }}>{formatDelta(view.delta.net)}</span>
+                        </>
+                      ) : (
+                        <>
+                          {formatShortGoalDate(view.end.date, [view.start.date])} · 净资产 <span style={{ color: 'var(--text)' }}>{formatCny(view.end.net)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ flex: '0 0 auto' }}>
+                    <PillTabs
+                      ariaLabel="asset stats range"
+                      options={[
+                        { value: '5w', label: '5周' },
+                        { value: '6m', label: '6月' },
+                        { value: '1y', label: '1年' },
+                        { value: '4y', label: '4年' },
+                      ]}
+                      value={range}
+                      onChange={setRange}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <motion.div
+                className="card"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.05 }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产负债概览</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <MetricTile label="总资产" value={formatCny(view.assetsEnd)} />
+                    <MetricTile label="净资产" value={formatCny(view.end.net)} />
+                    <MetricTile label="负债" value={formatCny(view.end.debt)} valueColor={debtAmountTone(view.end.debt)} />
+                    <MetricTile label="资产负债率" value={formatPct(view.ratios.debtToAssets)} />
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="card"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.1 }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性与杠杆</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <MetricTile label="流动资产" value={formatCny(view.currentAssets)} />
+                    <MetricTile label="净流动资产" value={formatCny(view.netLiquid)} />
+                    <MetricTile label="流动比" value={formatCoverageRatio(view.coverage.current, view.end.debt)} sub={formatCoverageSub('流动资产/负债', view.end.debt)} />
+                    <MetricTile label="速动比" value={formatCoverageRatio(view.coverage.quick, view.end.debt)} sub={formatCoverageSub('(现金+投资)/负债', view.end.debt)} />
+                    <MetricTile label="现金覆盖" value={formatCoverageRatio(view.coverage.cash, view.end.debt)} sub={formatCoverageSub('现金/负债', view.end.debt)} />
+                    <MetricTile label="负债/净资产" value={formatX(view.ratios.debtToNet)} />
+                    <MetricTile label="净资产率" value={formatPct(view.ratios.netToAssets)} />
+                    <MetricTile label="权益乘数" value={formatX(view.ratios.equityMultiplier)} />
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="card"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>区间变化</div>
+                  <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
+                    基于快照差值（含流量/估值波动）
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
+                    <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
+                    <MetricTile label="负债" value={formatDelta(view.delta.debt)} valueColor={debtDeltaTone(view.delta.debt)} />
+                    <MetricTile label="流动资金" value={formatDelta(view.delta.cash)} valueColor={colors.liquid} />
+                    <MetricTile label="投资" value={formatDelta(view.delta.invest)} valueColor={colors.invest} />
+                    <MetricTile label="固定资产" value={formatDelta(view.delta.fixed)} valueColor={colors.fixed} />
+                    <MetricTile label="应收款" value={formatDelta(view.delta.receivable)} valueColor={colors.receivable} />
+                    <MetricTile label="快照数量" value={`${view.selectedCount}条`} sub={view.days != null ? `跨度 ${view.days} 天` : undefined} />
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div
+                className="card"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.25 }}
+              >
+                <div className="cardInner">
+                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>增长与节奏</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                    <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
+                    <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
+                    <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} valueColor={debtDeltaTone(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
+                    <MetricTile label="日均净资产变化" value={view.growth.avgDailyNet != null ? formatDelta(view.growth.avgDailyNet) : '—'} sub={formatNetChangePaceSource(view.netPace)} />
+                  </div>
+                </div>
+              </motion.div>
+            </>
           ) : (
-            <>暂无快照数据</>
+            <div className="muted" style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 800 }}>
+              暂无快照数据
+            </div>
           )}
         </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-          <PillTabs
-            ariaLabel="range"
-            options={[
-              { value: '5w', label: '5周' },
-              { value: '6m', label: '6月' },
-              { value: '1y', label: '1年' },
-              { value: '4y', label: '4年' },
-            ]}
-            value={range}
-            onChange={setRange}
-          />
-        </div>
-
-        {!view ? null : (
-          <div className="stack" style={{ marginTop: 12 }}>
-            <SavingsStatusCard
-              summary={goalSummary}
-              latestNetWorth={latestNetWorth}
-              rangeDeltaNet={view.delta.net}
-              startDate={view.start.date}
-              endDate={view.end.date}
-              selectedCount={view.selectedCount}
-              color={colors.invest}
-              onEdit={() => setGoalSheetOpen(true)}
-            />
-
-            <SavingsGoalCard
-              goal={goal}
-              summary={goalSummary}
-              color={colors.invest}
-              onEdit={() => setGoalSheetOpen(true)}
-            />
-
-            {celebrationMilestone != null ? (
-              <SavingsMilestoneCelebration milestone={celebrationMilestone} color={colors.invest} />
-            ) : null}
-
-            {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
-
-            <motion.div
-              className="card"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.05 }}
-            >
-              <div className="cardInner">
-                <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产负债概览</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-                  <MetricTile label="总资产" value={formatCny(view.assetsEnd)} />
-                  <MetricTile label="净资产" value={formatCny(view.end.net)} />
-                  <MetricTile label="负债" value={formatCny(view.end.debt)} valueColor={debtAmountTone(view.end.debt)} />
-                  <MetricTile label="资产负债率" value={formatPct(view.ratios.debtToAssets)} />
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="card"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.1 }}
-            >
-              <div className="cardInner">
-                <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性与杠杆</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-                  <MetricTile label="流动资产" value={formatCny(view.currentAssets)} />
-                  <MetricTile label="净流动资产" value={formatCny(view.netLiquid)} />
-                  <MetricTile label="流动比" value={formatCoverageRatio(view.coverage.current, view.end.debt)} sub={formatCoverageSub('流动资产/负债', view.end.debt)} />
-                  <MetricTile label="速动比" value={formatCoverageRatio(view.coverage.quick, view.end.debt)} sub={formatCoverageSub('(现金+投资)/负债', view.end.debt)} />
-                  <MetricTile label="现金覆盖" value={formatCoverageRatio(view.coverage.cash, view.end.debt)} sub={formatCoverageSub('现金/负债', view.end.debt)} />
-                  <MetricTile label="负债/净资产" value={formatX(view.ratios.debtToNet)} />
-                  <MetricTile label="净资产率" value={formatPct(view.ratios.netToAssets)} />
-                  <MetricTile label="权益乘数" value={formatX(view.ratios.equityMultiplier)} />
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="card"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              <div className="cardInner">
-                <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>区间变化</div>
-                <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
-                  基于快照差值（含流量/估值波动）
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-                  <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
-                  <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
-                  <MetricTile label="负债" value={formatDelta(view.delta.debt)} valueColor={debtDeltaTone(view.delta.debt)} />
-                  <MetricTile label="流动资金" value={formatDelta(view.delta.cash)} valueColor={colors.liquid} />
-                  <MetricTile label="投资" value={formatDelta(view.delta.invest)} valueColor={colors.invest} />
-                  <MetricTile label="固定资产" value={formatDelta(view.delta.fixed)} valueColor={colors.fixed} />
-                  <MetricTile label="应收款" value={formatDelta(view.delta.receivable)} valueColor={colors.receivable} />
-                  <MetricTile label="快照数量" value={`${view.selectedCount}条`} sub={view.days != null ? `跨度 ${view.days} 天` : undefined} />
-                </div>
-              </div>
-            </motion.div>
-
-            <motion.div
-              className="card"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.25 }}
-            >
-              <div className="cardInner">
-                <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>增长与节奏</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
-                  <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
-                  <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
-                  <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} valueColor={debtDeltaTone(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
-                  <MetricTile label="日均净资产变化" value={view.growth.avgDailyNet != null ? formatDelta(view.growth.avgDailyNet) : '—'} sub={formatNetChangePaceSource(view.netPace)} />
-                </div>
-              </div>
-            </motion.div>
-          </div>
-        )}
       </motion.div>
 
       <SavingsGoalSheet
