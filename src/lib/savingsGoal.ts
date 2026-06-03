@@ -25,6 +25,14 @@ export type SavingsGoalSummary = {
   targetDate: string
   startDate: string
   startNetWorth: number
+  currentPeriodStartDate: string
+  currentPeriodStartNetWorth: number
+  currentPeriodActual: number
+  currentPeriodTarget: number | null
+  currentPeriodRemaining: number | null
+  currentPeriodDelta: number | null
+  currentPeriodEndDate: string | null
+  currentPeriodIsOnTrack: boolean | null
   progress: number
   remaining: number
   daysLeft: number | null
@@ -166,14 +174,6 @@ export function defaultGoalDate(from: Date = new Date()): string {
   return toDateKey(d)
 }
 
-function latestSnapshot(snapshots: Snapshot[]): Snapshot | null {
-  if (snapshots.length === 0) return null
-  return snapshots.reduce<Snapshot | null>((best, s) => {
-    if (!best) return s
-    return s.date > best.date ? s : best
-  }, null)
-}
-
 export function getActiveSavingsGoalDate(latestDate: string | null) {
   const today = todayDateKey()
   return latestDate && latestDate > today ? latestDate : today
@@ -184,6 +184,46 @@ function sortValidSnapshots(snapshots: Snapshot[]) {
     .filter((s) => dateKeyToUtcDays(s.date) != null)
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+function getPeriodStartDate(dateKey: string, monthStartDay: number) {
+  const days = dateKeyToUtcDays(dateKey)
+  if (days == null) return dateKey
+
+  const d = new Date(days * 86400000)
+  const year = d.getUTCFullYear()
+  const monthIndex = d.getUTCMonth()
+  const day = d.getUTCDate()
+  const startDay = clampMonthStartDay(monthStartDay)
+  const startMonthIndex = day >= startDay ? monthIndex : monthIndex - 1
+  return dateKeyFromUtcDays(Math.floor(Date.UTC(year, startMonthIndex, startDay) / 86400000)) ?? dateKey
+}
+
+function getNextPeriodStartDate(periodStartDate: string, monthStartDay: number) {
+  const days = dateKeyToUtcDays(periodStartDate)
+  if (days == null) return null
+
+  const d = new Date(days * 86400000)
+  const nextStartDay = clampMonthStartDay(monthStartDay)
+  const next = Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, nextStartDay)
+  return dateKeyFromUtcDays(Math.floor(next / 86400000))
+}
+
+function maxDateKey(a: string, b: string) {
+  return a > b ? a : b
+}
+
+function minDateKey(a: string, b: string) {
+  return a < b ? a : b
+}
+
+function latestSnapshotOnOrBefore(snapshots: Snapshot[], dateKey: string) {
+  let best: Snapshot | null = null
+  for (const snapshot of snapshots) {
+    if (snapshot.date > dateKey) continue
+    if (!best || snapshot.date > best.date) best = snapshot
+  }
+  return best
 }
 
 function pickGrowthWindow(snapshots: Snapshot[], latestDate: string) {
@@ -421,10 +461,21 @@ export function getGoalComparisonValue(goal: SavingsGoal, dateKey: string): numb
 export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snapshot[], options: PaceOptions = {}): SavingsGoalSummary | null {
   if (!goal) return null
 
-  const latest = latestSnapshot(snapshots)
+  const sortedSnapshots = sortValidSnapshots(snapshots)
+  const monthStartDay = clampMonthStartDay(options.monthStartDay ?? DEFAULT_MONTH_START_DAY)
+  const latest = sortedSnapshots[sortedSnapshots.length - 1] ?? null
   const currentNetWorth = latest ? normalizeMoney(latest.net) : normalizeMoney(goal.startNetWorth)
   const latestDate = latest?.date ?? null
   const activeDate = getActiveSavingsGoalDate(latestDate)
+  const calendarPeriodStartDate = getPeriodStartDate(activeDate, monthStartDay)
+  const currentPeriodStartDate = goal.startDate <= activeDate ? maxDateKey(calendarPeriodStartDate, goal.startDate) : calendarPeriodStartDate
+  const nextPeriodStartDate = getNextPeriodStartDate(calendarPeriodStartDate, monthStartDay)
+  const currentPeriodEndDate = nextPeriodStartDate
+    ? goal.targetDate > currentPeriodStartDate ? minDateKey(nextPeriodStartDate, goal.targetDate) : null
+    : null
+  const periodStartSnapshot = latestSnapshotOnOrBefore(sortedSnapshots, currentPeriodStartDate)
+  const currentPeriodStartNetWorth = normalizeMoney(periodStartSnapshot?.net ?? goal.startNetWorth)
+  const currentPeriodActual = normalizeMoney(currentNetWorth - currentPeriodStartNetWorth)
 
   const rawProgress = goal.targetAmount <= 0 ? 0 : currentNetWorth / goal.targetAmount
   const progress = Math.max(0, Math.min(1, Number.isFinite(rawProgress) ? rawProgress : 0))
@@ -437,6 +488,13 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const isPastDue = !isComplete && daysLeftRaw != null && daysLeftRaw < 0
   const requiredDaily = !isComplete && daysLeft && daysLeft > 0 ? remaining / daysLeft : null
   const requiredMonthly = requiredDaily == null ? null : requiredDaily * 30.4375
+  const currentPeriodTargetValue = currentPeriodEndDate ? getGoalComparisonValue(goal, currentPeriodEndDate) : null
+  const currentPeriodTarget = !isComplete && currentPeriodTargetValue != null
+    ? Math.max(0, normalizeMoney(currentPeriodTargetValue - currentPeriodStartNetWorth))
+    : null
+  const currentPeriodDelta = currentPeriodTarget == null ? null : currentPeriodActual - currentPeriodTarget
+  const currentPeriodRemaining = currentPeriodTarget == null ? null : Math.max(0, normalizeMoney(currentPeriodTarget - currentPeriodActual))
+  const currentPeriodIsOnTrack = isComplete ? true : currentPeriodDelta == null ? null : currentPeriodDelta >= 0
 
   const netChangePace = getNetChangePace(snapshots, options)
   const avgDailyNetChange = netChangePace?.avgDaily ?? null
@@ -467,6 +525,14 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
     targetDate: goal.targetDate,
     startDate: goal.startDate,
     startNetWorth: goal.startNetWorth,
+    currentPeriodStartDate,
+    currentPeriodStartNetWorth,
+    currentPeriodActual,
+    currentPeriodTarget: currentPeriodTarget == null ? null : normalizeMoney(currentPeriodTarget),
+    currentPeriodRemaining,
+    currentPeriodDelta: currentPeriodDelta == null ? null : normalizeMoney(currentPeriodDelta),
+    currentPeriodEndDate,
+    currentPeriodIsOnTrack,
     progress,
     remaining,
     daysLeft,

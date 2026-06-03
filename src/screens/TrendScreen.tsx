@@ -12,19 +12,16 @@ import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, formatMonthKeyLabel, MONTH
 import {
   SAVINGS_GOAL_KEY,
   SAVINGS_PACE_ALGORITHM_KEY,
-  addDaysToDateKey,
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
   diffDateDays,
-  getActiveSavingsGoalDate,
-  getGoalComparisonValue,
-  getLinearGoalValue,
   getSavingsGoalSummary,
   type SavingsGoal,
   type SavingsGoalSummary,
   type SavingsPaceAlgorithm,
 } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
+import { withGoalTrendLines, type FutureCadence, type TrendPoint } from './trendGoalLines'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type TrendMode = 'netDebt' | 'cashInvest'
@@ -34,40 +31,18 @@ type RangeId = '30d' | '6m' | '1y' | 'custom'
 const RECENT_SNAPSHOT_LIMIT = 90
 const DAYS_PER_MONTH = 30.4375
 
-type TrendPoint = {
-  date: string
-  dateKey: string
-  idx: number
-  net: number | null
-  debt: number | null
-  cash: number | null
-  invest: number | null
-  fixed: number | null
-  receivable: number | null
-  goalTarget?: number | null
-  goalComparison?: number | null
-  projectedNet?: number | null
-}
-
-type FutureCadence = {
-  stepDays: number
-  maxPoints: number
-  horizonDays: number
-}
 
 const DEFAULT_FUTURE_CADENCE: FutureCadence = {
   stepDays: Math.round(DAYS_PER_MONTH),
   maxPoints: 8,
   horizonDays: Math.round(DAYS_PER_MONTH * 6),
 }
-
 function toDateKey(d: Date) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
-
 function getDateYear(dateKey: string | null | undefined) {
   if (!dateKey) return null
   const m = /^(\d{4})/.exec(dateKey)
@@ -75,7 +50,6 @@ function getDateYear(dateKey: string | null | undefined) {
   const year = Number(m[1])
   return Number.isFinite(year) ? year : null
 }
-
 function shouldShowYearForDateKeys(dateKeys: Array<string | null | undefined>) {
   const years = new Set<number>()
   for (const dateKey of dateKeys) {
@@ -214,113 +188,6 @@ function getFutureCadence(range: RangeId, points: TrendPoint[]): FutureCadence {
   }
 }
 
-function getForecastEndDate(startDate: string, requestedEndDate: string, cadence: FutureCadence) {
-  const days = diffDateDays(startDate, requestedEndDate)
-  if (days == null || days <= 0) return requestedEndDate
-
-  const horizonDays = Math.max(cadence.stepDays, Math.round(cadence.horizonDays))
-  if (days <= horizonDays) return requestedEndDate
-
-  return addDaysToDateKey(startDate, horizonDays) ?? requestedEndDate
-}
-
-function getProjectionEndLabel(endDate: string, goal: SavingsGoal, summary: SavingsGoalSummary) {
-  if (endDate === goal.targetDate) return '目标'
-  if (summary.projectedDate && endDate === summary.projectedDate) return '预计'
-  return '展望'
-}
-
-function getProjectionRequestEndDate(goal: SavingsGoal, summary: SavingsGoalSummary, forecastStartDate: string) {
-  if (summary.projectedDate && summary.projectedDate > forecastStartDate) return summary.projectedDate
-  return goal.targetDate > forecastStartDate ? goal.targetDate : forecastStartDate
-}
-
-function makeGoalPoint(dateKey: string, label?: string, showYear?: boolean): TrendPoint {
-  return {
-    date: label ?? formatLabel(dateKey, { showYear: showYear || shouldShowYearForDateKeys([dateKey]) }),
-    dateKey,
-    idx: -1,
-    net: null,
-    debt: null,
-    cash: null,
-    invest: null,
-    fixed: null,
-    receivable: null,
-    goalTarget: null,
-    goalComparison: null,
-    projectedNet: null,
-  }
-}
-
-function addFutureCheckpoints(
-  ensurePoint: (dateKey: string, label?: string) => void,
-  startDate: string,
-  endDate: string,
-  cadence: FutureCadence,
-) {
-  const days = diffDateDays(startDate, endDate)
-  if (days == null || days <= 0) return
-
-  const stepDays = Math.max(1, Math.round(cadence.stepDays))
-  const maxPoints = Math.max(0, Math.floor(cadence.maxPoints))
-  if (maxPoints <= 0) return
-
-  const effectiveStepDays = Math.max(stepDays, Math.ceil(days / (maxPoints + 1)))
-  let added = 0
-  for (let offset = effectiveStepDays; offset < days && added < maxPoints; offset += effectiveStepDays) {
-    const next = addDaysToDateKey(startDate, offset)
-    if (next && next > startDate && next < endDate) ensurePoint(next)
-    added += 1
-  }
-}
-
-function withGoalTrendLines(points: TrendPoint[], goal: SavingsGoal | null, summary: SavingsGoalSummary | null, showYear: boolean, futureCadence: FutureCadence) {
-  if (!goal || !summary || points.length === 0) return points
-
-  const firstDate = points[0]?.dateKey
-  if (!firstDate) return points
-
-  const byDate = new Map<string, TrendPoint>()
-  for (const point of points) {
-    byDate.set(point.dateKey, { ...point, goalTarget: null, goalComparison: null, projectedNet: null })
-  }
-
-  const ensurePoint = (dateKey: string, label?: string) => {
-    if (dateKey < firstDate) return
-    if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label, showYear))
-  }
-
-  const forecastStartDate = getActiveSavingsGoalDate(summary.latestDate)
-  const targetTrendEnd = getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence)
-
-  ensurePoint(targetTrendEnd, targetTrendEnd === goal.targetDate ? '目标' : '展望')
-  if (goal.startDate >= firstDate) ensurePoint(goal.startDate)
-  if (targetTrendEnd > forecastStartDate) addFutureCheckpoints(ensurePoint, forecastStartDate, targetTrendEnd, futureCadence)
-
-  let projectionEnd: string | null = null
-  if (summary.avgDailyNetChange != null) {
-    const requestedProjectionEnd = getProjectionRequestEndDate(goal, summary, forecastStartDate)
-    projectionEnd = getForecastEndDate(forecastStartDate, requestedProjectionEnd, futureCadence)
-    ensurePoint(forecastStartDate)
-    ensurePoint(projectionEnd, getProjectionEndLabel(projectionEnd, goal, summary))
-    addFutureCheckpoints(ensurePoint, forecastStartDate, projectionEnd, futureCadence)
-  }
-
-  const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
-  for (const point of merged) {
-    point.goalTarget = getLinearGoalValue(goal, point.dateKey)
-    point.goalComparison = point.dateKey >= goal.startDate ? getGoalComparisonValue(goal, point.dateKey) : null
-
-    if (projectionEnd && summary.avgDailyNetChange != null) {
-      const daysFromForecastStart = diffDateDays(forecastStartDate, point.dateKey)
-      if (daysFromForecastStart != null && daysFromForecastStart >= 0 && point.dateKey <= projectionEnd) {
-        point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromForecastStart
-      }
-    }
-  }
-
-  return merged
-}
 
 function pickTopChangingAccounts(prev: Snapshot | null, curr: Snapshot, limit: number) {
   if (!prev || !prev.accounts || !curr.accounts) return null
@@ -436,7 +303,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     [goal, monthStartDay, paceAlgorithm, snapshots],
   )
   const goalTrendPoints = useMemo(
-    () => withGoalTrendLines(view.points, goal, goalSummary, view.showYear, view.futureCadence),
+    () => withGoalTrendLines(view.points, goal, goalSummary, view.futureCadence, (dateKey) => formatLabel(dateKey, { showYear: view.showYear })),
     [goal, goalSummary, view.futureCadence, view.points, view.showYear],
   )
   const data = mode === 'netDebt' ? goalTrendPoints : view.points
@@ -581,7 +448,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           ) : null}
           {p.projectedNet != null ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
-              <div style={{ color: 'var(--muted-text)' }}>当前速度</div>
+              <div style={{ color: 'var(--muted-text)' }}>预测速度</div>
               <div style={{ color: '#10b981' }}>{formatCny(p.projectedNet)}</div>
             </div>
           ) : null}
@@ -766,7 +633,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                         animationEasing="ease-out"
                       />
                       <Line
-                        type="monotone"
+                        type="linear"
                         dataKey="projectedNet"
                         stroke="#10b981"
                         strokeWidth={3}
@@ -847,7 +714,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
                   <span style={{ width: 18, borderTop: '2px dashed #10b981' }} />
-                  当前速度
+                  预测速度
                 </span>
               </div>
               <div style={{ fontSize: 11, fontWeight: 950, color: goalPaceColor }}>

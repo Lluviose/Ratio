@@ -75,6 +75,57 @@ describe('savingsGoal', () => {
     expect(summary?.isComplete).toBe(false)
   })
 
+  it('compares current period savings against the fixed goal path increment', () => {
+    const summary = getSavingsGoalSummary(
+      {
+        ...goal,
+        targetAmount: 124000,
+        startDate: '2026-01-01',
+        startNetWorth: 100000,
+        targetDate: '2026-12-31',
+      },
+      [
+        snapshot('2026-01-01', 100000),
+        snapshot('2026-06-01', 110000),
+        snapshot('2026-06-15', 110200),
+      ],
+      { monthStartDay: 1 },
+    )
+
+    expect(summary?.currentPeriodStartDate).toBe('2026-06-01')
+    expect(summary?.currentPeriodEndDate).toBe('2026-07-01')
+    expect(summary?.currentPeriodActual).toBe(200)
+    expect(summary?.currentPeriodTarget).toBeCloseTo(1934.07)
+    expect(summary?.currentPeriodRemaining).toBeCloseTo(1734.07)
+    expect(summary?.currentPeriodDelta).toBeCloseTo(-1734.07)
+    expect(summary?.currentPeriodIsOnTrack).toBe(false)
+  })
+
+  it('does not raise the current period target when current net worth increases', () => {
+    const summaryGoal = {
+      ...goal,
+      targetAmount: 124000,
+      startDate: '2026-01-01',
+      startNetWorth: 100000,
+      targetDate: '2026-12-31',
+    }
+    const low = getSavingsGoalSummary(summaryGoal, [
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-06-01', 110000),
+      snapshot('2026-06-15', 110200),
+    ], { monthStartDay: 1 })
+    const high = getSavingsGoalSummary(summaryGoal, [
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-06-01', 110000),
+      snapshot('2026-06-15', 112000),
+    ], { monthStartDay: 1 })
+
+    expect(low?.currentPeriodTarget).toBe(high?.currentPeriodTarget)
+    expect(high?.currentPeriodRemaining).toBeCloseTo(0)
+    expect(high?.currentPeriodDelta).toBeCloseTo(65.93)
+    expect(high?.currentPeriodIsOnTrack).toBe(true)
+  })
+
   it('projects stale snapshots from today instead of the old snapshot date', () => {
     const today = todayDateKey()
     const startDate = addDaysToDateKey(today, -90)!

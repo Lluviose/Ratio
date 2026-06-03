@@ -309,11 +309,11 @@ function SavingsStatusCard(props: {
         <div className="cardInner">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本月储蓄状态</div>
+              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本期储蓄状态</div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 8 }}>当前净资产</div>
               <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}>{formatCny(latestNetWorth)}</div>
               <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
-                设置目标后，这里会显示本月需要存多少和目标节奏。
+                设置目标后，这里会显示本期还需存多少和本期进度。
               </div>
             </div>
             <button type="button" className="iconBtn" onClick={onEdit} aria-label="set savings goal">
@@ -330,46 +330,57 @@ function SavingsStatusCard(props: {
   }
 
   const progress = clampProgress(summary.progress)
-  const monthlyNeed = summary.requiredMonthly
-  const paceDeltaMonthly = summary.paceDailyDelta == null ? null : normalizeMoney(summary.paceDailyDelta * DAYS_PER_MONTH)
+  const periodRemaining = summary.currentPeriodRemaining
+  const periodDelta = summary.currentPeriodDelta
+  const periodProgressSub = summary.currentPeriodTarget == null
+    ? '等待目标路径'
+    : `已增 ${formatDelta(summary.currentPeriodActual)} / 本期目标 ${formatCny(summary.currentPeriodTarget)}`
   const paceDeltaDisplay = summary.isComplete
     ? { label: '目标状态', value: '已达成', tone: '#10b981', sub: '目标已覆盖' }
     : summary.isPastDue || summary.isDueToday
       ? { label: '目标缺口', value: formatCny(summary.remaining), tone: '#ef4444', sub: summary.isDueToday ? '今天到期' : '目标已逾期' }
-      : paceDeltaMonthly == null
-        ? { label: '目标节奏', value: '—', tone: undefined, sub: formatSummaryPaceSource(summary) }
-        : paceDeltaMonthly === 0
-          ? { label: '目标节奏', value: '按计划', tone: 'var(--text)', sub: formatSummaryPaceSource(summary) }
-          : paceDeltaMonthly > 0
-            ? { label: '高于节奏', value: `${formatDelta(paceDeltaMonthly)}/月`, tone: '#10b981', sub: formatSummaryPaceSource(summary) }
-            : { label: '落后节奏', value: `${formatDelta(paceDeltaMonthly)}/月`, tone: '#ef4444', sub: formatSummaryPaceSource(summary) }
+      : periodDelta == null
+        ? { label: '本期进度', value: '—', tone: undefined, sub: periodProgressSub }
+        : periodDelta === 0
+          ? { label: '本期进度', value: '按计划', tone: 'var(--text)', sub: periodProgressSub }
+          : periodDelta > 0
+            ? { label: '本期超出', value: formatDelta(periodDelta), tone: '#10b981', sub: periodProgressSub }
+            : { label: '本期落后', value: `还差 ${formatCny(Math.abs(periodDelta))}`, tone: '#ef4444', sub: periodProgressSub }
   const statusText = summary.isComplete
     ? '目标已达成'
     : summary.isPastDue
       ? '目标已逾期'
       : summary.isDueToday
         ? '今日到期'
-        : summary.isOnTrack === true
-          ? '跟得上目标'
-          : summary.isOnTrack === false
-            ? '低于目标节奏'
+        : summary.currentPeriodIsOnTrack === true
+          ? '本期达标'
+          : summary.currentPeriodIsOnTrack === false
+            ? '本期落后'
             : '等待更多快照'
-  const statusTone = summary.isComplete || summary.isOnTrack === true
+  const statusTone = summary.isComplete || summary.currentPeriodIsOnTrack === true
     ? '#10b981'
-    : summary.isPastDue || summary.isDueToday || summary.isOnTrack === false
+    : summary.isPastDue || summary.isDueToday || summary.currentPeriodIsOnTrack === false
       ? '#ef4444'
       : 'var(--muted-text)'
   const heroLabel = summary.isComplete
     ? '当前净资产'
-    : monthlyNeed == null
+    : periodRemaining == null
       ? '距离目标还差'
-      : '本月建议存入'
+      : periodRemaining > 0
+        ? '本期还需存入'
+        : '本期已达标'
   const heroValue = summary.isComplete
     ? formatCny(summary.currentNetWorth)
-    : monthlyNeed == null
+    : periodRemaining == null
       ? formatCny(summary.remaining)
-      : formatCny(monthlyNeed)
-  const heroSub = summary.isComplete ? '目标已覆盖' : `距离目标还差 ${formatCny(summary.remaining)}`
+      : periodRemaining > 0
+        ? formatCny(periodRemaining)
+        : formatDelta(Math.abs(periodDelta ?? 0))
+  const heroSub = summary.isComplete
+    ? '目标已覆盖'
+    : summary.currentPeriodTarget == null
+      ? `距离目标还差 ${formatCny(summary.remaining)}`
+      : `本期已增 ${formatDelta(summary.currentPeriodActual)} · 距离总目标还差 ${formatCny(summary.remaining)}`
   const progressPct = `${Math.round(progress * 1000) / 10}%`
   const projectionSub = summary.avgDailyNetChange != null ? formatSummaryPaceSource(summary) : '等待更多快照'
   const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
@@ -385,7 +396,7 @@ function SavingsStatusCard(props: {
       <motion.div
         aria-hidden="true"
         initial={{ opacity: 0 }}
-        animate={{ opacity: summary.isComplete || summary.isOnTrack === true ? 0.14 : 0.08 }}
+        animate={{ opacity: summary.isComplete || summary.currentPeriodIsOnTrack === true ? 0.14 : 0.08 }}
         transition={{ duration: 0.35 }}
         style={{
           position: 'absolute',
@@ -396,7 +407,7 @@ function SavingsStatusCard(props: {
       />
       <div className="cardInner" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本月储蓄状态</div>
+          <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本期储蓄状态</div>
           <div
             style={{
               flex: '0 0 auto',
@@ -818,7 +829,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>按目标日设月存</span>：把每月多存调到刚好覆盖目标日缺口；如果滑块上限不够，会改为拉满月存。</div>
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>模拟达成</span>：按当前组合预计到达目标的日期。</div>
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>目标日结果</span>：显示目标日当天预计多出或少多少；接近刚好时显示“刚好达标”。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及为了踩中目标日还要补的月存额。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>预测月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及为了踩中目标日还要补的月存额。</div>
           </motion.div>
         ) : null}
 
@@ -873,7 +884,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{targetGapForDisplay == null ? '目标日已过' : targetDateLabel}</div>
           </div>
           <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>月增速</div>
+            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>预测月增速</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color, overflowWrap: 'anywhere' }}>{formatDelta(plan.simulatedMonthlyPace)}</div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>原速 {formatDelta(plan.baseMonthlyPace)}</div>
           </div>
@@ -915,7 +926,7 @@ function SavingsPaceAlgorithmCard(props: {
           </div>
           <div style={{ flex: '0 0 auto', textAlign: 'right' }}>
             <div style={{ fontSize: 13, fontWeight: 950, color: summary?.avgDailyNetChange == null ? 'var(--muted-text)' : 'var(--text)' }}>{paceText}</div>
-            <div className="muted" style={{ fontSize: 10, fontWeight: 850, marginTop: 3 }}>当前基础增速</div>
+            <div className="muted" style={{ fontSize: 10, fontWeight: 850, marginTop: 3 }}>预测基础增速</div>
           </div>
         </div>
 
@@ -928,7 +939,7 @@ function SavingsPaceAlgorithmCard(props: {
           />
         </div>
 
-        <div className="muted" style={{ marginTop: 10, fontSize: 11, fontWeight: 850 }}>{paceSub}</div>
+        <div className="muted" style={{ marginTop: 10, fontSize: 11, fontWeight: 850 }}>{paceSub}，用于预计达成和目标模拟器</div>
       </div>
     </motion.div>
   )
