@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeSnapshot, type Snapshot } from './snapshots'
+import type { Account } from './accounts'
+import { normalizeSnapshot, withAccountSnapshot, type Snapshot } from './snapshots'
 
 describe('normalizeSnapshot', () => {
   it('fills missing numeric fields with 0', () => {
@@ -70,5 +71,28 @@ describe('normalizeSnapshot', () => {
       { id: 'debt', type: 'credit_card', name: 'Card', balance: 50 },
     ])
   })
-})
 
+  it('replaces the stored day snapshot with current account balances', () => {
+    const accounts: Account[] = [
+      { id: 'cash', type: 'cash', name: 'Cash', balance: 150000, updatedAt: '2026-06-03T00:00:00.000Z' },
+      { id: 'loan', type: 'loan', name: 'Loan', balance: 20000, updatedAt: '2026-06-03T00:00:00.000Z' },
+    ]
+
+    const merged = withAccountSnapshot(
+      [
+        { date: '2026-06-02', net: 90000, debt: 0, cash: 90000, invest: 0, fixed: 0, receivable: 0 },
+        { date: '2026-06-03', net: 10000, debt: 0, cash: 10000, invest: 0, fixed: 0, receivable: 0 },
+      ],
+      accounts,
+      '2026-06-03',
+    )
+
+    expect(merged).toHaveLength(2)
+    expect(merged.at(-1)).toMatchObject({
+      date: '2026-06-03',
+      net: 130000,
+      debt: 20000,
+      cash: 150000,
+    })
+  })
+})

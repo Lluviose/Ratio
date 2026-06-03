@@ -36,6 +36,7 @@ type Rect = { x: number; y: number; w: number; h: number }
 const LIST_GROUP_ORDER: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
 
 const INITIAL_HOME_PAGE_INDEX = 2
+const HOME_PAGE_ACTIVE_TOLERANCE = 0.12
 const BUBBLE_PAGE_ACTIVE_MAX = 0.8
 const BUBBLE_PHYSICS_ENABLE_MAX = 0.24
 const BUBBLE_PHYSICS_DISABLE_MAX = 0.34
@@ -528,8 +529,19 @@ export function AssetsScreen(props: {
   activeAccountId?: string | null
   skipInitialAnimation?: boolean
   addButtonTone?: string
+  onHomePageActiveChange?: (active: boolean) => void
 }) {
-  const { grouped, getIcon, onEditAccount, onAddAccount, onNavigate, activeAccountId, skipInitialAnimation = false, addButtonTone } = props
+  const {
+    grouped,
+    getIcon,
+    onEditAccount,
+    onAddAccount,
+    onNavigate,
+    activeAccountId,
+    skipInitialAnimation = false,
+    addButtonTone,
+    onHomePageActiveChange,
+  } = props
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
@@ -616,6 +628,18 @@ export function AssetsScreen(props: {
     const w = scrollerWidth || viewport.w || 1
     return v / w
   })
+
+  const reportHomePageActive = useCallback(
+    (idx: number) => {
+      onHomePageActiveChange?.(Math.abs(idx - INITIAL_HOME_PAGE_INDEX) <= HOME_PAGE_ACTIVE_TOLERANCE)
+    },
+    [onHomePageActiveChange],
+  )
+
+  useEffect(() => {
+    reportHomePageActive(scrollIdx.get())
+    return scrollIdx.on('change', reportHomePageActive)
+  }, [reportHomePageActive, scrollIdx])
 
   // Page 0: Bubble
   // Page 1: Ratio (Blocks)

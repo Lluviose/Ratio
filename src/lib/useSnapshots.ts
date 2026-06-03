@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { Account } from './accounts'
 import { useLocalStorageState } from './useLocalStorageState'
-import { buildSnapshot, normalizeSnapshot, todayDateKey, type Snapshot } from './snapshots'
+import { buildSnapshot, normalizeSnapshot, todayDateKey, upsertSnapshot, type Snapshot } from './snapshots'
 
 function coerceSnapshots(value: unknown): Snapshot[] {
   if (!Array.isArray(value)) return []
@@ -19,17 +19,7 @@ export function useSnapshots() {
     (accounts: Account[], date: string = todayDateKey()) => {
       const next = buildSnapshot(date, accounts)
       setSnapshots((prev) => {
-        const idx = prev.findIndex((s) => s.date === date)
-        if (idx >= 0) {
-          const copy = prev.slice()
-          copy[idx] = next
-          copy.sort((a, b) => a.date.localeCompare(b.date))
-          return copy
-        }
-
-        const copy = [...prev, next]
-        copy.sort((a, b) => a.date.localeCompare(b.date))
-        return copy
+        return upsertSnapshot(prev, next)
       })
     },
     [setSnapshots],

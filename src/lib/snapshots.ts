@@ -111,3 +111,19 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
     })),
   }
 }
+
+export function upsertSnapshot(snapshots: readonly Snapshot[], next: Snapshot): Snapshot[] {
+  const normalizedNext = normalizeSnapshot(next)
+  const copy = snapshots.map((s) => normalizeSnapshot(s)).filter((s) => s.date !== normalizedNext.date)
+  copy.push(normalizedNext)
+  copy.sort((a, b) => a.date.localeCompare(b.date))
+  return copy
+}
+
+export function withAccountSnapshot(
+  snapshots: readonly Snapshot[],
+  accounts: readonly Account[],
+  date: string = todayDateKey(),
+): Snapshot[] {
+  return upsertSnapshot(snapshots, buildSnapshot(date, [...accounts]))
+}

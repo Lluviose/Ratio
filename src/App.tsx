@@ -29,6 +29,7 @@ import { navSpring, screenTransition } from './lib/motionPresets'
 import { useReducedMotion } from './lib/useReducedMotion'
 import { initCloudAutoSync } from './lib/cloudSync'
 import { initTelemetry, trackTelemetry } from './lib/telemetry'
+import { withAccountSnapshot } from './lib/snapshots'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
@@ -297,6 +298,7 @@ export default function App() {
   const [detailTransitionAccountId, setDetailTransitionAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
+  const [assetsHomePageActive, setAssetsHomePageActive] = useState(true)
   const [tabDirection, setTabDirection] = useState(1)
   const [themeTransition, setThemeTransition] = useState<ThemeTransition | null>(null)
   const themeTransitionSeqRef = useRef(0)
@@ -328,6 +330,11 @@ export default function App() {
       groupCards: cards,
     }
   }, [accounts.grouped, themeColors])
+
+  const liveSnapshots = useMemo(() => {
+    if (accounts.accounts.length === 0 && snapshots.length === 0) return snapshots
+    return withAccountSnapshot(snapshots, accounts.accounts)
+  }, [accounts.accounts, snapshots])
 
   useLayoutEffect(() => {
     applyDocumentTheme(resolvedTheme, themeColors)
@@ -531,6 +538,7 @@ export default function App() {
                         onAddAccount={() => setView('addAccount')}
                         addButtonTone={themeColors.debt}
                         onNavigate={navigateTab}
+                        onHomePageActiveChange={setAssetsHomePageActive}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
                           setDetailTransitionAccountId(a.id)
@@ -554,7 +562,7 @@ export default function App() {
                     >
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="trend" />}>
-                          <TrendScreen snapshots={snapshots} colors={themeColors} />
+                          <TrendScreen snapshots={liveSnapshots} colors={themeColors} />
                         </Suspense>
                       </LazyLoadBoundary>
                     </motion.div>
@@ -572,7 +580,7 @@ export default function App() {
                     >
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="stats" />}>
-                          <StatsScreen snapshots={snapshots} colors={themeColors} />
+                          <StatsScreen snapshots={liveSnapshots} colors={themeColors} />
                         </Suspense>
                       </LazyLoadBoundary>
                     </motion.div>
@@ -605,7 +613,7 @@ export default function App() {
 
               {tab !== 'assets' ? <BottomTabNav tab={tab} onNavigate={navigateTab} /> : null}
 
-              {tab === 'assets' && view === 'main' && selectedAccountId == null ? <LazyAiAssistant /> : null}
+              {tab === 'assets' && view === 'main' && assetsHomePageActive && selectedAccountId == null ? <LazyAiAssistant /> : null}
 
               <AccountDetailSheet
                 open={Boolean(selectedAccountId)}
