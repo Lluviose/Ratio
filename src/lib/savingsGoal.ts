@@ -70,6 +70,8 @@ const SPARSE_TYPICAL_GAP_DAYS = 7
 const IRREGULAR_LONG_GAP_DAYS = 14
 const IRREGULAR_GAP_RATIO = 4
 const HIGH_VOLATILITY_RATIO = 0.9
+const MIN_SMOOTHED_MONTHLY_INTERVALS = 3
+const MIN_SMART_SMOOTHED_MONTHLY_INTERVALS = 5
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -297,7 +299,10 @@ function getMonthlySmoothedPace(sorted: Snapshot[], selected: Snapshot[], monthS
   const sampleDays = diffDateDays(first.date, last.date)
   if (sampleDays == null || sampleDays < MIN_SPARSE_PACE_DAYS) return null
 
-  const smoothedDaily = median(getMonthlyIntervalRates(monthlyWindow))
+  const rates = getMonthlyIntervalRates(monthlyWindow)
+  if (rates.length < MIN_SMOOTHED_MONTHLY_INTERVALS) return null
+
+  const smoothedDaily = median(rates)
   if (smoothedDaily == null || !Number.isFinite(smoothedDaily)) return null
 
   return {
@@ -313,7 +318,7 @@ function getMonthlySmoothedPace(sorted: Snapshot[], selected: Snapshot[], monthS
 function hasHighMonthlyVolatility(sorted: Snapshot[], selected: Snapshot[], monthStartDay: number) {
   const monthlyWindow = pickMonthlyPaceWindow(sorted, selected, monthStartDay)
   const rates = getMonthlyIntervalRates(monthlyWindow)
-  if (rates.length < 3) return false
+  if (rates.length < MIN_SMART_SMOOTHED_MONTHLY_INTERVALS) return false
 
   const center = median(rates)
   if (center == null) return false

@@ -1311,7 +1311,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     const days = diffDays(start.date, end.date)
 
-    const netPace = getNetChangePace(selected, { monthStartDay, algorithm: paceAlgorithm })
+    const netPace = getNetChangePace(selected, { monthStartDay })
 
     const growth = {
       net: safeGrowth(delta.net, start.net),
@@ -1331,7 +1331,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       growth,
       netPace,
     }
-  }, [monthStartDay, paceAlgorithm, range, snapshots])
+  }, [monthStartDay, range, snapshots])
 
   const goalSummary = useMemo(
     () => getSavingsGoalSummary(goal, snapshots, { monthStartDay, algorithm: paceAlgorithm }),

@@ -152,7 +152,30 @@ describe('savingsGoal', () => {
     expect(pace?.avgDaily).toBeCloseTo(437.79)
   })
 
+  it('requires enough month intervals for manual smoothing', () => {
+    expect(getNetChangePace([
+      snapshot('2026-01-31', 100000),
+      snapshot('2026-02-28', 120000),
+      snapshot('2026-03-31', 90000),
+    ], { algorithm: 'monthly-smoothed' })).toBeNull()
+  })
+
   it('smart mode smooths large month-to-month swings', () => {
+    const pace = getNetChangePace([
+      snapshot('2026-01-31', 100000),
+      snapshot('2026-02-28', 120000),
+      snapshot('2026-03-31', 90000),
+      snapshot('2026-04-30', 125000),
+      snapshot('2026-05-31', 130000),
+      snapshot('2026-06-30', 170000),
+      snapshot('2026-07-31', 172000),
+    ])
+
+    expect(pace?.method).toBe('monthly-smoothed')
+    expect(pace?.avgDaily).toBeCloseTo(161.29)
+  })
+
+  it('smart mode waits for more monthly history before smoothing', () => {
     const pace = getNetChangePace([
       snapshot('2026-01-31', 100000),
       snapshot('2026-02-28', 120000),
@@ -161,8 +184,8 @@ describe('savingsGoal', () => {
       snapshot('2026-05-31', 130000),
     ])
 
-    expect(pace?.method).toBe('monthly-smoothed')
-    expect(pace?.avgDaily).toBeCloseTo(437.79)
+    expect(pace?.method).toBe('monthly-close')
+    expect(pace?.avgDaily).toBe(250)
   })
 
   it('keeps short sparse samples unestimated in smart mode', () => {
