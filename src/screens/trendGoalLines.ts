@@ -14,12 +14,12 @@ export type TrendPoint = {
   dateKey: string
   dateValue?: number
   idx: number
-  net: number | null
-  debt: number | null
-  cash: number | null
-  invest: number | null
-  fixed: number | null
-  receivable: number | null
+  net: number | null | undefined
+  debt: number | null | undefined
+  cash: number | null | undefined
+  invest: number | null | undefined
+  fixed: number | null | undefined
+  receivable: number | null | undefined
   goalTarget?: number | null
   goalComparison?: number | null
   projectedBridgeNet?: number | null
@@ -59,12 +59,12 @@ function makeGoalPoint(dateKey: string, label?: string): TrendPoint {
     dateKey,
     dateValue: dateKeyToUtcDays(dateKey) ?? 0,
     idx: -1,
-    net: null,
-    debt: null,
-    cash: null,
-    invest: null,
-    fixed: null,
-    receivable: null,
+    net: undefined,
+    debt: undefined,
+    cash: undefined,
+    invest: undefined,
+    fixed: undefined,
+    receivable: undefined,
     goalTarget: null,
     goalComparison: null,
     projectedBridgeNet: null,
@@ -161,7 +161,11 @@ export function withGoalTrendLines(
     ))
     if (!anchorHasRecordedNet) {
       const lastRecordedPoint = findLastRecordedPointBefore(points, projectionAnchorDate)
-      if (lastRecordedPoint) {
+      if (
+        lastRecordedPoint &&
+        typeof lastRecordedPoint.net === 'number' &&
+        Number.isFinite(lastRecordedPoint.net)
+      ) {
         bridgeStartDate = lastRecordedPoint.dateKey
         bridgeStartNet = lastRecordedPoint.net
       }
@@ -187,7 +191,6 @@ export function withGoalTrendLines(
 
       if (bridgeValue != null) {
         point.projectedBridgeNet = bridgeValue
-        point.projectedNet = bridgeValue
       }
 
       const daysFromForecastStart = diffDateDays(forecastStartDate, point.dateKey)

@@ -164,6 +164,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const forecastArea = forecastStartValue != null && forecastEndValue != null && forecastEndValue > forecastStartValue
     ? { start: forecastStartValue, end: forecastEndValue }
     : null
+  const hasProjectionBridge = mode === 'netDebt' && data.some((point) => point.projectedBridgeNet != null)
   const showYearInData = shouldShowYearForDateKeys(data.map((point) => point.dateKey))
   const goalDateContext = goalSummary
     ? [goalSummary.startDate, goalSummary.latestDate, goalSummary.targetDate, goalSummary.projectedDate]
@@ -466,30 +467,6 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               />
               {mode === 'netDebt' ? (
                 <>
-                  <Line
-                    type="monotone"
-                    dataKey="net"
-                    stroke="var(--primary)"
-                    strokeWidth={3.75}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
-                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                    animationDuration={1500}
-                    animationEasing="ease-out"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="debt"
-                    stroke={colors.debt}
-                    strokeWidth={2.75}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    dot={false}
-                    activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
-                    animationDuration={1500}
-                    animationEasing="ease-out"
-                  />
                   {goalSummary ? (
                     <>
                       <Line
@@ -508,6 +485,20 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       />
                       <Line
                         type="linear"
+                        dataKey="projectedBridgeNet"
+                        stroke="rgba(15, 23, 42, 0.28)"
+                        strokeWidth={2}
+                        strokeDasharray="3 7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        dot={false}
+                        activeDot={false}
+                        connectNulls={false}
+                        animationDuration={700}
+                        animationEasing="ease-out"
+                      />
+                      <Line
+                        type="linear"
                         dataKey="projectedNet"
                         stroke={FORECAST_STROKE}
                         strokeWidth={3}
@@ -522,6 +513,32 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       />
                     </>
                   ) : null}
+                  <Line
+                    type="monotone"
+                    dataKey="net"
+                    stroke="var(--primary)"
+                    strokeWidth={3.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
+                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    connectNulls={false}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="debt"
+                    stroke={colors.debt}
+                    strokeWidth={2.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    dot={false}
+                    activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
+                    connectNulls={false}
+                    animationDuration={1500}
+                    animationEasing="ease-out"
+                  />
                 </>
               ) : (
                 <>
@@ -534,6 +551,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    connectNulls={false}
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
@@ -546,6 +564,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    connectNulls={false}
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
@@ -592,6 +611,12 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                   <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.42)' }} />
                   目标路径
                 </span>
+                {hasProjectionBridge ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
+                    <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.28)' }} />
+                    记录延伸
+                  </span>
+                ) : null}
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
                   <span style={{ width: 18, borderTop: `2px dashed ${FORECAST_STROKE}` }} />
                   预测速度
