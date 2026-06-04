@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
@@ -26,6 +26,7 @@ import type { ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
 import { buildSavingsSimulationPlan } from '../lib/savingsGoalSimulation'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
+import { shouldShowYearForDateKeys } from '../lib/dateSeries'
 import {
   buildCurrentSnapshotStats,
   buildStatsRangeView,
@@ -67,6 +68,16 @@ const compactTwoColumnGridStyle = {
   gap: 8,
 } satisfies CSSProperties
 
+const compactTwoColumnGridTop14Style = {
+  ...compactTwoColumnGridStyle,
+  marginTop: 14,
+} satisfies CSSProperties
+
+const compactTwoColumnGridTop12Style = {
+  ...compactTwoColumnGridStyle,
+  marginTop: 12,
+} satisfies CSSProperties
+
 const cardTitleStyle = {
   fontWeight: 950,
   fontSize: 14,
@@ -87,6 +98,56 @@ const compactMetricTileStyle = {
   padding: 10,
   background: 'var(--bg)',
 } satisfies CSSProperties
+
+const metricLabelStyle = {
+  fontSize: 11,
+  fontWeight: 900,
+  color: 'var(--muted-text)',
+  overflowWrap: 'anywhere',
+} satisfies CSSProperties
+
+const metricValueStyle = {
+  fontSize: 16,
+  fontWeight: 950,
+  marginTop: 4,
+  overflowWrap: 'anywhere',
+} satisfies CSSProperties
+
+const metricSubStyle = {
+  fontSize: 11,
+  fontWeight: 850,
+  marginTop: 4,
+  color: 'var(--muted-text)',
+  overflowWrap: 'anywhere',
+} satisfies CSSProperties
+
+const compactMetricLabelStyle = {
+  fontSize: 10,
+  fontWeight: 900,
+  color: 'var(--muted-text)',
+} satisfies CSSProperties
+
+const compactMetricValueStyle = {
+  fontSize: 14,
+  fontWeight: 950,
+  marginTop: 3,
+  overflowWrap: 'anywhere',
+} satisfies CSSProperties
+
+const compactMetricSubStyle = {
+  fontSize: 10,
+  fontWeight: 800,
+  color: 'var(--muted-text)',
+  marginTop: 3,
+} satisfies CSSProperties
+
+type MetricGridLayout = 'regular' | 'compactTop12' | 'compactTop14'
+
+const metricGridStyles = {
+  regular: twoColumnGridStyle,
+  compactTop12: compactTwoColumnGridTop12Style,
+  compactTop14: compactTwoColumnGridTop14Style,
+} satisfies Record<MetricGridLayout, CSSProperties>
 
 const cardScaleTransition = (delay: number) => ({ delay })
 
@@ -231,25 +292,6 @@ function formatGoalDate(dateKey: string | null | undefined) {
   return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-function getDateYear(dateKey: string | null | undefined) {
-  if (!dateKey) return null
-  const m = /^(\d{4})/.exec(dateKey)
-  if (!m) return null
-  const year = Number(m[1])
-  return Number.isFinite(year) ? year : null
-}
-
-function shouldShowYearForDateKeys(dateKeys: Array<string | null | undefined>) {
-  const years = new Set<number>()
-  for (const dateKey of dateKeys) {
-    const year = getDateYear(dateKey)
-    if (year != null) years.add(year)
-  }
-  if (years.size > 1) return true
-  const [year] = Array.from(years)
-  return year != null && year !== new Date().getFullYear()
-}
-
 function formatShortGoalDate(dateKey: string | null | undefined, contextDateKeys: Array<string | null | undefined> = []) {
   if (!dateKey) return '未设置'
   const d = new Date(`${dateKey}T00:00:00`)
@@ -281,18 +323,31 @@ function formatGoalInputAmount(value: number) {
   return normalized.toFixed(2).replace(/\.?0+$/, '')
 }
 
+function MetricGrid(props: {
+  children: ReactNode
+  layout?: MetricGridLayout
+}) {
+  const { children, layout = 'regular' } = props
+  return <div style={metricGridStyles[layout]}>{children}</div>
+}
+
 function MetricTile(props: {
   label: string
   value: string
   sub?: string
   valueColor?: string
+  compact?: boolean
 }) {
-  const { label, value, sub, valueColor } = props
+  const { label, value, sub, valueColor, compact = false } = props
+  const valueStyle = compact
+    ? { ...compactMetricValueStyle, color: valueColor }
+    : { ...metricValueStyle, color: valueColor ?? 'var(--text)' }
+
   return (
-    <div style={metricTileStyle}>
-      <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)', overflowWrap: 'anywhere' }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4, color: valueColor ?? 'var(--text)', overflowWrap: 'anywhere' }}>{value}</div>
-      {sub ? <div style={{ fontSize: 11, fontWeight: 850, marginTop: 4, color: 'var(--muted-text)', overflowWrap: 'anywhere' }}>{sub}</div> : null}
+    <div style={compact ? compactMetricTileStyle : metricTileStyle}>
+      <div style={compact ? compactMetricLabelStyle : metricLabelStyle}>{label}</div>
+      <div style={valueStyle}>{value}</div>
+      {sub ? <div style={compact ? compactMetricSubStyle : metricSubStyle}>{sub}</div> : null}
     </div>
   )
 }
@@ -341,10 +396,10 @@ function SavingsStatusCard(props: {
               <Target size={18} strokeWidth={2.6} />
             </button>
           </div>
-          <div style={{ ...compactTwoColumnGridStyle, marginTop: 14 }}>
+          <MetricGrid layout="compactTop14">
             <MetricTile label="当前净资产" value={formatCny(latestNetWorth)} sub="目标按净资产计算" />
             <MetricTile label="快照数量" value={`${snapshotCount}条`} sub="持续记录后会更准确" />
-          </div>
+          </MetricGrid>
         </div>
       </motion.div>
     )
@@ -561,10 +616,10 @@ function SavingsStatusCard(props: {
           </div>
         </div>
 
-        <div style={{ ...compactTwoColumnGridStyle, marginTop: 14 }}>
+        <MetricGrid layout="compactTop14">
           <MetricTile label={paceDeltaDisplay.label} value={paceDeltaDisplay.value} valueColor={paceDeltaDisplay.tone} sub={paceDeltaDisplay.sub} />
           <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate, goalDateContext) : '暂无预测'} sub={projectionSub} />
-        </div>
+        </MetricGrid>
       </div>
     </motion.div>
   )
@@ -920,34 +975,30 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
-          <div style={compactMetricTileStyle}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>模拟达成</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: shift.tone, overflowWrap: 'anywhere' }}>
-              {plan.simulatedDate ? formatShortGoalDate(plan.simulatedDate, dateContext) : '暂不可达'}
-            </div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
-          </div>
-          <div style={compactMetricTileStyle}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>
-              {targetGapForDisplay == null || targetGapForDisplay === 0 ? '目标日结果' : targetGapForDisplay > 0 ? '目标日余量' : '目标日缺口'}
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: targetGapTone, overflowWrap: 'anywhere' }}>
-              {targetGapForDisplay == null ? '—' : targetGapForDisplay === 0 ? '刚好达标' : formatAbsCny(targetGapForDisplay)}
-            </div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{targetGapForDisplay == null ? '目标日已过' : targetDateLabel}</div>
-          </div>
-          <div style={compactMetricTileStyle}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>预测月增速</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color, overflowWrap: 'anywhere' }}>{formatDelta(plan.simulatedMonthlyPace)}</div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>原速 {formatDelta(plan.baseMonthlyPace)}</div>
-          </div>
-          <div style={compactMetricTileStyle}>
-            <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{extraNeededLabel}</div>
-            <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: extraNeededTone, overflowWrap: 'anywhere' }}>{extraNeededText}</div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{extraNeededSub}</div>
-          </div>
-        </div>
+        <MetricGrid layout="compactTop12">
+          <MetricTile
+            compact
+            label="模拟达成"
+            value={plan.simulatedDate ? formatShortGoalDate(plan.simulatedDate, dateContext) : '暂不可达'}
+            valueColor={shift.tone}
+            sub={shift.text}
+          />
+          <MetricTile
+            compact
+            label={targetGapForDisplay == null || targetGapForDisplay === 0 ? '目标日结果' : targetGapForDisplay > 0 ? '目标日余量' : '目标日缺口'}
+            value={targetGapForDisplay == null ? '—' : targetGapForDisplay === 0 ? '刚好达标' : formatAbsCny(targetGapForDisplay)}
+            valueColor={targetGapTone}
+            sub={targetGapForDisplay == null ? '目标日已过' : targetDateLabel}
+          />
+          <MetricTile
+            compact
+            label="预测月增速"
+            value={formatDelta(plan.simulatedMonthlyPace)}
+            valueColor={color}
+            sub={`原速 ${formatDelta(plan.baseMonthlyPace)}`}
+          />
+          <MetricTile compact label={extraNeededLabel} value={extraNeededText} valueColor={extraNeededTone} sub={extraNeededSub} />
+        </MetricGrid>
       </div>
     </motion.div>
   )
@@ -1422,12 +1473,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               >
                 <div className="cardInner">
                   <div style={cardTitleStyle}>资产负债概览</div>
-                  <div style={twoColumnGridStyle}>
+                  <MetricGrid>
                     <MetricTile label="总资产" value={formatCny(currentStats.assets)} />
                     <MetricTile label="净资产" value={formatCny(currentStats.snapshot.net)} />
                     <MetricTile label="负债" value={formatCny(currentStats.snapshot.debt)} valueColor={debtAmountTone(currentStats.snapshot.debt)} />
                     <MetricTile label="资产负债率" value={formatPct(currentStats.ratios.debtToAssets)} />
-                  </div>
+                  </MetricGrid>
                 </div>
               </motion.div>
 
@@ -1439,7 +1490,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               >
                 <div className="cardInner">
                   <div style={cardTitleStyle}>流动性与杠杆</div>
-                  <div style={twoColumnGridStyle}>
+                  <MetricGrid>
                     <MetricTile label="流动资产" value={formatCny(currentStats.currentAssets)} />
                     <MetricTile label="净流动资产" value={formatCny(currentStats.netLiquid)} />
                     <MetricTile label="流动比" value={formatCoverageRatio(currentStats.coverage.current, currentStats.snapshot.debt)} sub={formatCoverageSub('流动资产/负债', currentStats.snapshot.debt)} />
@@ -1448,7 +1499,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     <MetricTile label="负债/净资产" value={formatX(currentStats.ratios.debtToNet)} />
                     <MetricTile label="净资产率" value={formatPct(currentStats.ratios.netToAssets)} />
                     <MetricTile label="权益乘数" value={formatX(currentStats.ratios.equityMultiplier)} />
-                  </div>
+                  </MetricGrid>
                 </div>
               </motion.div>
             </>
@@ -1505,7 +1556,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                   <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
                     基于快照差值（含流量/估值波动）
                   </div>
-                  <div style={twoColumnGridStyle}>
+                  <MetricGrid>
                     <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
                     <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
                     <MetricTile label="负债" value={formatDelta(view.delta.debt)} valueColor={debtDeltaTone(view.delta.debt)} />
@@ -1518,7 +1569,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       value={`${view.selectedCount}条`}
                       sub={view.rangeFallback ? '所选区间不足 2 条，已显示全部' : view.days != null ? `跨度 ${view.days} 天` : undefined}
                     />
-                  </div>
+                  </MetricGrid>
                 </div>
               </motion.div>
 
@@ -1530,12 +1581,12 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               >
                 <div className="cardInner">
                   <div style={cardTitleStyle}>增长与节奏</div>
-                  <div style={twoColumnGridStyle}>
+                  <MetricGrid>
                     <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
                     <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
                     <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} valueColor={debtDeltaTone(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
                     <MetricTile label="日均净资产变化" value={view.growth.avgDailyNet != null ? formatDelta(view.growth.avgDailyNet) : '—'} sub={formatNetChangePaceSource(view.netPace)} />
-                  </div>
+                  </MetricGrid>
                 </div>
               </motion.div>
             </>

@@ -9,6 +9,7 @@ import { formatCny } from '../lib/format'
 import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
+import { shouldShowYearForDateKeys } from '../lib/dateSeries'
 import {
   SAVINGS_GOAL_KEY,
   SAVINGS_PACE_ALGORITHM_KEY,
@@ -23,7 +24,7 @@ import {
 } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 import { withGoalTrendLines, type TrendPoint } from './trendGoalLines'
-import { buildTrendChartDerived, buildTrendView, formatLabel, RECENT_SNAPSHOT_LIMIT, shouldShowYearForDateKeys, type RangeId } from './trendView'
+import { buildTrendChartDerived, buildTrendView, formatLabel, RECENT_SNAPSHOT_LIMIT, type RangeId } from './trendView'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type TrendMode = 'netDebt' | 'cashInvest'

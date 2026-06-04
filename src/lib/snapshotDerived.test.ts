@@ -3,7 +3,6 @@ import {
   buildCurrentSnapshotStats,
   buildStatsRangeView,
   getLatestSnapshot,
-  getMaxDateValue,
   safeGrowth,
   safeRatio,
   sortSnapshotsByDate,
@@ -100,12 +99,4 @@ describe('snapshotDerived', () => {
     expect(safeGrowth(10, 100)).toBe(0.1)
   })
 
-  it('finds the max chart date value from explicit values and date keys', () => {
-    expect(getMaxDateValue([
-      { dateKey: '2026-01-01', dateValue: 10 },
-      { dateKey: '2026-02-01' },
-      { dateKey: 'not-a-date' },
-    ])).toBeGreaterThan(10)
-    expect(getMaxDateValue([{ dateKey: 'not-a-date' }])).toBeNull()
-  })
 })

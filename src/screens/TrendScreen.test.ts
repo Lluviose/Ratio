@@ -51,6 +51,25 @@ describe('buildTrendView', () => {
     vi.useRealTimers()
   })
 
+  it('sorts monthly snapshots before sampling', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+    const view = buildTrendView([
+      snapshot('2026-06-05', 120000),
+      snapshot('2026-04-07', 100000),
+      snapshot('2026-05-07', 110000),
+    ], '6m', 8)
+
+    expect(view.points.map((point) => point.dateKey)).toEqual([
+      '2026-04-07',
+      '2026-05-07',
+      '2026-06-05',
+    ])
+
+    vi.useRealTimers()
+  })
+
   it('groups monthly trend points by the configured month start day', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))

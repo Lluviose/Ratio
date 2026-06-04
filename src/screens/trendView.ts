@@ -1,5 +1,5 @@
 import { dateKeyToUtcDays, diffDateDays } from '../lib/savingsGoal'
-import { getMaxDateValue } from '../lib/snapshotDerived'
+import { getMaxDateValue, shouldShowYearForDateKeys } from '../lib/dateSeries'
 import { formatMonthKeyLabel, monthKeyForDateKey } from '../lib/monthStart'
 import type { Snapshot } from '../lib/snapshots'
 import type { FutureCadence, TrendPoint } from './trendGoalLines'
@@ -59,25 +59,6 @@ function toDateKey(d: Date) {
   return `${y}-${m}-${day}`
 }
 
-function getDateYear(dateKey: string | null | undefined) {
-  if (!dateKey) return null
-  const m = /^(\d{4})/.exec(dateKey)
-  if (!m) return null
-  const year = Number(m[1])
-  return Number.isFinite(year) ? year : null
-}
-
-export function shouldShowYearForDateKeys(dateKeys: Array<string | null | undefined>) {
-  const years = new Set<number>()
-  for (const dateKey of dateKeys) {
-    const year = getDateYear(dateKey)
-    if (year != null) years.add(year)
-  }
-  if (years.size > 1) return true
-  const [year] = Array.from(years)
-  return year != null && year !== new Date().getFullYear()
-}
-
 export function formatLabel(date: string, options?: { showYear?: boolean }) {
   const d = new Date(`${date}T00:00:00`)
   if (Number.isNaN(d.getTime())) return date
@@ -117,11 +98,10 @@ function getMonthlyRangeStartKey(range: Extract<RangeId, '6m' | '1y'>, monthStar
   return shiftMonthKey(anchorMonthKey, -(monthCount - 1))
 }
 
-function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDay: number, startMonthKey?: string) {
-  const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
+function pickMonthlyLastFromSorted(snapshots: readonly Snapshot[], monthCount: number, monthStartDay: number, startMonthKey?: string) {
   const byMonth = new Map<string, Snapshot>()
 
-  for (const s of sorted) {
+  for (const s of snapshots) {
     const monthKey = monthKeyForDateKey(s.date, monthStartDay)
     if (startMonthKey && monthKey < startMonthKey) continue
     byMonth.set(monthKey, s)
@@ -221,13 +201,13 @@ export function buildTrendView(snapshots: Snapshot[], range: RangeId, monthStart
     const cutoffKey = getRangeCutoffKey(range)
     entries = sorted.filter((s) => s.date >= cutoffKey).map((snapshot) => ({ snapshot }))
   } else if (range === '6m') {
-    entries = pickMonthlyLast(sorted, 6, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
+    entries = pickMonthlyLastFromSorted(sorted, 6, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
       .map((x) => ({ snapshot: x.snapshot, monthKey: x.monthKey }))
     entries = withLatestSnapshotEntry(entries, latest)
   } else if (range === 'custom') {
     entries = sorted.slice(Math.max(0, sorted.length - RECENT_SNAPSHOT_LIMIT)).map((snapshot) => ({ snapshot }))
   } else {
-    entries = pickMonthlyLast(sorted, 12, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
+    entries = pickMonthlyLastFromSorted(sorted, 12, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
       .map((x) => ({ snapshot: x.snapshot, monthKey: x.monthKey }))
     entries = withLatestSnapshotEntry(entries, latest)
   }

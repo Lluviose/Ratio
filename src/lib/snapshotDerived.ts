@@ -1,5 +1,5 @@
 import { addMoney, subtractMoney } from './money'
-import { dateKeyToUtcDays, diffDateDays, getNetChangePace, toDateKey, type NetChangePace } from './savingsGoal'
+import { diffDateDays, getNetChangePace, toDateKey, type NetChangePace } from './savingsGoal'
 import type { Snapshot } from './snapshots'
 
 export type StatsRangeId = '5w' | '6m' | '1y' | '4y'
@@ -161,12 +161,4 @@ export function buildCurrentSnapshotStats(snapshot: Snapshot | null): CurrentSna
       cash: safeRatio(snapshot.cash, snapshot.debt),
     },
   }
-}
-
-export function getMaxDateValue(points: Array<{ dateKey: string; dateValue?: number | null }>): number | null {
-  return points.reduce<number | null>((max, point) => {
-    const value = typeof point.dateValue === 'number' ? point.dateValue : dateKeyToUtcDays(point.dateKey)
-    if (value == null) return max
-    return max == null ? value : Math.max(max, value)
-  }, null)
 }
