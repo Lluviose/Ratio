@@ -180,6 +180,10 @@ export function getActiveSavingsGoalDate(latestDate: string | null) {
   return latestDate && latestDate > today ? latestDate : today
 }
 
+export function getSavingsProjectionStartDate(latestDate: string | null) {
+  return latestDate ?? getActiveSavingsGoalDate(latestDate)
+}
+
 function sortValidSnapshots(snapshots: Snapshot[]) {
   return snapshots
     .filter((s) => dateKeyToUtcDays(s.date) != null)
@@ -476,6 +480,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const currentNetWorth = latest ? normalizeMoney(latest.net) : normalizeMoney(goal.startNetWorth)
   const latestDate = latest?.date ?? null
   const activeDate = getActiveSavingsGoalDate(latestDate)
+  const projectionStartDate = getSavingsProjectionStartDate(latestDate)
   const calendarPeriodStartDate = getPeriodStartDate(activeDate, monthStartDay)
   const currentPeriodStartDate = goal.startDate <= activeDate ? maxDateKey(calendarPeriodStartDate, goal.startDate) : calendarPeriodStartDate
   const nextPeriodStartDate = getNextPeriodStartDate(calendarPeriodStartDate, monthStartDay)
@@ -517,12 +522,12 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   let projectedDate: string | null = null
   if (!isComplete && latestDate && avgDailyNetChange != null && avgDailyNetChange > 0) {
     const daysToGoal = Math.ceil(remaining / avgDailyNetChange)
-    projectedDate = addDaysToDateKey(activeDate, daysToGoal)
+    projectedDate = addDaysToDateKey(projectionStartDate, daysToGoal)
   }
 
   let projectedNetAtTargetDate: number | null = null
   if (latestDate && avgDailyNetChange != null) {
-    const daysToTarget = diffDateDays(activeDate, goal.targetDate)
+    const daysToTarget = diffDateDays(projectionStartDate, goal.targetDate)
     if (daysToTarget != null && daysToTarget >= 0) {
       projectedNetAtTargetDate = normalizeMoney(currentNetWorth + avgDailyNetChange * daysToTarget)
     }

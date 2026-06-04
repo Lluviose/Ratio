@@ -5,6 +5,7 @@ import {
   getActiveSavingsGoalDate,
   getGoalComparisonValue,
   getLinearGoalValue,
+  getSavingsProjectionStartDate,
   type SavingsGoal,
   type SavingsGoalSummary,
 } from '../lib/savingsGoal'
@@ -139,7 +140,10 @@ export function withGoalTrendLines(
     if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label ?? labelForDate(dateKey)))
   }
 
-  const forecastStartDate = getActiveSavingsGoalDate(summary.latestDate)
+  const projectionStartDate = getSavingsProjectionStartDate(summary.latestDate)
+  const forecastStartDate = projectionStartDate >= firstDate
+    ? projectionStartDate
+    : getActiveSavingsGoalDate(summary.latestDate)
   const targetTrendEnd = getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence)
 
   ensurePoint(targetTrendEnd, targetTrendEnd === goal.targetDate ? '目标' : '展望')

@@ -8,14 +8,13 @@ import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
   SAVINGS_PACE_ALGORITHM_KEY,
-  addDaysToDateKey,
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
   defaultGoalDate,
   diffDateDays,
-  getActiveSavingsGoalDate,
   getNetChangePace,
   getSavingsGoalSummary,
+  getSavingsProjectionStartDate,
   isDateKey,
   todayDateKey,
   type NetChangePace,
@@ -26,6 +25,7 @@ import {
 import { DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY, clampMonthStartDay } from '../lib/monthStart'
 import type { ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
+import { buildSavingsSimulationPlan } from '../lib/savingsGoalSimulation'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type RangeId = '5w' | '6m' | '1y' | '4y'
@@ -713,62 +713,8 @@ function SavingsSliderControl(props: {
   )
 }
 
-type SavingsSimulationPlan = {
-  baseDate: string
-  baseDaily: number
-  simulatedDaily: number
-  baseMonthlyPace: number
-  simulatedMonthlyPace: number
-  remainingAfterOneTime: number
-  simulatedDate: string | null
-  daysToTarget: number | null
-  simulatedNetAtTarget: number | null
-  targetGap: number | null
-  extraMonthlyNeededForTarget: number | null
-}
-
-function getActiveGoalDate(summary: SavingsGoalSummary) {
-  return getActiveSavingsGoalDate(summary.latestDate)
-}
-
-function buildSavingsSimulationPlan(summary: SavingsGoalSummary, monthlyExtra: number, oneTime: number): SavingsSimulationPlan {
-  const baseDate = getActiveGoalDate(summary)
-  const baseDaily = normalizeMoney(summary.avgDailyNetChange ?? 0)
-  const simulatedDaily = normalizeMoney(baseDaily + monthlyExtra / DAYS_PER_MONTH)
-  const baseMonthlyPace = normalizeMoney(baseDaily * DAYS_PER_MONTH)
-  const simulatedMonthlyPace = normalizeMoney(simulatedDaily * DAYS_PER_MONTH)
-  const remainingAfterOneTime = Math.max(0, normalizeMoney(summary.targetAmount - summary.currentNetWorth - oneTime))
-  const simulatedDate = remainingAfterOneTime <= 0
-    ? baseDate
-    : simulatedDaily > 0
-      ? addDaysToDateKey(baseDate, Math.ceil(remainingAfterOneTime / simulatedDaily))
-      : null
-  const daysToTarget = diffDateDays(baseDate, summary.targetDate)
-  const simulatedNetAtTarget = daysToTarget == null || daysToTarget < 0
-    ? null
-    : normalizeMoney(summary.currentNetWorth + oneTime + simulatedDaily * daysToTarget)
-  const targetGap = simulatedNetAtTarget == null ? null : normalizeMoney(simulatedNetAtTarget - summary.targetAmount)
-  const extraMonthlyNeededForTarget = targetGap == null
-    ? null
-    : targetGap >= 0
-      ? 0
-      : daysToTarget != null && daysToTarget > 0
-        ? normalizeMoney((Math.abs(targetGap) / daysToTarget) * DAYS_PER_MONTH)
-        : null
-
-  return {
-    baseDate,
-    baseDaily,
-    simulatedDaily,
-    baseMonthlyPace,
-    simulatedMonthlyPace,
-    remainingAfterOneTime,
-    simulatedDate,
-    daysToTarget,
-    simulatedNetAtTarget,
-    targetGap,
-    extraMonthlyNeededForTarget,
-  }
+function getProjectionGoalDate(summary: SavingsGoalSummary) {
+  return getSavingsProjectionStartDate(summary.latestDate)
 }
 
 function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: string }) {
@@ -784,7 +730,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
 
   if (summary.isComplete) return null
 
-  const baseDate = getActiveGoalDate(summary)
+  const baseDate = getProjectionGoalDate(summary)
   const baseDaily = normalizeMoney(summary.avgDailyNetChange ?? 0)
   const daysToTarget = diffDateDays(baseDate, summary.targetDate)
   const baseTargetShortfall = daysToTarget != null && daysToTarget > 0

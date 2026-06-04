@@ -15,8 +15,8 @@ import {
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
   dateKeyToUtcDays,
-  getActiveSavingsGoalDate,
   getSavingsGoalSummary,
+  getSavingsProjectionStartDate,
   type SavingsGoal,
   type SavingsGoalSummary,
   type SavingsPaceAlgorithm,
@@ -151,7 +151,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   )
   const data = mode === 'netDebt' ? goalTrendPoints : view.points
   const forecastStartDate = mode === 'netDebt' && goalSummary?.avgDailyNetChange != null
-    ? getActiveSavingsGoalDate(goalSummary.latestDate)
+    ? getSavingsProjectionStartDate(goalSummary.latestDate)
     : null
   const forecastStartValue = forecastStartDate ? dateKeyToUtcDays(forecastStartDate) : null
   const forecastEndValue = forecastStartValue == null
@@ -497,20 +497,6 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                         animationDuration={700}
                         animationEasing="ease-out"
                       />
-                      <Line
-                        type="linear"
-                        dataKey="projectedNet"
-                        stroke={FORECAST_STROKE}
-                        strokeWidth={3}
-                        strokeDasharray="7 8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        dot={false}
-                        activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff', fill: FORECAST_STROKE }}
-                        connectNulls={false}
-                        animationDuration={900}
-                        animationEasing="ease-out"
-                      />
                     </>
                   ) : null}
                   <Line
@@ -539,6 +525,22 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
+                  {goalSummary ? (
+                    <Line
+                      type="linear"
+                      dataKey="projectedNet"
+                      stroke={FORECAST_STROKE}
+                      strokeWidth={3}
+                      strokeDasharray="7 8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff', fill: FORECAST_STROKE }}
+                      connectNulls={false}
+                      animationDuration={900}
+                      animationEasing="ease-out"
+                    />
+                  ) : null}
                 </>
               ) : (
                 <>

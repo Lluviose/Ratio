@@ -108,15 +108,17 @@ describe('withGoalTrendLines', () => {
     ], goal, summary, cadence)
 
     const latestPoint = points.find((point) => point.dateKey === '2026-05-01')
-    const forecastStartPoint = points.find((point) => point.dateKey === '2026-06-01')
+    const firstFuturePoint = points.find((point) => point.dateKey > '2026-05-01' && point.projectedNet != null)
 
-    expect(latestPoint?.projectedBridgeNet).toBe(120000)
-    expect(latestPoint?.projectedNet).toBeNull()
-    expect(forecastStartPoint?.net).toBeUndefined()
-    expect(forecastStartPoint?.debt).toBeUndefined()
-    expect(forecastStartPoint?.projectedBridgeNet).toBe(120000)
-    expect(forecastStartPoint?.projectedNet).toBe(120000)
-    expect(points.some((point) => point.projectedNet != null && point.dateKey > '2026-06-01')).toBe(true)
+    // 预测线直接从最新记录点出发，无需bridge
+    expect(latestPoint?.projectedBridgeNet).toBeNull()
+    expect(latestPoint?.projectedNet).toBe(120000)
+    // 第一个未来检查点无真实记录数据
+    expect(firstFuturePoint?.net).toBeUndefined()
+    expect(firstFuturePoint?.debt).toBeUndefined()
+    expect(firstFuturePoint?.projectedBridgeNet).toBeNull()
+    expect(firstFuturePoint?.projectedNet).toBe(150000) // 120000 + 1000*30
+    expect(points.some((point) => point.projectedNet != null && point.dateKey > '2026-05-01')).toBe(true)
 
     vi.useRealTimers()
   })

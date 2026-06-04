@@ -8,6 +8,7 @@ import {
   getLinearGoalValue,
   getNetChangePace,
   getSavingsGoalSummary,
+  getSavingsProjectionStartDate,
   todayDateKey,
   type SavingsGoal,
 } from './savingsGoal'
@@ -174,7 +175,7 @@ describe('savingsGoal', () => {
     expect(summary?.currentPeriodIsOnTrack).toBe(true)
   })
 
-  it('projects stale snapshots from today instead of the old snapshot date', () => {
+  it('projects from the latest snapshot date instead of today', () => {
     const today = todayDateKey()
     const startDate = addDaysToDateKey(today, -90)!
     const latestDate = addDaysToDateKey(today, -60)!
@@ -186,7 +187,15 @@ describe('savingsGoal', () => {
     ])
 
     expect(summary?.avgDailyNetChange).toBe(1000)
-    expect(summary?.projectedDate).toBe(addDaysToDateKey(today, 70))
+    expect(summary?.projectedDate).toBe(addDaysToDateKey(latestDate, 70))
+  })
+
+  it('uses the latest snapshot as the shared projection start date', () => {
+    const today = todayDateKey()
+    const latestDate = addDaysToDateKey(today, -60)!
+
+    expect(getSavingsProjectionStartDate(latestDate)).toBe(latestDate)
+    expect(getSavingsProjectionStartDate(null)).toBe(today)
   })
 
   it('does not turn a short concentrated update into a daily pace', () => {
