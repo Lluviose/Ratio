@@ -508,7 +508,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinejoin="round"
                     dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                    connectNulls={false}
+                    connectNulls={true}
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
@@ -521,7 +521,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
-                    connectNulls={false}
+                    connectNulls={true}
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
@@ -553,7 +553,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                    connectNulls={false}
+                    connectNulls={true}
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />
@@ -566,7 +566,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
-                    connectNulls={false}
+                    connectNulls={true}
                     animationDuration={1500}
                     animationEasing="ease-out"
                   />

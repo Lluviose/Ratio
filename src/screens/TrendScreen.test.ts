@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withGoalTrendLines } from './trendGoalLines'
-import { buildTrendView } from './trendView'
-import type { SavingsGoal, SavingsGoalSummary } from '../lib/savingsGoal'
+import { buildTrendView, type RangeId } from './trendView'
+import { getSavingsGoalSummary, type SavingsGoal, type SavingsGoalSummary } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 
 const goal: SavingsGoal = {
@@ -50,6 +50,37 @@ describe('buildTrendView', () => {
 
     vi.useRealTimers()
   })
+
+  it.each(['30d', '6m', '1y'] satisfies RangeId[])(
+    'keeps real records around a synthetic goal start in %s data',
+    (range) => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+      const snapshots = [
+        snapshot('2026-04-07', 100000),
+        snapshot('2026-05-07', 110000),
+        snapshot('2026-06-05', 120000),
+      ]
+      const goalStartingAfterClose = {
+        ...goal,
+        startDate: '2026-05-08',
+        startNetWorth: 110000,
+      }
+      const view = buildTrendView(snapshots, range, 8)
+      const summary = getSavingsGoalSummary(goalStartingAfterClose, snapshots, { monthStartDay: 8 })
+      const points = withGoalTrendLines(view.points, goalStartingAfterClose, summary, view.futureCadence)
+      const dates = points.map((point) => point.dateKey)
+
+      expect(points.find((point) => point.dateKey === '2026-05-07')?.net).toBe(110000)
+      expect(points.find((point) => point.dateKey === '2026-05-08')?.net).toBeUndefined()
+      expect(points.find((point) => point.dateKey === '2026-06-05')?.net).toBe(120000)
+      expect(dates.indexOf('2026-05-07')).toBeLessThan(dates.indexOf('2026-05-08'))
+      expect(dates.indexOf('2026-05-08')).toBeLessThan(dates.indexOf('2026-06-05'))
+
+      vi.useRealTimers()
+    },
+  )
 })
 
 describe('withGoalTrendLines', () => {
