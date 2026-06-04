@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 import { motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { PillTabs } from '../components/PillTabs'
@@ -14,6 +14,8 @@ import {
   SAVINGS_PACE_ALGORITHM_KEY,
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
+  dateKeyToUtcDays,
+  getActiveSavingsGoalDate,
   getSavingsGoalSummary,
   type SavingsGoal,
   type SavingsGoalSummary,
@@ -26,6 +28,8 @@ import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type TrendMode = 'netDebt' | 'cashInvest'
 const DAYS_PER_MONTH = 30.4375
+const CHART_HEIGHT = 252
+const FORECAST_STROKE = '#059669'
 
 function toDateKey(d: Date) {
   const y = d.getFullYear()
@@ -146,6 +150,20 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     [goal, goalSummary, view.futureCadence, view.points, view.showYear],
   )
   const data = mode === 'netDebt' ? goalTrendPoints : view.points
+  const forecastStartDate = mode === 'netDebt' && goalSummary?.avgDailyNetChange != null
+    ? getActiveSavingsGoalDate(goalSummary.latestDate)
+    : null
+  const forecastStartValue = forecastStartDate ? dateKeyToUtcDays(forecastStartDate) : null
+  const forecastEndValue = forecastStartValue == null
+    ? null
+    : data.reduce<number | null>((max, point) => {
+        const value = typeof point.dateValue === 'number' ? point.dateValue : dateKeyToUtcDays(point.dateKey)
+        if (value == null) return max
+        return max == null ? value : Math.max(max, value)
+      }, null)
+  const forecastArea = forecastStartValue != null && forecastEndValue != null && forecastEndValue > forecastStartValue
+    ? { start: forecastStartValue, end: forecastEndValue }
+    : null
   const showYearInData = shouldShowYearForDateKeys(data.map((point) => point.dateKey))
   const goalDateContext = goalSummary
     ? [goalSummary.startDate, goalSummary.latestDate, goalSummary.targetDate, goalSummary.projectedDate]
@@ -193,6 +211,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       typeof p.fixed === 'number' &&
       typeof p.receivable === 'number' &&
       typeof p.debt === 'number'
+    const projectedNetForDetail = forecastStartDate && p.dateKey < forecastStartDate ? null : p.projectedNet
     const goalReferenceAtPoint = p.goalComparison ?? p.goalTarget
     const targetDeltaAtPoint = typeof p.net === 'number' && goalReferenceAtPoint != null ? p.net - goalReferenceAtPoint : null
     const targetDeltaDisplay = getGoalDeltaDisplay(targetDeltaAtPoint)
@@ -269,7 +288,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     ) : null
 
     const goalPanel =
-      mode === 'netDebt' && (p.goalTarget != null || p.goalComparison != null || p.projectedNet != null) ? (
+      mode === 'netDebt' && (p.goalTarget != null || p.goalComparison != null || projectedNetForDetail != null) ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
           <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>储蓄路径</div>
@@ -285,10 +304,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalComparison)}</div>
             </div>
           ) : null}
-          {p.projectedNet != null ? (
+          {projectedNetForDetail != null ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>预测速度</div>
-              <div style={{ color: '#10b981' }}>{formatCny(p.projectedNet)}</div>
+              <div style={{ color: FORECAST_STROKE }}>{formatCny(projectedNetForDetail)}</div>
             </div>
           ) : null}
           {targetDeltaAtPoint != null ? (
@@ -400,7 +419,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         <motion.div
           ref={chartRef}
           style={{
-            height: 240,
+            height: CHART_HEIGHT,
             marginTop: 24,
             position: 'relative',
             zIndex: 1,
@@ -415,7 +434,14 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
         >
           {chartWidth > 0 && data.length > 0 ? (
-            <LineChart width={chartWidth} height={240} data={data} margin={{ top: 10, right: 10, bottom: 0, left: -6 }} onClick={handleChartClick}>
+            <LineChart width={chartWidth} height={CHART_HEIGHT} data={data} margin={{ top: 12, right: 10, bottom: 2, left: -6 }} onClick={handleChartClick}>
+              <CartesianGrid vertical={false} stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="3 8" />
+              {forecastArea ? (
+                <ReferenceArea x1={forecastArea.start} x2={forecastArea.end} fill={FORECAST_STROKE} fillOpacity={0.045} strokeOpacity={0} />
+              ) : null}
+              {forecastStartValue != null ? (
+                <ReferenceLine x={forecastStartValue} stroke="rgba(5, 150, 105, 0.36)" strokeWidth={1.5} strokeDasharray="4 7" />
+              ) : null}
               <XAxis
                 dataKey="dateValue"
                 type="number"
@@ -444,7 +470,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     type="monotone"
                     dataKey="net"
                     stroke="var(--primary)"
-                    strokeWidth={4}
+                    strokeWidth={3.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
                     animationDuration={1500}
@@ -454,7 +482,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     type="monotone"
                     dataKey="debt"
                     stroke={colors.debt}
-                    strokeWidth={3}
+                    strokeWidth={2.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
                     animationDuration={1500}
@@ -466,8 +496,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                         type="monotone"
                         dataKey="goalComparison"
                         stroke="rgba(15, 23, 42, 0.42)"
-                        strokeWidth={2.5}
-                        strokeDasharray="7 7"
+                        strokeWidth={2.25}
+                        strokeDasharray="6 7"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                         dot={false}
                         activeDot={false}
                         connectNulls={false}
@@ -476,24 +508,14 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       />
                       <Line
                         type="linear"
-                        dataKey="projectedBridgeNet"
-                        stroke="#10b981"
-                        strokeWidth={2}
-                        strokeDasharray="4 5"
-                        dot={false}
-                        activeDot={false}
-                        connectNulls={false}
-                        animationDuration={700}
-                        animationEasing="ease-out"
-                      />
-                      <Line
-                        type="linear"
                         dataKey="projectedNet"
-                        stroke="#10b981"
+                        stroke={FORECAST_STROKE}
                         strokeWidth={3}
-                        strokeDasharray="2 7"
+                        strokeDasharray="7 8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                         dot={false}
-                        activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
+                        activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff', fill: FORECAST_STROKE }}
                         connectNulls={false}
                         animationDuration={900}
                         animationEasing="ease-out"
@@ -507,7 +529,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     type="monotone"
                     dataKey="cash"
                     stroke={colors.liquid}
-                    strokeWidth={4}
+                    strokeWidth={3.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
                     animationDuration={1500}
@@ -517,7 +541,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     type="monotone"
                     dataKey="invest"
                     stroke={colors.invest}
-                    strokeWidth={4}
+                    strokeWidth={3.75}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     dot={false}
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
                     animationDuration={1500}
@@ -567,7 +593,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                   目标路径
                 </span>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
-                  <span style={{ width: 18, borderTop: '2px dashed #10b981' }} />
+                  <span style={{ width: 18, borderTop: `2px dashed ${FORECAST_STROKE}` }} />
                   预测速度
                 </span>
               </div>

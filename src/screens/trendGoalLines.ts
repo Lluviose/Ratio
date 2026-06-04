@@ -178,19 +178,22 @@ export function withGoalTrendLines(
     point.goalComparison = point.dateKey >= goal.startDate ? getGoalComparisonValue(goal, point.dateKey) : null
 
     if (projectionEnd && projectionAnchorDate && summary.avgDailyNetChange != null) {
+      let bridgeValue: number | null = null
       if (bridgeStartDate && bridgeStartNet != null && point.dateKey >= bridgeStartDate && point.dateKey <= projectionAnchorDate) {
-        point.projectedBridgeNet = interpolateValue(bridgeStartNet, summary.currentNetWorth, bridgeStartDate, projectionAnchorDate, point.dateKey)
-      } else if (point.dateKey >= projectionAnchorDate && point.dateKey <= forecastStartDate) {
-        point.projectedBridgeNet = summary.currentNetWorth
+        bridgeValue = interpolateValue(bridgeStartNet, summary.currentNetWorth, bridgeStartDate, projectionAnchorDate, point.dateKey)
+      } else if (projectionAnchorDate < forecastStartDate && point.dateKey >= projectionAnchorDate && point.dateKey <= forecastStartDate) {
+        bridgeValue = summary.currentNetWorth
+      }
+
+      if (bridgeValue != null) {
+        point.projectedBridgeNet = bridgeValue
+        point.projectedNet = bridgeValue
       }
 
       const daysFromForecastStart = diffDateDays(forecastStartDate, point.dateKey)
       if (daysFromForecastStart != null && point.dateKey <= projectionEnd) {
         if (daysFromForecastStart >= 0) {
           point.projectedNet = summary.currentNetWorth + summary.avgDailyNetChange * daysFromForecastStart
-        }
-        if (point.dateKey === forecastStartDate) {
-          point.projectedBridgeNet = summary.currentNetWorth
         }
       }
     }

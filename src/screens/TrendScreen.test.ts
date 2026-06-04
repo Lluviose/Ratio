@@ -111,7 +111,7 @@ describe('withGoalTrendLines', () => {
     const forecastStartPoint = points.find((point) => point.dateKey === '2026-06-01')
 
     expect(latestPoint?.projectedBridgeNet).toBe(120000)
-    expect(latestPoint?.projectedNet).toBeNull()
+    expect(latestPoint?.projectedNet).toBe(120000)
     expect(forecastStartPoint?.projectedBridgeNet).toBe(120000)
     expect(forecastStartPoint?.projectedNet).toBe(120000)
     expect(points.some((point) => point.projectedNet != null && point.dateKey > '2026-06-01')).toBe(true)
@@ -175,7 +175,7 @@ describe('withGoalTrendLines', () => {
 
     const latestPoint = points.find((point) => point.dateKey === '2026-06-01')
 
-    expect(latestPoint?.projectedBridgeNet).toBe(120000)
+    expect(latestPoint?.projectedBridgeNet).toBeNull()
     expect(latestPoint?.projectedNet).toBe(120000)
     expect(points.some((point) => point.projectedNet != null && point.dateKey > '2026-06-01')).toBe(true)
 
@@ -241,6 +241,7 @@ describe('withGoalTrendLines', () => {
     const latestPoint = points.find((point) => point.dateKey === '2026-06-04')
 
     expect(visibleHistoryEnd?.projectedBridgeNet).toBe(125000)
+    expect(visibleHistoryEnd?.projectedNet).toBe(125000)
     expect(latestPoint?.projectedBridgeNet).toBe(9902)
     expect(latestPoint?.projectedNet).toBe(9902)
 
