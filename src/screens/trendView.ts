@@ -1,4 +1,5 @@
 import { dateKeyToUtcDays, diffDateDays } from '../lib/savingsGoal'
+import { getMaxDateValue } from '../lib/snapshotDerived'
 import { formatMonthKeyLabel, monthKeyForDateKey } from '../lib/monthStart'
 import type { Snapshot } from '../lib/snapshots'
 import type { FutureCadence, TrendPoint } from './trendGoalLines'
@@ -25,6 +26,30 @@ type TrendView = {
   selected: Snapshot[]
   showYear: boolean
   futureCadence: FutureCadence
+}
+
+export type TrendChartDerived = {
+  data: TrendPoint[]
+  forecastStartDate: string | null
+  forecastStartValue: number | null
+  forecastArea: { start: number; end: number } | null
+  hasProjectionBridge: boolean
+  showYearInData: boolean
+  goalDateContext: string[]
+}
+
+type TrendChartDerivedOptions = {
+  mode: 'netDebt' | 'cashInvest'
+  viewPoints: TrendPoint[]
+  goalTrendPoints: TrendPoint[]
+  goalSummary?: {
+    avgDailyNetChange: number | null
+    latestDate: string | null
+    startDate: string
+    targetDate: string
+    projectedDate: string | null
+  } | null
+  getSavingsProjectionStartDate: (latestDate: string | null) => string | null
 }
 
 function toDateKey(d: Date) {
@@ -217,5 +242,32 @@ export function buildTrendView(snapshots: Snapshot[], range: RangeId, monthStart
     selected,
     showYear,
     futureCadence: getFutureCadence(range, points),
+  }
+}
+
+export function buildTrendChartDerived(options: TrendChartDerivedOptions): TrendChartDerived {
+  const { mode, viewPoints, goalTrendPoints, goalSummary, getSavingsProjectionStartDate } = options
+  const data = mode === 'netDebt' ? goalTrendPoints : viewPoints
+  const forecastStartDate = mode === 'netDebt' && goalSummary?.avgDailyNetChange != null
+    ? getSavingsProjectionStartDate(goalSummary.latestDate)
+    : null
+  const forecastStartValue = forecastStartDate ? dateKeyToUtcDays(forecastStartDate) : null
+  const forecastEndValue = forecastStartValue == null ? null : getMaxDateValue(data)
+  const forecastArea = forecastStartValue != null && forecastEndValue != null && forecastEndValue > forecastStartValue
+    ? { start: forecastStartValue, end: forecastEndValue }
+    : null
+
+  return {
+    data,
+    forecastStartDate,
+    forecastStartValue,
+    forecastArea,
+    hasProjectionBridge: mode === 'netDebt' && data.some((point) => point.projectedBridgeNet != null),
+    showYearInData: shouldShowYearForDateKeys(data.map((point) => point.dateKey)),
+    goalDateContext: goalSummary
+      ? [goalSummary.startDate, goalSummary.latestDate, goalSummary.targetDate, goalSummary.projectedDate].filter(
+          (dateKey): dateKey is string => Boolean(dateKey),
+        )
+      : [],
   }
 }

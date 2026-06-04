@@ -4,7 +4,7 @@ import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
-import { addMoney, normalizeMoney, subtractMoney } from '../lib/money'
+import { normalizeMoney } from '../lib/money'
 import {
   SAVINGS_GOAL_KEY,
   SAVINGS_PACE_ALGORITHM_KEY,
@@ -12,7 +12,6 @@ import {
   coerceSavingsPaceAlgorithm,
   defaultGoalDate,
   diffDateDays,
-  getNetChangePace,
   getSavingsGoalSummary,
   getSavingsProjectionStartDate,
   isDateKey,
@@ -27,48 +26,14 @@ import type { ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
 import { buildSavingsSimulationPlan } from '../lib/savingsGoalSimulation'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
+import {
+  buildCurrentSnapshotStats,
+  buildStatsRangeView,
+  getLatestSnapshot,
+  type StatsRangeId,
+} from '../lib/snapshotDerived'
 
-type RangeId = '5w' | '6m' | '1y' | '4y'
-
-function toDateKey(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-
-function dateKeyToUtcDays(dateKey: string): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey)
-  if (!m) return null
-  const year = Number(m[1])
-  const month = Number(m[2]) - 1
-  const day = Number(m[3])
-  if (![year, month, day].every((v) => Number.isFinite(v))) return null
-  return Math.floor(Date.UTC(year, month, day) / 86400000)
-}
-
-function diffDays(startDateKey: string, endDateKey: string): number | null {
-  const start = dateKeyToUtcDays(startDateKey)
-  const end = dateKeyToUtcDays(endDateKey)
-  if (start == null || end == null) return null
-  return Math.max(0, end - start)
-}
-
-function sumAssets(s: Snapshot) {
-  return addMoney(addMoney(s.cash, s.invest), addMoney(s.fixed, s.receivable))
-}
-
-function safeDiv(numerator: number, denominator: number): number | null {
-  if (![numerator, denominator].every((v) => Number.isFinite(v))) return null
-  if (denominator === 0) return numerator === 0 ? 0 : Infinity
-  return numerator / denominator
-}
-
-function safeGrowth(delta: number, base: number): number | null {
-  if (![delta, base].every((v) => Number.isFinite(v))) return null
-  if (base <= 0) return null
-  return delta / base
-}
+type RangeId = StatsRangeId
 
 function formatPct(value: number | null) {
   if (value == null || !Number.isFinite(value)) return '—'
@@ -1321,101 +1286,15 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const celebrationKeyRef = useRef<string | null>(null)
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
-  const view = useMemo(() => {
-    if (!snapshots || snapshots.length === 0) return null
-
-    const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
-
-    const cutoff = new Date()
-    if (range === '5w') cutoff.setDate(cutoff.getDate() - 35)
-    if (range === '6m') cutoff.setMonth(cutoff.getMonth() - 6)
-    if (range === '1y') cutoff.setFullYear(cutoff.getFullYear() - 1)
-    if (range === '4y') cutoff.setFullYear(cutoff.getFullYear() - 4)
-
-    const cutoffKey = toDateKey(cutoff)
-    let selected = sorted.filter((s) => s.date >= cutoffKey)
-    const rangeFallback = selected.length < 2 && sorted.length > selected.length
-    if (rangeFallback) selected = sorted
-
-    const start = selected[0]
-    const end = selected[selected.length - 1]
-    if (!start || !end) return null
-
-    const assetsStart = sumAssets(start)
-    const assetsEnd = sumAssets(end)
-
-    const delta = {
-      net: subtractMoney(end.net, start.net),
-      assets: subtractMoney(assetsEnd, assetsStart),
-      debt: subtractMoney(end.debt, start.debt),
-      cash: subtractMoney(end.cash, start.cash),
-      invest: subtractMoney(end.invest, start.invest),
-      fixed: subtractMoney(end.fixed, start.fixed),
-      receivable: subtractMoney(end.receivable, start.receivable),
-    }
-
-    const days = diffDays(start.date, end.date)
-
-    const netPace = getNetChangePace(selected, { monthStartDay })
-
-    const growth = {
-      net: safeGrowth(delta.net, start.net),
-      assets: safeGrowth(delta.assets, assetsStart),
-      debt: safeGrowth(delta.debt, start.debt),
-      avgDailyNet: netPace?.avgDaily ?? null,
-    }
-
-    return {
-      start,
-      end,
-      selectedCount: selected.length,
-      rangeFallback,
-      assetsStart,
-      delta,
-      days,
-      growth,
-      netPace,
-    }
-  }, [monthStartDay, range, snapshots])
+  const view = useMemo(() => buildStatsRangeView(snapshots, range, monthStartDay), [monthStartDay, range, snapshots])
 
   const goalSummary = useMemo(
     () => getSavingsGoalSummary(goal, snapshots, { monthStartDay, algorithm: paceAlgorithm }),
     [goal, monthStartDay, paceAlgorithm, snapshots],
   )
-  const latestSnapshot = useMemo(() => {
-    if (snapshots.length === 0) return null
-    return snapshots.reduce<Snapshot | null>((best, snapshot) => {
-      if (!best) return snapshot
-      return snapshot.date > best.date ? snapshot : best
-    }, null)
-  }, [snapshots])
+  const latestSnapshot = useMemo(() => getLatestSnapshot(snapshots), [snapshots])
   const latestNetWorth = goalSummary?.currentNetWorth ?? latestSnapshot?.net ?? 0
-  const currentStats = useMemo(() => {
-    if (!latestSnapshot) return null
-
-    const assets = sumAssets(latestSnapshot)
-    const currentAssets = addMoney(addMoney(latestSnapshot.cash, latestSnapshot.invest), latestSnapshot.receivable)
-    const quickAssets = addMoney(latestSnapshot.cash, latestSnapshot.invest)
-    const netLiquid = subtractMoney(currentAssets, latestSnapshot.debt)
-
-    return {
-      snapshot: latestSnapshot,
-      assets,
-      currentAssets,
-      netLiquid,
-      ratios: {
-        debtToAssets: safeDiv(latestSnapshot.debt, assets),
-        netToAssets: safeDiv(latestSnapshot.net, assets),
-        debtToNet: latestSnapshot.net > 0 ? safeDiv(latestSnapshot.debt, latestSnapshot.net) : null,
-        equityMultiplier: latestSnapshot.net > 0 ? safeDiv(assets, latestSnapshot.net) : null,
-      },
-      coverage: {
-        current: safeDiv(currentAssets, latestSnapshot.debt),
-        quick: safeDiv(quickAssets, latestSnapshot.debt),
-        cash: safeDiv(latestSnapshot.cash, latestSnapshot.debt),
-      },
-    }
-  }, [latestSnapshot])
+  const currentStats = useMemo(() => buildCurrentSnapshotStats(latestSnapshot), [latestSnapshot])
 
   useEffect(() => {
     if (!goal || !goalSummary) {

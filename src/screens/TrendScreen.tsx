@@ -14,16 +14,16 @@ import {
   SAVINGS_PACE_ALGORITHM_KEY,
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
-  dateKeyToUtcDays,
   getSavingsGoalSummary,
   getSavingsProjectionStartDate,
+  toDateKey,
   type SavingsGoal,
   type SavingsGoalSummary,
   type SavingsPaceAlgorithm,
 } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 import { withGoalTrendLines, type TrendPoint } from './trendGoalLines'
-import { buildTrendView, formatLabel, RECENT_SNAPSHOT_LIMIT, shouldShowYearForDateKeys, type RangeId } from './trendView'
+import { buildTrendChartDerived, buildTrendView, formatLabel, RECENT_SNAPSHOT_LIMIT, shouldShowYearForDateKeys, type RangeId } from './trendView'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
 type TrendMode = 'netDebt' | 'cashInvest'
@@ -31,12 +31,6 @@ const DAYS_PER_MONTH = 30.4375
 const CHART_HEIGHT = 252
 const FORECAST_STROKE = '#059669'
 
-function toDateKey(d: Date) {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
 function formatDelta(value: number) {
   const abs = Math.abs(value)
   const text = formatCny(abs)
@@ -149,26 +143,25 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     () => withGoalTrendLines(view.points, goal, goalSummary, view.futureCadence, (dateKey) => formatLabel(dateKey, { showYear: view.showYear })),
     [goal, goalSummary, view.futureCadence, view.points, view.showYear],
   )
-  const data = mode === 'netDebt' ? goalTrendPoints : view.points
-  const forecastStartDate = mode === 'netDebt' && goalSummary?.avgDailyNetChange != null
-    ? getSavingsProjectionStartDate(goalSummary.latestDate)
-    : null
-  const forecastStartValue = forecastStartDate ? dateKeyToUtcDays(forecastStartDate) : null
-  const forecastEndValue = forecastStartValue == null
-    ? null
-    : data.reduce<number | null>((max, point) => {
-        const value = typeof point.dateValue === 'number' ? point.dateValue : dateKeyToUtcDays(point.dateKey)
-        if (value == null) return max
-        return max == null ? value : Math.max(max, value)
-      }, null)
-  const forecastArea = forecastStartValue != null && forecastEndValue != null && forecastEndValue > forecastStartValue
-    ? { start: forecastStartValue, end: forecastEndValue }
-    : null
-  const hasProjectionBridge = mode === 'netDebt' && data.some((point) => point.projectedBridgeNet != null)
-  const showYearInData = shouldShowYearForDateKeys(data.map((point) => point.dateKey))
-  const goalDateContext = goalSummary
-    ? [goalSummary.startDate, goalSummary.latestDate, goalSummary.targetDate, goalSummary.projectedDate]
-    : []
+  const chartDerived = useMemo(
+    () => buildTrendChartDerived({
+      mode,
+      viewPoints: view.points,
+      goalTrendPoints,
+      goalSummary,
+      getSavingsProjectionStartDate,
+    }),
+    [goalSummary, goalTrendPoints, mode, view.points],
+  )
+  const {
+    data,
+    forecastStartDate,
+    forecastStartValue,
+    forecastArea,
+    hasProjectionBridge,
+    showYearInData,
+    goalDateContext,
+  } = chartDerived
   const goalPaceText = !goalSummary
     ? ''
     : goalSummary.isComplete

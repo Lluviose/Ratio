@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withGoalTrendLines } from './trendGoalLines'
-import { buildTrendView, type RangeId } from './trendView'
+import { buildTrendChartDerived, buildTrendView, type RangeId } from './trendView'
 import { getSavingsGoalSummary, type SavingsGoal, type SavingsGoalSummary } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 
@@ -138,6 +138,107 @@ describe('buildTrendView', () => {
       vi.useRealTimers()
     },
   )
+})
+
+describe('buildTrendChartDerived', () => {
+  it('derives forecast bounds, projection bridge state, and goal date context', () => {
+    const goalSummary = {
+      avgDailyNetChange: 100,
+      latestDate: '2026-06-05',
+      startDate: '2026-01-01',
+      targetDate: '2026-12-31',
+      projectedDate: '2027-01-15',
+    }
+    const viewPoints = [
+      {
+        date: '6/5',
+        dateKey: '2026-06-05',
+        dateValue: 20609,
+        idx: 0,
+        net: 100000,
+        debt: 0,
+        cash: 100000,
+        invest: 0,
+        fixed: 0,
+        receivable: 0,
+      },
+    ]
+    const goalTrendPoints = [
+      ...viewPoints,
+      {
+        date: '6/20',
+        dateKey: '2026-06-20',
+        dateValue: 20624,
+        idx: -1,
+        net: undefined,
+        debt: undefined,
+        cash: undefined,
+        invest: undefined,
+        fixed: undefined,
+        receivable: undefined,
+        projectedBridgeNet: 100000,
+      },
+      {
+        date: '7/5',
+        dateKey: '2026-07-05',
+        dateValue: 20639,
+        idx: -1,
+        net: undefined,
+        debt: undefined,
+        cash: undefined,
+        invest: undefined,
+        fixed: undefined,
+        receivable: undefined,
+        projectedNet: 103000,
+      },
+    ]
+
+    const derived = buildTrendChartDerived({
+      mode: 'netDebt',
+      viewPoints,
+      goalTrendPoints,
+      goalSummary,
+      getSavingsProjectionStartDate: () => '2026-06-20',
+    })
+
+    expect(derived.data).toBe(goalTrendPoints)
+    expect(derived.forecastStartDate).toBe('2026-06-20')
+    expect(derived.forecastStartValue).toBe(20624)
+    expect(derived.forecastArea).toEqual({ start: 20624, end: 20639 })
+    expect(derived.hasProjectionBridge).toBe(true)
+    expect(derived.showYearInData).toBe(false)
+    expect(derived.goalDateContext).toEqual(['2026-01-01', '2026-06-05', '2026-12-31', '2027-01-15'])
+  })
+
+  it('uses raw view points and disables forecast metadata outside net debt mode', () => {
+    const viewPoints = [
+      {
+        date: '6/5',
+        dateKey: '2026-06-05',
+        idx: 0,
+        net: 100000,
+        debt: 0,
+        cash: 100000,
+        invest: 0,
+        fixed: 0,
+        receivable: 0,
+      },
+    ]
+    const derived = buildTrendChartDerived({
+      mode: 'cashInvest',
+      viewPoints,
+      goalTrendPoints: [],
+      goalSummary: null,
+      getSavingsProjectionStartDate: () => '2026-06-20',
+    })
+
+    expect(derived.data).toBe(viewPoints)
+    expect(derived.forecastStartDate).toBeNull()
+    expect(derived.forecastStartValue).toBeNull()
+    expect(derived.forecastArea).toBeNull()
+    expect(derived.hasProjectionBridge).toBe(false)
+    expect(derived.goalDateContext).toEqual([])
+  })
 })
 
 describe('withGoalTrendLines', () => {
