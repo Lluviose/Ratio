@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { motion } from 'framer-motion'
 import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
@@ -32,8 +32,63 @@ import {
   getLatestSnapshot,
   type StatsRangeId,
 } from '../lib/snapshotDerived'
+import {
+  cardEntranceAnimate,
+  cardEntranceInitial,
+  cardEntranceTransition,
+  fadeUpAnimate,
+  fadeUpInitial,
+  progressFillTransition,
+  quickFade,
+  scaleInAnimate,
+  scaleInInitial,
+  screenTransition,
+} from '../lib/motionPresets'
 
 type RangeId = StatsRangeId
+
+const statsPageInitial = {
+  opacity: 0,
+  y: 20,
+}
+
+const statsPageTransition = {
+  duration: 0.4,
+}
+
+const twoColumnGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+  gap: 10,
+} satisfies CSSProperties
+
+const compactTwoColumnGridStyle = {
+  ...twoColumnGridStyle,
+  gap: 8,
+} satisfies CSSProperties
+
+const cardTitleStyle = {
+  fontWeight: 950,
+  fontSize: 14,
+  marginBottom: 10,
+} satisfies CSSProperties
+
+const metricTileStyle = {
+  minWidth: 0,
+  border: '1px solid var(--hairline)',
+  borderRadius: 18,
+  padding: 12,
+  background: 'var(--card)',
+} satisfies CSSProperties
+
+const compactMetricTileStyle = {
+  ...metricTileStyle,
+  borderRadius: 16,
+  padding: 10,
+  background: 'var(--bg)',
+} satisfies CSSProperties
+
+const cardScaleTransition = (delay: number) => ({ delay })
 
 function formatPct(value: number | null) {
   if (value == null || !Number.isFinite(value)) return '—'
@@ -234,7 +289,7 @@ function MetricTile(props: {
 }) {
   const { label, value, sub, valueColor } = props
   return (
-    <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--card)' }}>
+    <div style={metricTileStyle}>
       <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)', overflowWrap: 'anywhere' }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 950, marginTop: 4, color: valueColor ?? 'var(--text)', overflowWrap: 'anywhere' }}>{value}</div>
       {sub ? <div style={{ fontSize: 11, fontWeight: 850, marginTop: 4, color: 'var(--muted-text)', overflowWrap: 'anywhere' }}>{sub}</div> : null}
@@ -267,9 +322,9 @@ function SavingsStatusCard(props: {
     return (
       <motion.div
         className="card"
-        initial={{ opacity: 0, y: 12, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+        initial={cardEntranceInitial}
+        animate={cardEntranceAnimate}
+        transition={cardEntranceTransition}
         style={{ overflow: 'hidden', position: 'relative' }}
       >
         <div className="cardInner">
@@ -286,7 +341,7 @@ function SavingsStatusCard(props: {
               <Target size={18} strokeWidth={2.6} />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
+          <div style={{ ...compactTwoColumnGridStyle, marginTop: 14 }}>
             <MetricTile label="当前净资产" value={formatCny(latestNetWorth)} sub="目标按净资产计算" />
             <MetricTile label="快照数量" value={`${snapshotCount}条`} sub="持续记录后会更准确" />
           </div>
@@ -370,9 +425,9 @@ function SavingsStatusCard(props: {
   return (
     <motion.div
       className="card"
-      initial={{ opacity: 0, y: 12, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      initial={cardEntranceInitial}
+      animate={cardEntranceAnimate}
+      transition={cardEntranceTransition}
       style={{ overflow: 'visible', position: 'relative' }}
     >
       <motion.div
@@ -437,7 +492,7 @@ function SavingsStatusCard(props: {
             role="tooltip"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            transition={quickFade}
             style={{
               position: 'absolute',
               top: 43,
@@ -482,7 +537,7 @@ function SavingsStatusCard(props: {
           key={heroValue}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          transition={screenTransition}
           style={{ fontSize: 31, fontWeight: 950, marginTop: 5, letterSpacing: 0, overflowWrap: 'normal', wordBreak: 'keep-all' }}
         >
           {heroValue}
@@ -496,7 +551,7 @@ function SavingsStatusCard(props: {
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: progressPct }}
-              transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ ...progressFillTransition, duration: 0.55 }}
               style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 18px ${color}` }}
             />
           </div>
@@ -506,7 +561,7 @@ function SavingsStatusCard(props: {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
+        <div style={{ ...compactTwoColumnGridStyle, marginTop: 14 }}>
           <MetricTile label={paceDeltaDisplay.label} value={paceDeltaDisplay.value} valueColor={paceDeltaDisplay.tone} sub={paceDeltaDisplay.sub} />
           <MetricTile label="预计达成" value={summary.isComplete ? '已达成' : summary.projectedDate ? formatShortGoalDate(summary.projectedDate, goalDateContext) : '暂无预测'} sub={projectionSub} />
         </div>
@@ -546,14 +601,14 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: progressPct }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          transition={progressFillTransition}
           style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 14px ${color}` }}
         />
         <motion.span
           aria-hidden="true"
           initial={{ opacity: 0, scale: 0.7 }}
           animate={{ opacity: 1, scale: [0.9, 1.18, 1] }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          transition={progressFillTransition}
           style={{
             position: 'absolute',
             top: 1,
@@ -756,9 +811,9 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
   return (
     <motion.div
       className="card"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      initial={fadeUpInitial}
+      animate={fadeUpAnimate}
+      transition={cardEntranceTransition}
     >
       <div className="cardInner" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -801,7 +856,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             role="tooltip"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            transition={quickFade}
             style={{
               position: 'absolute',
               top: 58,
@@ -866,14 +921,14 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 12 }}>
-          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+          <div style={compactMetricTileStyle}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>模拟达成</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: shift.tone, overflowWrap: 'anywhere' }}>
               {plan.simulatedDate ? formatShortGoalDate(plan.simulatedDate, dateContext) : '暂不可达'}
             </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{shift.text}</div>
           </div>
-          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+          <div style={compactMetricTileStyle}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>
               {targetGapForDisplay == null || targetGapForDisplay === 0 ? '目标日结果' : targetGapForDisplay > 0 ? '目标日余量' : '目标日缺口'}
             </div>
@@ -882,12 +937,12 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             </div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{targetGapForDisplay == null ? '目标日已过' : targetDateLabel}</div>
           </div>
-          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+          <div style={compactMetricTileStyle}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>预测月增速</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color, overflowWrap: 'anywhere' }}>{formatDelta(plan.simulatedMonthlyPace)}</div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>原速 {formatDelta(plan.baseMonthlyPace)}</div>
           </div>
-          <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 16, padding: 10, background: 'var(--bg)' }}>
+          <div style={compactMetricTileStyle}>
             <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)' }}>{extraNeededLabel}</div>
             <div style={{ fontSize: 14, fontWeight: 950, marginTop: 3, color: extraNeededTone, overflowWrap: 'anywhere' }}>{extraNeededText}</div>
             <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--muted-text)', marginTop: 3 }}>{extraNeededSub}</div>
@@ -913,9 +968,9 @@ function SavingsPaceAlgorithmCard(props: {
   return (
     <motion.div
       className="card"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      initial={fadeUpInitial}
+      animate={fadeUpAnimate}
+      transition={cardEntranceTransition}
     >
       <div className="cardInner">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
@@ -951,8 +1006,8 @@ function SavingsMilestoneCelebration(props: { milestone: number; color: string }
   return (
     <motion.div
       className="card"
-      initial={{ opacity: 0, y: 12, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
+      initial={cardEntranceInitial}
+      animate={cardEntranceAnimate}
       exit={{ opacity: 0, y: -8, scale: 0.98 }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
       style={{ overflow: 'hidden', position: 'relative' }}
@@ -1015,9 +1070,9 @@ function SavingsGoalCard(props: {
     return (
       <motion.div
         className="card"
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.02 }}
+        initial={scaleInInitial}
+        animate={scaleInAnimate}
+        transition={cardScaleTransition(0.02)}
       >
         <div className="cardInner">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1060,9 +1115,9 @@ function SavingsGoalCard(props: {
   return (
     <motion.div
       className="card"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: 0.02 }}
+      initial={scaleInInitial}
+      animate={scaleInAnimate}
+      transition={cardScaleTransition(0.02)}
     >
       <div className="cardInner">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -1114,7 +1169,7 @@ function SavingsGoalCard(props: {
                 key={progressText}
                 initial={{ opacity: 0, y: 5, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                transition={screenTransition}
                 style={{ fontSize: 24, fontWeight: 950, lineHeight: 1, color }}
               >
                 {progressText}
@@ -1328,7 +1383,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
   return (
     <div className="stack" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+      <motion.div initial={statsPageInitial} animate={fadeUpAnimate} transition={statsPageTransition}>
         <div className="stack" style={{ marginTop: 8 }}>
           <SavingsStatusCard
             summary={goalSummary}
@@ -1361,13 +1416,13 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             <>
               <motion.div
                 className="card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.05 }}
+                initial={scaleInInitial}
+                animate={scaleInAnimate}
+                transition={cardScaleTransition(0.05)}
               >
                 <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>资产负债概览</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                  <div style={cardTitleStyle}>资产负债概览</div>
+                  <div style={twoColumnGridStyle}>
                     <MetricTile label="总资产" value={formatCny(currentStats.assets)} />
                     <MetricTile label="净资产" value={formatCny(currentStats.snapshot.net)} />
                     <MetricTile label="负债" value={formatCny(currentStats.snapshot.debt)} valueColor={debtAmountTone(currentStats.snapshot.debt)} />
@@ -1378,13 +1433,13 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
               <motion.div
                 className="card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
+                initial={scaleInInitial}
+                animate={scaleInAnimate}
+                transition={cardScaleTransition(0.1)}
               >
                 <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>流动性与杠杆</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                  <div style={cardTitleStyle}>流动性与杠杆</div>
+                  <div style={twoColumnGridStyle}>
                     <MetricTile label="流动资产" value={formatCny(currentStats.currentAssets)} />
                     <MetricTile label="净流动资产" value={formatCny(currentStats.netLiquid)} />
                     <MetricTile label="流动比" value={formatCoverageRatio(currentStats.coverage.current, currentStats.snapshot.debt)} sub={formatCoverageSub('流动资产/负债', currentStats.snapshot.debt)} />
@@ -1441,16 +1496,16 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
               <motion.div
                 className="card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
+                initial={scaleInInitial}
+                animate={scaleInAnimate}
+                transition={cardScaleTransition(0.2)}
               >
                 <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>区间变化</div>
+                  <div style={cardTitleStyle}>区间变化</div>
                   <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
                     基于快照差值（含流量/估值波动）
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                  <div style={twoColumnGridStyle}>
                     <MetricTile label="净资产" value={formatDelta(view.delta.net)} />
                     <MetricTile label="总资产" value={formatDelta(view.delta.assets)} />
                     <MetricTile label="负债" value={formatDelta(view.delta.debt)} valueColor={debtDeltaTone(view.delta.debt)} />
@@ -1469,13 +1524,13 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
               <motion.div
                 className="card"
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.25 }}
+                initial={scaleInInitial}
+                animate={scaleInAnimate}
+                transition={cardScaleTransition(0.25)}
               >
                 <div className="cardInner">
-                  <div style={{ fontWeight: 950, fontSize: 14, marginBottom: 10 }}>增长与节奏</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 10 }}>
+                  <div style={cardTitleStyle}>增长与节奏</div>
+                  <div style={twoColumnGridStyle}>
                     <MetricTile label="净资产增长率" value={formatPct(view.growth.net)} sub={view.start.net > 0 ? undefined : '起始净资产≤0，未计算'} />
                     <MetricTile label="总资产增长率" value={formatPct(view.growth.assets)} sub={view.assetsStart > 0 ? undefined : '起始资产≤0，未计算'} />
                     <MetricTile label="负债增长率" value={formatPct(view.growth.debt)} valueColor={debtDeltaTone(view.growth.debt)} sub={view.start.debt > 0 ? undefined : '起始负债≤0，未计算'} />
