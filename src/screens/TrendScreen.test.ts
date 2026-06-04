@@ -51,6 +51,63 @@ describe('buildTrendView', () => {
     vi.useRealTimers()
   })
 
+  it('groups monthly trend points by the configured month start day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+    const view = buildTrendView([
+      snapshot('2026-04-07', 100000),
+      snapshot('2026-05-07', 110000),
+      snapshot('2026-05-08', 111000),
+      snapshot('2026-06-05', 120000),
+    ], '6m', 8)
+
+    expect(view.points.map((point) => [point.dateKey, point.date])).toEqual([
+      ['2026-04-07', '3月'],
+      ['2026-05-07', '4月'],
+      ['2026-06-05', '5月'],
+    ])
+    expect(view.selected.map((s) => s.date)).toContain('2026-06-05')
+
+    vi.useRealTimers()
+  })
+
+  it('cuts monthly trend ranges by business month instead of calendar date', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+    const view = buildTrendView([
+      snapshot('2025-12-07', 90000),
+      snapshot('2025-12-08', 91000),
+      snapshot('2026-01-07', 92000),
+      snapshot('2026-02-07', 93000),
+      snapshot('2026-03-07', 94000),
+      snapshot('2026-04-07', 95000),
+      snapshot('2026-05-07', 96000),
+      snapshot('2026-06-05', 97000),
+    ], '6m', 8)
+
+    expect(view.points.map((point) => point.dateKey)).toEqual([
+      '2026-01-07',
+      '2026-02-07',
+      '2026-03-07',
+      '2026-04-07',
+      '2026-05-07',
+      '2026-06-05',
+    ])
+    expect(view.points.map((point) => point.date)).toEqual([
+      '2025/12',
+      '2026/1',
+      '2026/2',
+      '2026/3',
+      '2026/4',
+      '2026/5',
+    ])
+    expect(view.points.some((point) => point.dateKey === '2025-12-07')).toBe(false)
+
+    vi.useRealTimers()
+  })
+
   it.each(['30d', '6m', '1y'] satisfies RangeId[])(
     'keeps real records around a synthetic goal start in %s data',
     (range) => {

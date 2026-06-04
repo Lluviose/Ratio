@@ -102,6 +102,56 @@ describe('savingsGoal', () => {
     expect(summary?.currentPeriodIsOnTrack).toBe(false)
   })
 
+  it('uses the configured month start day for current savings periods before the boundary', () => {
+    const summary = getSavingsGoalSummary(
+      {
+        ...goal,
+        targetAmount: 124000,
+        startDate: '2026-01-01',
+        startNetWorth: 100000,
+        targetDate: '2026-12-31',
+      },
+      [
+        snapshot('2026-05-08', 108000),
+        snapshot('2026-06-05', 110200),
+      ],
+      { monthStartDay: 8 },
+    )
+
+    expect(summary?.currentPeriodStartDate).toBe('2026-05-08')
+    expect(summary?.currentPeriodEndDate).toBe('2026-06-08')
+    expect(summary?.currentPeriodStartNetWorth).toBe(108000)
+    expect(summary?.currentPeriodActual).toBe(2200)
+    expect(summary?.currentPeriodTargetNetWorth).toBeCloseTo(110417.58)
+    expect(summary?.currentPeriodTarget).toBeCloseTo(2417.58)
+    expect(summary?.currentPeriodRemaining).toBeCloseTo(217.58)
+  })
+
+  it('starts a new savings period on the configured month start day', () => {
+    const summary = getSavingsGoalSummary(
+      {
+        ...goal,
+        targetAmount: 124000,
+        startDate: '2026-01-01',
+        startNetWorth: 100000,
+        targetDate: '2026-12-31',
+      },
+      [
+        snapshot('2026-05-08', 108000),
+        snapshot('2026-06-05', 110200),
+        snapshot('2026-06-08', 110500),
+      ],
+      { monthStartDay: 8 },
+    )
+
+    expect(summary?.currentPeriodStartDate).toBe('2026-06-08')
+    expect(summary?.currentPeriodEndDate).toBe('2026-07-08')
+    expect(summary?.currentPeriodStartNetWorth).toBe(110500)
+    expect(summary?.currentPeriodActual).toBe(0)
+    expect(summary?.currentPeriodTargetNetWorth).toBeCloseTo(112395.6)
+    expect(summary?.currentPeriodTarget).toBeCloseTo(1895.6)
+  })
+
   it('does not raise the current period target when current net worth increases', () => {
     const summaryGoal = {
       ...goal,

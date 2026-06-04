@@ -70,12 +70,35 @@ function formatMonthLabel(monthKey: string, showYear: boolean) {
   return formatMonthKeyLabel(monthKey)
 }
 
-function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDay: number) {
+function shiftMonthKey(monthKey: string, offsetMonths: number) {
+  const m = /^(\d{4})-(\d{2})$/.exec(monthKey)
+  if (!m) return monthKey
+
+  const year = Number(m[1])
+  const monthIndex = Number(m[2]) - 1
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex)) return monthKey
+
+  const shifted = year * 12 + monthIndex + offsetMonths
+  const shiftedYear = Math.floor(shifted / 12)
+  const shiftedMonth = shifted % 12
+  return `${String(shiftedYear).padStart(4, '0')}-${String(shiftedMonth + 1).padStart(2, '0')}`
+}
+
+function getMonthlyRangeStartKey(range: Extract<RangeId, '6m' | '1y'>, monthStartDay: number, latest: Snapshot | null) {
+  const todayKey = toDateKey(new Date())
+  const anchorDateKey = latest && latest.date > todayKey ? latest.date : todayKey
+  const anchorMonthKey = monthKeyForDateKey(anchorDateKey, monthStartDay)
+  const monthCount = range === '6m' ? 6 : 12
+  return shiftMonthKey(anchorMonthKey, -(monthCount - 1))
+}
+
+function pickMonthlyLast(snapshots: Snapshot[], monthCount: number, monthStartDay: number, startMonthKey?: string) {
   const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
   const byMonth = new Map<string, Snapshot>()
 
   for (const s of sorted) {
     const monthKey = monthKeyForDateKey(s.date, monthStartDay)
+    if (startMonthKey && monthKey < startMonthKey) continue
     byMonth.set(monthKey, s)
   }
 
@@ -173,15 +196,13 @@ export function buildTrendView(snapshots: Snapshot[], range: RangeId, monthStart
     const cutoffKey = getRangeCutoffKey(range)
     entries = sorted.filter((s) => s.date >= cutoffKey).map((snapshot) => ({ snapshot }))
   } else if (range === '6m') {
-    const cutoffKey = getRangeCutoffKey(range)
-    entries = pickMonthlyLast(sorted.filter((s) => s.date >= cutoffKey), 6, monthStartDay)
+    entries = pickMonthlyLast(sorted, 6, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
       .map((x) => ({ snapshot: x.snapshot, monthKey: x.monthKey }))
     entries = withLatestSnapshotEntry(entries, latest)
   } else if (range === 'custom') {
     entries = sorted.slice(Math.max(0, sorted.length - RECENT_SNAPSHOT_LIMIT)).map((snapshot) => ({ snapshot }))
   } else {
-    const cutoffKey = getRangeCutoffKey(range)
-    entries = pickMonthlyLast(sorted.filter((s) => s.date >= cutoffKey), 12, monthStartDay)
+    entries = pickMonthlyLast(sorted, 12, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
       .map((x) => ({ snapshot: x.snapshot, monthKey: x.monthKey }))
     entries = withLatestSnapshotEntry(entries, latest)
   }
