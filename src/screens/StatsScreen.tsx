@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
@@ -44,6 +44,8 @@ import {
   scaleInAnimate,
   scaleInInitial,
   screenTransition,
+  subtleLift,
+  tooltipExit,
 } from '../lib/motionPresets'
 
 type RangeId = StatsRangeId
@@ -344,11 +346,15 @@ function MetricTile(props: {
     : { ...metricValueStyle, color: valueColor ?? 'var(--text)' }
 
   return (
-    <div style={compact ? compactMetricTileStyle : metricTileStyle}>
+    <motion.div
+      style={compact ? compactMetricTileStyle : metricTileStyle}
+      whileHover={subtleLift}
+      transition={quickFade}
+    >
       <div style={compact ? compactMetricLabelStyle : metricLabelStyle}>{label}</div>
       <div style={valueStyle}>{value}</div>
       {sub ? <div style={compact ? compactMetricSubStyle : metricSubStyle}>{sub}</div> : null}
-    </div>
+    </motion.div>
   )
 }
 
@@ -541,13 +547,15 @@ function SavingsStatusCard(props: {
             {statusText}
           </div>
         </div>
-        {explainOpen && periodExplain ? (
-          <motion.div
-            id="savings-period-explain"
-            role="tooltip"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={quickFade}
+        <AnimatePresence>
+          {explainOpen && periodExplain ? (
+            <motion.div
+              id="savings-period-explain"
+              role="tooltip"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={tooltipExit}
+              transition={quickFade}
             style={{
               position: 'absolute',
               top: 43,
@@ -585,8 +593,9 @@ function SavingsStatusCard(props: {
                 ? `${formatCny(periodExplain.targetNetWorth)} - ${formatCny(summary.currentNetWorth)} = ${formatCny(periodExplain.remaining)}`
                 : '当前净资产已达到本期期末要求。'}
             </div>
-          </motion.div>
-        ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
         <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 10 }}>{heroLabel}</div>
         <motion.div
           key={heroValue}
@@ -905,13 +914,15 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
           </button>
         </div>
 
-        {helpOpen ? (
-          <motion.div
-            id="savings-goal-simulator-help"
-            role="tooltip"
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={quickFade}
+        <AnimatePresence>
+          {helpOpen ? (
+            <motion.div
+              id="savings-goal-simulator-help"
+              role="tooltip"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={tooltipExit}
+              transition={quickFade}
             style={{
               position: 'absolute',
               top: 58,
@@ -939,8 +950,9 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>模拟达成</span>：按当前组合预计到达目标的日期。</div>
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>目标日结果</span>：显示目标日当天预计多出或少多少；接近刚好时显示“刚好达标”。</div>
             <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>预测月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及为了踩中目标日还要补的月存额。</div>
-          </motion.div>
-        ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
           <SavingsSliderControl
@@ -1457,9 +1469,11 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             onChange={setPaceAlgorithm}
           />
 
-          {celebrationMilestone != null ? (
-            <SavingsMilestoneCelebration milestone={celebrationMilestone} color={colors.invest} />
-          ) : null}
+          <AnimatePresence>
+            {celebrationMilestone != null ? (
+              <SavingsMilestoneCelebration milestone={celebrationMilestone} color={colors.invest} />
+            ) : null}
+          </AnimatePresence>
 
           {goalSummary ? <SavingsGoalSimulatorCard summary={goalSummary} color={colors.invest} /> : null}
 

@@ -66,3 +66,13 @@ export const scaleInAnimate = {
   opacity: 1,
   scale: 1,
 }
+
+export const subtleLift = {
+  y: -2,
+  scale: 1.01,
+}
+
+export const tooltipExit = {
+  opacity: 0,
+  y: -4,
+}

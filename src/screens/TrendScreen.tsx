@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -10,6 +10,15 @@ import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
 import { subtractMoney } from '../lib/money'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import { shouldShowYearForDateKeys } from '../lib/dateSeries'
+import {
+  cardEntranceAnimate,
+  cardEntranceInitial,
+  cardEntranceTransition,
+  fadeUpAnimate,
+  quickFade,
+  screenTransition,
+  tooltipExit,
+} from '../lib/motionPresets'
 import {
   SAVINGS_GOAL_KEY,
   SAVINGS_PACE_ALGORITHM_KEY,
@@ -31,6 +40,26 @@ type TrendMode = 'netDebt' | 'cashInvest'
 const DAYS_PER_MONTH = 30.4375
 const CHART_HEIGHT = 252
 const FORECAST_STROKE = '#059669'
+
+const trendPageInitial = {
+  opacity: 0,
+  y: 20,
+}
+
+const trendPageTransition = {
+  duration: 0.38,
+}
+
+const chartEntranceTransition = {
+  ...cardEntranceTransition,
+  delay: 0.08,
+}
+
+const detailExit = {
+  opacity: 0,
+  y: -4,
+  scale: 0.98,
+}
 
 function formatDelta(value: number) {
   const abs = Math.abs(value)
@@ -396,9 +425,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   return (
     <div className="stack" style={{ padding: '0 16px', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+        initial={trendPageInitial}
+        animate={fadeUpAnimate}
+        transition={trendPageTransition}
       >
         <div style={{ display: 'flex', justifyContent: 'center' }}>
           <SegmentedControl
@@ -424,9 +453,9 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             WebkitUserSelect: 'none',
             cursor: data.length > 0 ? 'pointer' : 'default',
           }}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ type: 'spring', damping: 20, stiffness: 100, delay: 0.1 }}
+          initial={cardEntranceInitial}
+          animate={cardEntranceAnimate}
+          transition={chartEntranceTransition}
         >
           {chartWidth > 0 && data.length > 0 ? (
             <LineChart width={chartWidth} height={CHART_HEIGHT} data={data} margin={{ top: 12, right: 10, bottom: 2, left: -6 }} onClick={handleChartClick}>
@@ -475,6 +504,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                         activeDot={false}
                         connectNulls={false}
                         animationDuration={900}
+                        animationBegin={80}
                         animationEasing="ease-out"
                       />
                       <Line
@@ -489,6 +519,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                         activeDot={false}
                         connectNulls={false}
                         animationDuration={700}
+                        animationBegin={160}
                         animationEasing="ease-out"
                       />
                     </>
@@ -504,6 +535,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
                     connectNulls={true}
                     animationDuration={1500}
+                    animationBegin={80}
                     animationEasing="ease-out"
                   />
                   <Line
@@ -517,6 +549,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
                     connectNulls={true}
                     animationDuration={1500}
+                    animationBegin={180}
                     animationEasing="ease-out"
                   />
                   {goalSummary ? (
@@ -532,6 +565,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff', fill: FORECAST_STROKE }}
                       connectNulls={false}
                       animationDuration={900}
+                      animationBegin={260}
                       animationEasing="ease-out"
                     />
                   ) : null}
@@ -549,6 +583,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
                     connectNulls={true}
                     animationDuration={1500}
+                    animationBegin={80}
                     animationEasing="ease-out"
                   />
                   <Line
@@ -562,6 +597,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
                     connectNulls={true}
                     animationDuration={1500}
+                    animationBegin={180}
                     animationEasing="ease-out"
                   />
                 </>
@@ -574,34 +610,39 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           )}
         </motion.div>
 
-        {selectedPoint ? (
-          <motion.div
-            key={`${mode}-${selectedPoint.dateKey}`}
-            initial={{ opacity: 0, y: -6, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            style={{ display: 'flex', justifyContent: 'center', marginTop: 10, position: 'relative', zIndex: 3 }}
-          >
-            {renderTrendDetail(selectedPoint, () => setSelectedPointKey(null))}
-          </motion.div>
-        ) : null}
+        <AnimatePresence mode="wait">
+          {selectedPoint ? (
+            <motion.div
+              key={`${mode}-${selectedPoint.dateKey}`}
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={detailExit}
+              transition={screenTransition}
+              style={{ display: 'flex', justifyContent: 'center', marginTop: 10, position: 'relative', zIndex: 3 }}
+            >
+              {renderTrendDetail(selectedPoint, () => setSelectedPointKey(null))}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
-        {mode === 'netDebt' && goalSummary ? (
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-            style={{
-              marginTop: 12,
-              border: '1px solid var(--hairline)',
-              borderRadius: 18,
-              padding: '10px 12px',
-              background: 'var(--card)',
-              display: 'grid',
-              gap: 8,
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+        <AnimatePresence>
+          {mode === 'netDebt' && goalSummary ? (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={tooltipExit}
+              transition={screenTransition}
+              style={{
+                marginTop: 12,
+                border: '1px solid var(--hairline)',
+                borderRadius: 18,
+                padding: '10px 12px',
+                background: 'var(--card)',
+                display: 'grid',
+                gap: 8,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
                   <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.42)' }} />
@@ -621,15 +662,16 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <div style={{ fontSize: 11, fontWeight: 950, color: goalPaceColor }}>
                 {goalPaceText}
               </div>
-            </div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850 }}>
+              </div>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 850 }}>
               目标 {formatCny(goalSummary.targetAmount)} · {formatGoalDate(goalSummary.targetDate, goalDateContext)}
               {goalSummary.projectedDate ? ` · 预计 ${formatGoalDate(goalSummary.projectedDate, goalDateContext)}` : ''}
               {goalDeltaText ? ` · ${goalDeltaText}` : ''}
               {` · ${formatGoalPaceSource(goalSummary)}`}
-            </div>
-          </motion.div>
-        ) : null}
+              </div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, position: 'relative', zIndex: 0 }}>
           <PillTabs
@@ -644,11 +686,20 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             onChange={setRange}
           />
         </div>
-        {range === 'custom' ? (
-          <div className="muted" style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}>
+        <AnimatePresence>
+          {range === 'custom' ? (
+            <motion.div
+              className="muted"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={tooltipExit}
+              transition={quickFade}
+              style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}
+            >
             按最近 {RECENT_SNAPSHOT_LIMIT} 条快照展示
-          </div>
-        ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </motion.div>
     </div>
   )
