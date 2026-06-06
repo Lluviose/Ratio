@@ -302,7 +302,7 @@ a {
   pointer-events: none;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0)),
-    linear-gradient(135deg, rgb(var(--primary-rgb) / 0.13), rgba(16, 185, 129, 0.08) 48%, rgba(148, 163, 184, 0.05));
+    linear-gradient(135deg, rgb(var(--primary-rgb) / 0.12), rgba(255, 255, 255, 0.44) 46%, rgba(148, 163, 184, 0.1));
 }
 
 .iosInsightsPage > * {
@@ -313,6 +313,25 @@ a {
 .iosStatsStack {
   gap: 14px;
   margin-top: 8px;
+}
+
+.iosInsightsPage.iosStatsPage .card {
+  border-color: rgba(255, 255, 255, 0.86);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.84)),
+    rgba(255, 255, 255, 0.9);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 18px 46px -30px rgba(15, 23, 42, 0.48);
+}
+
+.iosInsightsPage.iosStatsPage .pills,
+.iosInsightsPage.iosStatsPage .segment {
+  border-color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    0 10px 28px -24px rgba(15, 23, 42, 0.52);
 }
 
 .iosInsightsPage .card {
@@ -357,10 +376,12 @@ a {
   gap: 10px;
   margin-top: 2px;
   padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.44);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    0 12px 30px -26px rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(18px) saturate(1.12);
   -webkit-backdrop-filter: blur(18px) saturate(1.12);
 }
@@ -399,7 +420,7 @@ a {
   pointer-events: none;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(90deg, rgb(var(--primary-rgb) / 0.08), rgba(255, 255, 255, 0) 58%);
+    linear-gradient(90deg, rgba(148, 163, 184, 0.1), rgba(255, 255, 255, 0) 58%);
 }
 
 .iosTrendChartCard .recharts-wrapper {

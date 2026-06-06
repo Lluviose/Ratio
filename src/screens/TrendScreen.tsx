@@ -40,6 +40,7 @@ type TrendMode = 'netDebt' | 'cashInvest'
 const DAYS_PER_MONTH = 30.4375
 const CHART_HEIGHT = 252
 const FORECAST_STROKE = '#059669'
+const FORECAST_AREA_FILL = '#64748b'
 
 const trendPageInitial = {
   opacity: 0,
@@ -446,10 +447,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             <LineChart width={chartWidth} height={CHART_HEIGHT} data={data} margin={{ top: 22, right: 12, bottom: 10, left: -2 }} onClick={handleChartClick}>
               <CartesianGrid vertical={false} stroke="rgba(100, 116, 139, 0.16)" strokeDasharray="2 10" />
               {forecastArea ? (
-                <ReferenceArea x1={forecastArea.start} x2={forecastArea.end} fill={FORECAST_STROKE} fillOpacity={0.045} strokeOpacity={0} />
+                <ReferenceArea x1={forecastArea.start} x2={forecastArea.end} fill={FORECAST_AREA_FILL} fillOpacity={0.055} strokeOpacity={0} />
               ) : null}
               {forecastStartValue != null ? (
-                <ReferenceLine x={forecastStartValue} stroke="rgba(5, 150, 105, 0.36)" strokeWidth={1.5} strokeDasharray="4 7" />
+                <ReferenceLine x={forecastStartValue} stroke="rgba(100, 116, 139, 0.34)" strokeWidth={1.5} strokeDasharray="4 7" />
               ) : null}
               <XAxis
                 dataKey="dateValue"

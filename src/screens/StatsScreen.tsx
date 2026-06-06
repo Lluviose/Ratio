@@ -89,11 +89,11 @@ const cardTitleStyle = {
 
 const metricTileStyle = {
   minWidth: 0,
-  border: '1px solid rgba(255, 255, 255, 0.68)',
+  border: '1px solid rgba(255, 255, 255, 0.82)',
   borderRadius: 20,
   padding: 12,
-  background: 'rgba(255, 255, 255, 0.54)',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 10px 24px -22px rgba(15, 23, 42, 0.52)',
+  background: 'rgba(255, 255, 255, 0.82)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 12px 28px -22px rgba(15, 23, 42, 0.48)',
   backdropFilter: 'blur(18px) saturate(1.12)',
   WebkitBackdropFilter: 'blur(18px) saturate(1.12)',
 } satisfies CSSProperties
@@ -102,13 +102,13 @@ const compactMetricTileStyle = {
   ...metricTileStyle,
   borderRadius: 18,
   padding: 10,
-  background: 'rgba(255, 255, 255, 0.42)',
+  background: 'rgba(255, 255, 255, 0.74)',
 } satisfies CSSProperties
 
 const metricLabelStyle = {
   fontSize: 11,
   fontWeight: 900,
-  color: 'var(--muted-text)',
+  color: 'rgba(51, 65, 85, 0.76)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
@@ -116,6 +116,7 @@ const metricValueStyle = {
   fontSize: 16,
   fontWeight: 950,
   marginTop: 4,
+  lineHeight: 1.18,
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
@@ -123,27 +124,28 @@ const metricSubStyle = {
   fontSize: 11,
   fontWeight: 850,
   marginTop: 4,
-  color: 'var(--muted-text)',
+  color: 'rgba(71, 85, 105, 0.76)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
 const compactMetricLabelStyle = {
   fontSize: 10,
   fontWeight: 900,
-  color: 'var(--muted-text)',
+  color: 'rgba(51, 65, 85, 0.76)',
 } satisfies CSSProperties
 
 const compactMetricValueStyle = {
   fontSize: 14,
   fontWeight: 950,
   marginTop: 3,
+  lineHeight: 1.18,
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
 const compactMetricSubStyle = {
   fontSize: 10,
   fontWeight: 800,
-  color: 'var(--muted-text)',
+  color: 'rgba(71, 85, 105, 0.74)',
   marginTop: 3,
 } satisfies CSSProperties
 
@@ -525,7 +527,7 @@ function SavingsStatusCard(props: {
                 height: 25,
                 borderRadius: 999,
                 border: '1px solid var(--hairline)',
-                background: 'rgb(255 255 255 / 0.72)',
+                background: 'rgb(255 255 255 / 0.84)',
                 color: 'var(--muted-text)',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -541,7 +543,7 @@ function SavingsStatusCard(props: {
               flex: '0 0 auto',
               borderRadius: 999,
               padding: '7px 10px',
-              background: 'rgb(255 255 255 / 0.72)',
+              background: 'rgb(255 255 255 / 0.84)',
               border: '1px solid var(--hairline)',
               color: statusTone,
               fontSize: 11,
@@ -616,7 +618,7 @@ function SavingsStatusCard(props: {
         </div>
 
         <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
-          <div style={{ height: 10, borderRadius: 999, background: 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+          <div style={{ height: 10, borderRadius: 999, background: 'rgba(100,116,139,0.14)', overflow: 'hidden' }}>
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: progressPct }}
@@ -663,7 +665,7 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
           position: 'relative',
           height: 12,
           borderRadius: 999,
-          background: 'rgba(15,23,42,0.08)',
+          background: 'rgba(100,116,139,0.14)',
           overflow: 'hidden',
         }}
       >
@@ -765,11 +767,11 @@ function SavingsSliderControl(props: {
     <div
       style={{
         minWidth: 0,
-        border: '1px solid rgba(255, 255, 255, 0.64)',
+        border: '1px solid rgba(255, 255, 255, 0.78)',
         borderRadius: 18,
         padding: 12,
-        background: 'rgba(255, 255, 255, 0.42)',
-        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+        background: 'rgba(255, 255, 255, 0.74)',
+        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 24px -22px rgba(15, 23, 42, 0.42)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
@@ -779,7 +781,7 @@ function SavingsSliderControl(props: {
         </div>
       </div>
       <div style={{ position: 'relative', marginTop: 12, height: 30, display: 'flex', alignItems: 'center' }}>
-        <div style={{ position: 'absolute', left: 0, right: 0, height: 8, borderRadius: 999, background: 'rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, height: 8, borderRadius: 999, background: 'rgba(100,116,139,0.14)', overflow: 'hidden' }}>
           <motion.div
             initial={false}
             animate={{ width: progressPct }}
@@ -910,7 +912,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
                   height: 28,
                   borderRadius: 999,
                   border: '1px solid var(--hairline)',
-                  background: 'rgb(255 255 255 / 0.72)',
+                  background: 'rgb(255 255 255 / 0.84)',
                   color: 'var(--muted-text)',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1229,10 +1231,10 @@ function SavingsGoalCard(props: {
           style={{
             marginTop: 12,
             borderRadius: 16,
-            border: '1px solid rgba(255, 255, 255, 0.64)',
+            border: '1px solid rgba(255, 255, 255, 0.78)',
             padding: 12,
-            background: 'rgba(255, 255, 255, 0.42)',
-            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+            background: 'rgba(255, 255, 255, 0.76)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 24px -22px rgba(15, 23, 42, 0.42)',
             display: 'grid',
             gap: 10,
           }}
@@ -1356,13 +1358,13 @@ function SavingsGoalSheet(props: {
 
         <div
           style={{
-            border: '1px solid rgba(255, 255, 255, 0.64)',
+            border: '1px solid rgba(255, 255, 255, 0.78)',
             borderRadius: 18,
             padding: 12,
             display: 'grid',
             gap: 8,
-            background: 'rgba(255, 255, 255, 0.48)',
-            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.72)',
+            background: 'rgba(255, 255, 255, 0.78)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 24px -22px rgba(15, 23, 42, 0.42)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 900 }}>
