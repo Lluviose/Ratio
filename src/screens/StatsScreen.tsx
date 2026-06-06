@@ -81,40 +81,40 @@ const compactTwoColumnGridTop12Style = {
 } satisfies CSSProperties
 
 const cardTitleStyle = {
-  fontWeight: 950,
+  fontWeight: 900,
   fontSize: 15,
-  marginBottom: 12,
+  marginBottom: 11,
   letterSpacing: 0,
 } satisfies CSSProperties
 
 const metricTileStyle = {
   minWidth: 0,
-  border: '1px solid rgba(255, 255, 255, 0.82)',
-  borderRadius: 20,
+  border: '1px solid rgba(15, 23, 42, 0.06)',
+  borderRadius: 14,
   padding: 12,
-  background: 'rgba(255, 255, 255, 0.82)',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.88), 0 12px 28px -22px rgba(15, 23, 42, 0.48)',
-  backdropFilter: 'blur(18px) saturate(1.12)',
-  WebkitBackdropFilter: 'blur(18px) saturate(1.12)',
+  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.7))',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 6px 16px -16px rgba(15, 23, 42, 0.36)',
+  backdropFilter: 'blur(14px) saturate(1.04)',
+  WebkitBackdropFilter: 'blur(14px) saturate(1.04)',
 } satisfies CSSProperties
 
 const compactMetricTileStyle = {
   ...metricTileStyle,
-  borderRadius: 18,
+  borderRadius: 13,
   padding: 10,
-  background: 'rgba(255, 255, 255, 0.74)',
+  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.66))',
 } satisfies CSSProperties
 
 const metricLabelStyle = {
   fontSize: 11,
-  fontWeight: 900,
-  color: 'rgba(51, 65, 85, 0.76)',
+  fontWeight: 850,
+  color: 'rgba(71, 85, 105, 0.82)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
 const metricValueStyle = {
   fontSize: 16,
-  fontWeight: 950,
+  fontWeight: 900,
   marginTop: 4,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
@@ -122,21 +122,21 @@ const metricValueStyle = {
 
 const metricSubStyle = {
   fontSize: 11,
-  fontWeight: 850,
+  fontWeight: 780,
   marginTop: 4,
-  color: 'rgba(71, 85, 105, 0.76)',
+  color: 'rgba(71, 85, 105, 0.72)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
 const compactMetricLabelStyle = {
   fontSize: 10,
-  fontWeight: 900,
-  color: 'rgba(51, 65, 85, 0.76)',
+  fontWeight: 850,
+  color: 'rgba(71, 85, 105, 0.82)',
 } satisfies CSSProperties
 
 const compactMetricValueStyle = {
   fontSize: 14,
-  fontWeight: 950,
+  fontWeight: 900,
   marginTop: 3,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
@@ -144,8 +144,8 @@ const compactMetricValueStyle = {
 
 const compactMetricSubStyle = {
   fontSize: 10,
-  fontWeight: 800,
-  color: 'rgba(71, 85, 105, 0.74)',
+  fontWeight: 760,
+  color: 'rgba(71, 85, 105, 0.7)',
   marginTop: 3,
 } satisfies CSSProperties
 
@@ -767,11 +767,11 @@ function SavingsSliderControl(props: {
     <div
       style={{
         minWidth: 0,
-        border: '1px solid rgba(255, 255, 255, 0.78)',
-        borderRadius: 18,
+        border: '1px solid rgba(15, 23, 42, 0.06)',
+        borderRadius: 14,
         padding: 12,
-        background: 'rgba(255, 255, 255, 0.74)',
-        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 24px -22px rgba(15, 23, 42, 0.42)',
+        background: 'rgba(248, 250, 252, 0.66)',
+        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.76)',
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
@@ -1231,10 +1231,10 @@ function SavingsGoalCard(props: {
           style={{
             marginTop: 12,
             borderRadius: 16,
-            border: '1px solid rgba(255, 255, 255, 0.78)',
+            border: '1px solid rgba(15, 23, 42, 0.06)',
             padding: 12,
-            background: 'rgba(255, 255, 255, 0.76)',
-            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 24px -22px rgba(15, 23, 42, 0.42)',
+            background: 'rgba(248, 250, 252, 0.66)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.76)',
             display: 'grid',
             gap: 10,
           }}
@@ -1358,13 +1358,13 @@ function SavingsGoalSheet(props: {
 
         <div
           style={{
-            border: '1px solid rgba(255, 255, 255, 0.78)',
-            borderRadius: 18,
+            border: '1px solid rgba(15, 23, 42, 0.06)',
+            borderRadius: 14,
             padding: 12,
             display: 'grid',
             gap: 8,
-            background: 'rgba(255, 255, 255, 0.78)',
-            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.86), 0 10px 24px -22px rgba(15, 23, 42, 0.42)',
+            background: 'rgba(248, 250, 252, 0.68)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.76)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 900 }}>
