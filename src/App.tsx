@@ -288,6 +288,23 @@ function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
   )
 }
 
+function LiquidGlassFilterDefs() {
+  return (
+    <svg className="liquidGlassFilterDefs" aria-hidden="true" focusable="false">
+      <filter id="ratioLiquidGlassRefraction" x="-14%" y="-14%" width="128%" height="128%" colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.018 0.044" numOctaves="2" seed="13" result="noise" />
+        <feGaussianBlur in="noise" stdDeviation="2" result="softNoise" />
+        <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="11" xChannelSelector="R" yChannelSelector="G" result="refracted" />
+        <feSpecularLighting in="softNoise" surfaceScale="6" specularConstant="0.52" specularExponent="18" lightingColor="#ffffff" result="shine">
+          <fePointLight x="-120" y="-180" z="220" />
+        </feSpecularLighting>
+        <feComposite in="shine" in2="refracted" operator="in" result="rim" />
+        <feBlend in="refracted" in2="rim" mode="screen" />
+      </filter>
+    </svg>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState<TabId>('assets')
   const [view, setView] = useState<ViewId>('main')
@@ -445,6 +462,7 @@ export default function App() {
 
   return (
     <div className="appViewport">
+      <LiquidGlassFilterDefs />
       <div className="appFrame">
         <OverlayProvider>
           <AnimatePresence mode="wait">

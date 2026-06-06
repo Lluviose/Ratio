@@ -31,10 +31,12 @@ export function PillTabs<T extends string>(props: {
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  background: 'var(--card)',
+                  background:
+                    'linear-gradient(180deg, rgba(255,255,255,0.86), rgba(255,255,255,0.36))',
                   borderRadius: 999,
                   zIndex: 0,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  border: '1px solid rgba(255,255,255,0.78)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.78), 0 8px 18px rgba(15,23,42,0.08)',
                 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 30 }}
               />

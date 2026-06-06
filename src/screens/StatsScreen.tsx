@@ -89,20 +89,22 @@ const cardTitleStyle = {
 
 const metricTileStyle = {
   minWidth: 0,
-  border: '1px solid rgba(15, 23, 42, 0.06)',
-  borderRadius: 14,
+  border: '1px solid rgba(255, 255, 255, 0.72)',
+  borderRadius: 16,
   padding: 12,
-  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.7))',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 6px 16px -16px rgba(15, 23, 42, 0.36)',
-  backdropFilter: 'blur(14px) saturate(1.04)',
-  WebkitBackdropFilter: 'blur(14px) saturate(1.04)',
+  background:
+    'radial-gradient(circle at 24% 0%, rgba(255, 255, 255, 0.88), transparent 42%), linear-gradient(145deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.28))',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.82), inset 0 -1px 0 rgba(255, 255, 255, 0.22), 0 12px 24px -22px rgba(15, 23, 42, 0.48)',
+  backdropFilter: 'blur(18px) saturate(1.28)',
+  WebkitBackdropFilter: 'blur(18px) saturate(1.28)',
 } satisfies CSSProperties
 
 const compactMetricTileStyle = {
   ...metricTileStyle,
-  borderRadius: 13,
+  borderRadius: 15,
   padding: 10,
-  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.66))',
+  background:
+    'radial-gradient(circle at 24% 0%, rgba(255, 255, 255, 0.82), transparent 42%), linear-gradient(145deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.26))',
 } satisfies CSSProperties
 
 const metricLabelStyle = {
@@ -1463,7 +1465,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [goal, goalSummary])
 
   return (
-    <div className="stack iosInsightsPage iosStatsPage" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
+    <div className="stack iosInsightsPage iosStatsPage" style={{ padding: '0 16px calc(126px + var(--safe-bottom))' }}>
       <motion.div initial={statsPageInitial} animate={fadeUpAnimate} transition={statsPageTransition}>
         <div className="stack iosStatsStack">
           <SavingsStatusCard
