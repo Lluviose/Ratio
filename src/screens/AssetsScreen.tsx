@@ -549,6 +549,7 @@ export function AssetsScreen(props: {
   const moreRef = useRef<HTMLDivElement | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const measureRafRef = useRef<number | null>(null)
+  const initRafRef = useRef<number | null>(null)
   const groupElsRef = useRef<Partial<Record<GroupId, HTMLDivElement | null>>>({})
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
@@ -1162,9 +1163,14 @@ export function AssetsScreen(props: {
 
   useEffect(() => {
     return () => {
-      if (measureRafRef.current === null) return
-      cancelAnimationFrame(measureRafRef.current)
-      measureRafRef.current = null
+      if (measureRafRef.current !== null) {
+        cancelAnimationFrame(measureRafRef.current)
+        measureRafRef.current = null
+      }
+      if (initRafRef.current !== null) {
+        cancelAnimationFrame(initRafRef.current)
+        initRafRef.current = null
+      }
     }
   }, [])
 
@@ -1205,23 +1211,46 @@ export function AssetsScreen(props: {
     return () => ro.disconnect()
   }, [])
 
-  useLayoutEffect(() => {
-    if (didInitRef.current) return
+  const initializeHomeScroller = useCallback(() => {
+    if (didInitRef.current) return true
     const el = scrollerRef.current
-    if (!el) return
+    if (!el) return false
 
-    const w = el.clientWidth || 0
-    if (w <= 0) return
+    const root = viewportRef.current
+    const w = el.clientWidth || root?.clientWidth || viewport.w || 0
+    if (w <= 0) return false
 
     didInitRef.current = true
 
     // Start at Page 2 (List) - 直接设置，不触发动画
-    el.scrollLeft = w * 2
+    el.scrollLeft = w * INITIAL_HOME_PAGE_INDEX
     scrollLeft.set(el.scrollLeft)
+    reportHomePageActive(INITIAL_HOME_PAGE_INDEX)
 
     measureListRects()
     setInitialized(true)
-  }, [measureListRects, scrollLeft, skipInitialAnimation, viewport.w])
+    return true
+  }, [measureListRects, reportHomePageActive, scrollLeft, viewport.w])
+
+  useLayoutEffect(() => {
+    if (initializeHomeScroller()) return
+
+    let attempts = 0
+    const retry = () => {
+      initRafRef.current = null
+      if (initializeHomeScroller()) return
+      attempts += 1
+      if (attempts >= 30) return
+      initRafRef.current = requestAnimationFrame(retry)
+    }
+
+    initRafRef.current = requestAnimationFrame(retry)
+    return () => {
+      if (initRafRef.current === null) return
+      cancelAnimationFrame(initRafRef.current)
+      initRafRef.current = null
+    }
+  }, [initializeHomeScroller])
 
   useEffect(() => {
     if (!initialized) return
