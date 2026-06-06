@@ -346,12 +346,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     if (mode === 'netDebt') {
       return (
         <div
+          className="iosTrendDetailPanel"
           style={{
-            background: 'var(--card)',
-            border: '1px solid var(--hairline)',
-            padding: '12px 16px',
-            borderRadius: 18,
-            boxShadow: 'var(--shadow-hover)',
             minWidth: 180,
             width: '100%',
             maxWidth: 440,
@@ -377,12 +373,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
     return (
       <div
+        className="iosTrendDetailPanel"
         style={{
-          background: 'var(--card)',
-          border: '1px solid var(--hairline)',
-          padding: '12px 16px',
-          borderRadius: 18,
-          boxShadow: 'var(--shadow-hover)',
           minWidth: 180,
           width: '100%',
           maxWidth: 440,
@@ -423,13 +415,13 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }
 
   return (
-    <div className="stack" style={{ padding: '0 16px', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
+    <div className="stack iosInsightsPage iosTrendPage" style={{ padding: '0 16px', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
       <motion.div
         initial={trendPageInitial}
         animate={fadeUpAnimate}
         transition={trendPageTransition}
       >
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div className="iosTrendMode">
           <SegmentedControl
             options={[
               { value: 'netDebt', label: '净资产与负债' },
@@ -442,15 +434,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
         <motion.div
           ref={chartRef}
+          className="iosTrendChartCard"
           style={{
-            height: CHART_HEIGHT,
-            marginTop: 24,
-            position: 'relative',
-            zIndex: 1,
-            overscrollBehavior: 'contain',
-            touchAction: 'pan-y',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
             cursor: data.length > 0 ? 'pointer' : 'default',
           }}
           initial={cardEntranceInitial}
@@ -458,8 +443,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           transition={chartEntranceTransition}
         >
           {chartWidth > 0 && data.length > 0 ? (
-            <LineChart width={chartWidth} height={CHART_HEIGHT} data={data} margin={{ top: 12, right: 10, bottom: 2, left: -6 }} onClick={handleChartClick}>
-              <CartesianGrid vertical={false} stroke="rgba(148, 163, 184, 0.18)" strokeDasharray="3 8" />
+            <LineChart width={chartWidth} height={CHART_HEIGHT} data={data} margin={{ top: 22, right: 12, bottom: 10, left: -2 }} onClick={handleChartClick}>
+              <CartesianGrid vertical={false} stroke="rgba(100, 116, 139, 0.16)" strokeDasharray="2 10" />
               {forecastArea ? (
                 <ReferenceArea x1={forecastArea.start} x2={forecastArea.end} fill={FORECAST_STROKE} fillOpacity={0.045} strokeOpacity={0} />
               ) : null}
@@ -486,7 +471,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <Tooltip
                 content={captureActivePoint}
                 wrapperStyle={{ opacity: 0, visibility: 'hidden', pointerEvents: 'none' }}
-                cursor={{ stroke: 'var(--hairline)', strokeWidth: 2, strokeDasharray: '4 4' }}
+                cursor={{ stroke: 'rgba(15, 23, 42, 0.16)', strokeWidth: 2, strokeDasharray: '4 6' }}
               />
               {mode === 'netDebt' ? (
                 <>
@@ -532,7 +517,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
-                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    activeDot={{ r: 6, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
                     connectNulls={true}
                     animationDuration={1500}
                     animationBegin={80}
@@ -546,7 +531,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     dot={false}
-                    activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff' }}
+                    activeDot={{ r: 5, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
                     connectNulls={true}
                     animationDuration={1500}
                     animationBegin={180}
@@ -562,7 +547,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       dot={false}
-                      activeDot={{ r: 5, strokeWidth: 3, stroke: '#fff', fill: FORECAST_STROKE }}
+                      activeDot={{ r: 5, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)', fill: FORECAST_STROKE }}
                       connectNulls={false}
                       animationDuration={900}
                       animationBegin={260}
@@ -580,7 +565,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     dot={false}
-                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    activeDot={{ r: 6, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
                     connectNulls={true}
                     animationDuration={1500}
                     animationBegin={80}
@@ -594,7 +579,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     dot={false}
-                    activeDot={{ r: 6, strokeWidth: 3, stroke: '#fff' }}
+                    activeDot={{ r: 6, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
                     connectNulls={true}
                     animationDuration={1500}
                     animationBegin={180}
@@ -628,18 +613,13 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         <AnimatePresence>
           {mode === 'netDebt' && goalSummary ? (
             <motion.div
+              className="iosTrendGoalPanel"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={tooltipExit}
               transition={screenTransition}
               style={{
                 marginTop: 12,
-                border: '1px solid var(--hairline)',
-                borderRadius: 18,
-                padding: '10px 12px',
-                background: 'var(--card)',
-                display: 'grid',
-                gap: 8,
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
@@ -673,7 +653,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           ) : null}
         </AnimatePresence>
 
-        <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24, position: 'relative', zIndex: 0 }}>
+        <div className="iosTrendRange">
           <PillTabs
             ariaLabel="range"
             options={[

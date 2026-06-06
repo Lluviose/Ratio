@@ -82,23 +82,27 @@ const compactTwoColumnGridTop12Style = {
 
 const cardTitleStyle = {
   fontWeight: 950,
-  fontSize: 14,
-  marginBottom: 10,
+  fontSize: 15,
+  marginBottom: 12,
+  letterSpacing: 0,
 } satisfies CSSProperties
 
 const metricTileStyle = {
   minWidth: 0,
-  border: '1px solid var(--hairline)',
-  borderRadius: 18,
+  border: '1px solid rgba(255, 255, 255, 0.68)',
+  borderRadius: 20,
   padding: 12,
-  background: 'var(--card)',
+  background: 'rgba(255, 255, 255, 0.54)',
+  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 10px 24px -22px rgba(15, 23, 42, 0.52)',
+  backdropFilter: 'blur(18px) saturate(1.12)',
+  WebkitBackdropFilter: 'blur(18px) saturate(1.12)',
 } satisfies CSSProperties
 
 const compactMetricTileStyle = {
   ...metricTileStyle,
-  borderRadius: 16,
+  borderRadius: 18,
   padding: 10,
-  background: 'var(--bg)',
+  background: 'rgba(255, 255, 255, 0.42)',
 } satisfies CSSProperties
 
 const metricLabelStyle = {
@@ -347,6 +351,7 @@ function MetricTile(props: {
 
   return (
     <motion.div
+      className="iosMetricTile"
       style={compact ? compactMetricTileStyle : metricTileStyle}
       whileHover={subtleLift}
       transition={quickFade}
@@ -757,7 +762,16 @@ function SavingsSliderControl(props: {
   const progressPct = `${Math.round(progress * 1000) / 10}%`
 
   return (
-    <div style={{ minWidth: 0, border: '1px solid var(--hairline)', borderRadius: 18, padding: 12, background: 'var(--bg)' }}>
+    <div
+      style={{
+        minWidth: 0,
+        border: '1px solid rgba(255, 255, 255, 0.64)',
+        borderRadius: 18,
+        padding: 12,
+        background: 'rgba(255, 255, 255, 0.42)',
+        boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
+      }}
+    >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
         <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>{label}</div>
         <div style={{ fontSize: 14, fontWeight: 950, color, overflowWrap: 'anywhere' }}>
@@ -1215,9 +1229,10 @@ function SavingsGoalCard(props: {
           style={{
             marginTop: 12,
             borderRadius: 16,
-            border: '1px solid var(--hairline)',
+            border: '1px solid rgba(255, 255, 255, 0.64)',
             padding: 12,
-            background: 'var(--bg)',
+            background: 'rgba(255, 255, 255, 0.42)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.7)',
             display: 'grid',
             gap: 10,
           }}
@@ -1341,12 +1356,13 @@ function SavingsGoalSheet(props: {
 
         <div
           style={{
-            border: '1px solid var(--hairline)',
+            border: '1px solid rgba(255, 255, 255, 0.64)',
             borderRadius: 18,
             padding: 12,
             display: 'grid',
             gap: 8,
-            background: 'var(--bg)',
+            background: 'rgba(255, 255, 255, 0.48)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.72)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 900 }}>
@@ -1445,9 +1461,9 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }, [goal, goalSummary])
 
   return (
-    <div className="stack" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
+    <div className="stack iosInsightsPage iosStatsPage" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
       <motion.div initial={statsPageInitial} animate={fadeUpAnimate} transition={statsPageTransition}>
-        <div className="stack" style={{ marginTop: 8 }}>
+        <div className="stack iosStatsStack">
           <SavingsStatusCard
             summary={goalSummary}
             latestNetWorth={latestNetWorth}
@@ -1521,7 +1537,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
           {view ? (
             <>
-              <div style={{ display: 'grid', gap: 9, marginTop: 2 }}>
+              <div className="iosStatsRangeHeader">
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ minWidth: 0, flex: '1 1 160px' }}>
                     <div style={{ fontSize: 12, fontWeight: 950 }}>区间统计范围</div>
