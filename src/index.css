@@ -28,8 +28,7 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
-  --bottom-nav-height: calc(89px + var(--safe-bottom));
-  --bottom-nav-clearance: 20px;
+  --bottom-nav-height: calc(80px + var(--safe-bottom));
 
   color-scheme: light;
 }
@@ -272,8 +271,11 @@ a {
 }
 
 .contentWithNav {
-  padding-bottom: calc(var(--bottom-nav-height) + var(--bottom-nav-clearance));
-  scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--bottom-nav-clearance));
+  scroll-padding-bottom: calc(var(--bottom-nav-height) + 16px);
+}
+
+.contentWithNavEndPadding {
+  padding-bottom: calc(var(--bottom-nav-height) + 16px);
 }
 
 .card {
@@ -509,8 +511,8 @@ a {
   bottom: 0;
   left: 0;
   right: 0;
-  min-height: var(--bottom-nav-height);
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+  height: var(--bottom-nav-height);
+  padding: 10px 10px calc(10px + var(--safe-bottom));
   background: rgba(245, 246, 248, 0.85);
   backdrop-filter: blur(12px);
   border-top: 1px solid rgba(11, 15, 26, 0.06);
@@ -530,12 +532,14 @@ a {
 .navItem {
   border: none;
   background: transparent;
+  height: 60px;
   padding: 10px 6px;
   border-radius: 16px;
   cursor: pointer;
   display: grid;
   justify-items: center;
   gap: 6px;
+  align-content: center;
   color: rgba(11, 15, 26, 0.6);
   position: relative;
   overflow: hidden;
@@ -564,6 +568,7 @@ a {
 .navLabel {
   font-size: 11px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .segment {
