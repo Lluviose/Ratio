@@ -558,7 +558,7 @@ export default function App() {
                       animate="animate"
                       exit="exit"
                       transition={screenTransition}
-                      style={{ height: '100%' }}
+                      style={{ minHeight: '100%' }}
                     >
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="trend" />}>
@@ -576,7 +576,7 @@ export default function App() {
                       animate="animate"
                       exit="exit"
                       transition={screenTransition}
-                      style={{ height: '100%' }}
+                      style={{ minHeight: '100%' }}
                     >
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="stats" />}>
@@ -594,7 +594,7 @@ export default function App() {
                       animate="animate"
                       exit="exit"
                       transition={screenTransition}
-                      style={{ height: '100%' }}
+                      style={{ minHeight: '100%' }}
                     >
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="settings" />}>

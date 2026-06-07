@@ -28,6 +28,8 @@
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
+  --bottom-nav-height: calc(89px + var(--safe-bottom));
+  --bottom-nav-clearance: 20px;
 
   color-scheme: light;
 }
@@ -270,7 +272,8 @@ a {
 }
 
 .contentWithNav {
-  padding-bottom: calc(92px + var(--safe-bottom));
+  padding-bottom: calc(var(--bottom-nav-height) + var(--bottom-nav-clearance));
+  scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--bottom-nav-clearance));
 }
 
 .card {
@@ -506,6 +509,7 @@ a {
   bottom: 0;
   left: 0;
   right: 0;
+  min-height: var(--bottom-nav-height);
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
   background: rgba(245, 246, 248, 0.85);
   backdrop-filter: blur(12px);
