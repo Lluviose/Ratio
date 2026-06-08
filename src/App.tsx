@@ -520,7 +520,7 @@ export default function App() {
               ) : null}
 
               <div className={tab === 'assets' ? 'relative flex-1 min-h-0' : 'content contentWithNav relative'}>
-                <AnimatePresence mode="wait" custom={tabDirection}>
+                <AnimatePresence mode="popLayout" initial={false} custom={tabDirection}>
                   {tab === 'assets' && (
                     <motion.div
                       key="assets"

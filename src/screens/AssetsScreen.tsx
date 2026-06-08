@@ -1542,8 +1542,66 @@ export function AssetsScreen(props: {
     }
   }, [selectedType, grouped.groupCards])
 
+  const fallbackHome = !initialized ? (
+    <div className="absolute inset-0 z-30 flex flex-col" style={{ background: 'var(--bg)' }}>
+      <div className="px-4 pt-6 pb-2 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
+            <span>鎴戠殑鍑€璧勪骇 (CNY)</span>
+          </div>
+          <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">
+            {hideAmounts ? <span className={maskedClass}>{maskedText}</span> : formatCny(grouped.netWorth)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onAddAccount}
+          className="iconBtn iconBtnPrimary shadow-sm"
+          style={addButtonStyle}
+          aria-label="add"
+        >
+          <Plus size={22} strokeWidth={2.75} />
+        </button>
+      </div>
+
+      <div className="relative flex-1 min-h-0">
+        <AssetsListPage
+          grouped={grouped}
+          getIcon={getIcon}
+          onPickType={handlePickType}
+          expandedGroup={expandedGroup}
+          onToggleGroup={handleToggleGroup}
+          hideAmounts={hideAmounts}
+          isInitialLoad={false}
+        />
+      </div>
+
+      <div className="absolute left-4 bottom-4 z-20">
+        <div className="flex items-center gap-1 bg-white/80 backdrop-blur-md border border-white/70 shadow-sm rounded-full p-1">
+          <button
+            type="button"
+            className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+            onClick={() => onNavigate('stats')}
+            aria-label="stats"
+          >
+            <BarChart3 size={20} strokeWidth={2.3} />
+          </button>
+          <button
+            type="button"
+            className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+            onClick={() => onNavigate('trend')}
+            aria-label="trend"
+          >
+            <TrendingUp size={20} strokeWidth={2.3} />
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null
+
   return (
     <div ref={viewportRef} className="relative w-full h-full overflow-hidden" style={{ background: 'var(--bg)' }}>
+      {fallbackHome}
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
       {initialized ? (
         <div className="absolute inset-0 z-0 pointer-events-none">
@@ -1694,7 +1752,11 @@ export function AssetsScreen(props: {
         </div>
       ) : null}
 
-      <motion.div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none" style={{ opacity: overlayFade }}>
+      <motion.div
+        aria-hidden={!initialized}
+        className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none"
+        style={{ opacity: overlayFade }}
+      >
         <motion.div
           className="flex items-start justify-between gap-3"
           style={{ y: listHeaderY, opacity: listHeaderOpacity, pointerEvents: listHeaderPointerEvents }}
@@ -1750,7 +1812,11 @@ export function AssetsScreen(props: {
         </motion.div>
       </motion.div>
 
-      <motion.div className="absolute left-4 bottom-4 z-20 pointer-events-none" style={{ opacity: overlayFade }}>
+      <motion.div
+        aria-hidden={!initialized}
+        className="absolute left-4 bottom-4 z-20 pointer-events-none"
+        style={{ opacity: overlayFade }}
+      >
         <motion.div style={{ opacity: miniBarOpacity, y: miniBarY, pointerEvents: miniBarPointerEvents }}>
           <div ref={moreRef} className="relative">
             <div className="flex items-center gap-1 bg-white/80 backdrop-blur-md border border-white/70 shadow-sm rounded-full p-1">
@@ -1809,6 +1875,7 @@ export function AssetsScreen(props: {
 
       <div
         ref={scrollerRef}
+        aria-hidden={!initialized}
         className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain"
         style={homeScrollerStyle}
       >

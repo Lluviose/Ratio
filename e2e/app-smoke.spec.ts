@@ -41,14 +41,14 @@ function accountTypeCard(page: Page) {
 }
 
 async function openAccountDetail(page: Page) {
-  await accountTypeCard(page).click()
-  await page.getByRole('button', { name: 'account type bank_card' }).click()
-  await page.getByRole('button', { name: 'account E2E Account' }).click()
+  await accountTypeCard(page).dispatchEvent('click')
+  await page.getByRole('button', { name: 'account type bank_card' }).dispatchEvent('click')
+  await page.getByRole('button', { name: 'account E2E Account' }).dispatchEvent('click')
 }
 
 test.beforeEach(async ({ page }) => {
   await seedApp(page)
-  await page.goto('/')
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
 })
 
 test('returns from stats and trend to assets without blanking the home screen', async ({ page }) => {
@@ -65,11 +65,29 @@ test('returns from stats and trend to assets without blanking the home screen', 
   await expectAssetsHomeVisible(page)
 })
 
+test('returns to assets when backing out of stats before it finishes loading', async ({ page }) => {
+  await expectAssetsHomeVisible(page)
+
+  await page.route(/\/assets\/StatsScreen-.*\.js$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    await route.continue()
+  })
+
+  await page.getByRole('button', { name: 'stats' }).click()
+  await page.getByRole('button', { name: 'back' }).first().click()
+
+  await expectAssetsHomeVisible(page)
+})
+
 test('focuses the blank balance input when opening edit balance', async ({ page }) => {
   await expectAssetsHomeVisible(page)
 
   await openAccountDetail(page)
-  await page.getByRole('button', { name: 'set balance action' }).click()
+  await page.getByRole('button', { name: 'set balance action' }).dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+    bubbles: true,
+    cancelable: true,
+  })
 
   const balanceInput = page.locator('input[aria-label="set balance"]')
   await expect(balanceInput).toBeVisible()

@@ -1,4 +1,5 @@
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { flushSync } from 'react-dom'
 import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
@@ -231,6 +232,7 @@ export function AccountDetailSheet(props: {
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
   const transferInputRef = useRef<HTMLInputElement | null>(null)
   const suppressOpClickRef = useRef(false)
+  const suppressActionClickRef = useRef(false)
   const openedAtRef = useRef<number | null>(null)
   const initKeyRef = useRef<string | null>(null)
   const [adjustDirection, setAdjustDirection] = useState<AdjustDirection>('plus')
@@ -310,6 +312,47 @@ export function AccountDetailSheet(props: {
     }
 
     setAction(nextAction)
+  }
+
+  const openAdjustAction = () => {
+    flushSync(() => {
+      setMoreOpen(false)
+      setNoteValue('')
+      setAdjustDirection('plus')
+      setAdjustAmount('')
+      transitionToAction('adjust')
+    })
+    focusAmountInput(adjustInputRef.current)
+  }
+
+  const openSetBalanceAction = () => {
+    flushSync(() => {
+      setMoreOpen(false)
+      setNoteValue('')
+      setBalanceValue('')
+      transitionToAction('set_balance')
+    })
+    focusAmountInput(balanceInputRef.current)
+  }
+
+  const handleActionPointerDown = (e: ReactPointerEvent, openAction: () => void) => {
+    if (e.pointerType === 'mouse') return
+
+    e.preventDefault()
+    e.stopPropagation()
+    suppressActionClickRef.current = true
+    window.setTimeout(() => {
+      suppressActionClickRef.current = false
+    }, 500)
+    openAction()
+  }
+
+  const handleActionClick = (openAction: () => void) => {
+    if (suppressActionClickRef.current) {
+      suppressActionClickRef.current = false
+      return
+    }
+    openAction()
   }
 
   useLayoutEffect(() => {
@@ -1012,7 +1055,7 @@ export function AccountDetailSheet(props: {
 
           <div className="mt-3 h-px bg-slate-200/70" />
 
-          <AnimatePresence mode="wait" initial={false}>
+          <AnimatePresence mode="popLayout" initial={false}>
             {action === 'none' ? (
               <motion.div
                 key="summary"
@@ -1031,13 +1074,8 @@ export function AccountDetailSheet(props: {
                   <motion.button
                     type="button"
                     aria-label="adjust balance action"
-                    onClick={() => {
-                      setMoreOpen(false)
-                      setNoteValue('')
-                      setAdjustDirection('plus')
-                      setAdjustAmount('')
-                      transitionToAction('adjust')
-                    }}
+                    onPointerDown={(e) => handleActionPointerDown(e, openAdjustAction)}
+                    onClick={() => handleActionClick(openAdjustAction)}
                     whileTap={{ scale: 0.99 }}
                     className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
                   >
@@ -1046,12 +1084,8 @@ export function AccountDetailSheet(props: {
                   <motion.button
                     type="button"
                     aria-label="set balance action"
-                    onClick={() => {
-                      setMoreOpen(false)
-                      setNoteValue('')
-                      setBalanceValue('')
-                      transitionToAction('set_balance')
-                    }}
+                    onPointerDown={(e) => handleActionPointerDown(e, openSetBalanceAction)}
+                    onClick={() => handleActionClick(openSetBalanceAction)}
                     whileTap={{ scale: 0.99 }}
                     className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
                   >
