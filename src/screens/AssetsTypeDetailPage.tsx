@@ -189,11 +189,20 @@ export function AssetsTypeDetailPage(props: {
               return (
                 <motion.div
                   key={account.id}
+                  role="button"
+                  aria-label={`account ${account.name}`}
+                  tabIndex={0}
                   layoutId={accountDetailSheetLayoutId(account.id)}
                   layout
                   className="p-3 rounded-[22px] bg-[var(--bg)] border border-[var(--hairline)] shadow-[0_10px_26px_-22px_rgba(0,0,0,0.28)] cursor-pointer"
                   onClick={() => {
                     if (isActive) return
+                    onEditAccount(account)
+                  }}
+                  onKeyDown={(e) => {
+                    if (isActive) return
+                    if (e.key !== 'Enter' && e.key !== ' ') return
+                    e.preventDefault()
                     onEditAccount(account)
                   }}
                   initial={{ opacity: 0, x: -10 }}

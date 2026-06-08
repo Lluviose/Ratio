@@ -1030,6 +1030,7 @@ export function AccountDetailSheet(props: {
                 <div className="mt-5 flex gap-3">
                   <motion.button
                     type="button"
+                    aria-label="adjust balance action"
                     onClick={() => {
                       setMoreOpen(false)
                       setNoteValue('')
@@ -1044,6 +1045,7 @@ export function AccountDetailSheet(props: {
                   </motion.button>
                   <motion.button
                     type="button"
+                    aria-label="set balance action"
                     onClick={() => {
                       setMoreOpen(false)
                       setNoteValue('')

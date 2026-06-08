@@ -313,6 +313,7 @@ function AssetsListPageComponent(props: {
                               <motion.button
                                 key={t.type}
                                 type="button"
+                                aria-label={`account type ${t.type}`}
                                 className={clsx(
                                   'flex items-center justify-between rounded-[18px] px-3 py-3 text-left',
                                   'bg-white border border-black/5 shadow-[0_6px_20px_-18px_rgba(15,23,42,0.45)]',
