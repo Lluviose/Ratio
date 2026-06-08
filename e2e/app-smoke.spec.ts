@@ -94,3 +94,27 @@ test('focuses the blank balance input when opening edit balance', async ({ page 
   await expect(balanceInput).toBeFocused()
   await expect(balanceInput).toHaveValue('')
 })
+
+test('does not focus a balance input when reopening account details normally', async ({ page }) => {
+  await expectAssetsHomeVisible(page)
+
+  await openAccountDetail(page)
+  await page.getByRole('button', { name: 'set balance action' }).dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+    bubbles: true,
+    cancelable: true,
+  })
+  const balanceInput = page.locator('input[aria-label="set balance"]')
+  await expect(balanceInput).toBeFocused()
+
+  await page.getByRole('button', { name: 'close' }).dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+    bubbles: true,
+    cancelable: true,
+  })
+  await expect(balanceInput).toBeHidden()
+
+  await openAccountDetail(page)
+  await expect(page.getByRole('button', { name: 'set balance action' })).toBeVisible()
+  await expect(page.locator('input[aria-label="set balance"]')).toHaveCount(0)
+})

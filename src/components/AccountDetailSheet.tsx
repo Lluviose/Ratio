@@ -358,10 +358,16 @@ export function AccountDetailSheet(props: {
   useLayoutEffect(() => {
     if (!open) {
       initKeyRef.current = null
+      setAction('none')
       setPageDir(0)
       setSuppressOpsIntro(false)
+      setMoreOpen(false)
       setEditingOpId(null)
       setSwipedOpId(null)
+      setBalanceValue('')
+      setAdjustAmount('')
+      setNoteValue('')
+      suppressActionClickRef.current = false
       return
     }
     if (!accountId || !account) return
