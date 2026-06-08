@@ -637,6 +637,26 @@ export function AssetsScreen(props: {
     [onHomePageActiveChange],
   )
 
+  const scrollHomeScrollerToListPage = useCallback(() => {
+    const el = scrollerRef.current
+    if (!el) return false
+
+    const w = el.clientWidth
+    if (w <= 0) return false
+
+    const target = w * INITIAL_HOME_PAGE_INDEX
+    const maxScrollLeft = Math.max(0, el.scrollWidth - w)
+    if (maxScrollLeft + 1 < target) return false
+
+    el.scrollLeft = target
+    const actual = el.scrollLeft
+    if (Math.abs(actual - target) > 1) return false
+
+    if (scrollLeft.get() !== actual) scrollLeft.set(actual)
+    reportHomePageActive(INITIAL_HOME_PAGE_INDEX)
+    return true
+  }, [reportHomePageActive, scrollLeft])
+
   useEffect(() => {
     reportHomePageActive(scrollIdx.get())
     return scrollIdx.on('change', reportHomePageActive)
@@ -1213,24 +1233,18 @@ export function AssetsScreen(props: {
 
   const initializeHomeScroller = useCallback(() => {
     if (didInitRef.current) return true
-    const el = scrollerRef.current
-    if (!el) return false
-
-    const root = viewportRef.current
-    const w = el.clientWidth || root?.clientWidth || viewport.w || 0
-    if (w <= 0) return false
-
     didInitRef.current = true
 
     // Start at Page 2 (List) - 直接设置，不触发动画
-    el.scrollLeft = w * INITIAL_HOME_PAGE_INDEX
-    scrollLeft.set(el.scrollLeft)
-    reportHomePageActive(INITIAL_HOME_PAGE_INDEX)
+    if (!scrollHomeScrollerToListPage()) {
+      didInitRef.current = false
+      return false
+    }
 
     measureListRects()
     setInitialized(true)
     return true
-  }, [measureListRects, reportHomePageActive, scrollLeft, viewport.w])
+  }, [measureListRects, scrollHomeScrollerToListPage])
 
   useLayoutEffect(() => {
     if (initializeHomeScroller()) return
@@ -1240,7 +1254,7 @@ export function AssetsScreen(props: {
       initRafRef.current = null
       if (initializeHomeScroller()) return
       attempts += 1
-      if (attempts >= 30) return
+      if (attempts >= 120) return
       initRafRef.current = requestAnimationFrame(retry)
     }
 
@@ -1251,6 +1265,13 @@ export function AssetsScreen(props: {
       initRafRef.current = null
     }
   }, [initializeHomeScroller])
+
+  useLayoutEffect(() => {
+    if (!initialized) return
+    if (detailPageMounted) return
+    if (!scrollHomeScrollerToListPage()) return
+    scheduleMeasure()
+  }, [detailPageMounted, initialized, scheduleMeasure, scrollerWidth, scrollHomeScrollerToListPage])
 
   useEffect(() => {
     if (!initialized) return

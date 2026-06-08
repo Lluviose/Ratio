@@ -1,4 +1,4 @@
-import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
@@ -268,6 +268,22 @@ export function AccountDetailSheet(props: {
         spellCheck: false,
       } as const)
 
+  const focusAmountInput = useCallback((input: HTMLInputElement | null, selectText = true) => {
+    if (!input) return
+    try {
+      input.focus({ preventScroll: true })
+    } catch {
+      input.focus()
+    }
+    if (!selectText) return
+    try {
+      input.select()
+    } catch {
+      const pos = input.value.length
+      input.setSelectionRange(pos, pos)
+    }
+  }, [])
+
   const handleClosePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -335,6 +351,14 @@ export function AccountDetailSheet(props: {
     openedAtRef.current = performance.now()
   }, [open])
 
+  useLayoutEffect(() => {
+    if (!open) return
+    if (action !== 'set_balance' && action !== 'adjust') return
+    setMoreOpen(false)
+    const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
+    focusAmountInput(el)
+  }, [action, focusAmountInput, open])
+
   useEffect(() => {
     if (!open) return
     if (action !== 'set_balance' && action !== 'adjust') return
@@ -347,11 +371,10 @@ export function AccountDetailSheet(props: {
     const timer = window.setTimeout(() => {
       const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
       if (!el) return
-      el.focus()
-      el.select()
+      focusAmountInput(el)
     }, delay)
     return () => window.clearTimeout(timer)
-  }, [action, open])
+  }, [action, focusAmountInput, open])
 
   useEffect(() => {
     if (!open || action !== 'none' || !suppressOpsIntro) return
@@ -414,6 +437,11 @@ export function AccountDetailSheet(props: {
     if (!latest) return true
     return latest.localeCompare(at) <= 0
   }
+
+  const setBalanceInputNode = useCallback((node: HTMLInputElement | null) => {
+    balanceInputRef.current = node
+    if (node && open && action === 'set_balance') focusAmountInput(node)
+  }, [action, focusAmountInput, open])
 
   if (!account)
     return (
@@ -514,8 +542,7 @@ export function AccountDetailSheet(props: {
             ? transferInputRef.current
             : null
     if (!el) return
-    el.focus()
-    el.select()
+    focusAmountInput(el)
   }
 
   const focusInputAtEnd = (input: HTMLInputElement | null) => {
@@ -1475,11 +1502,12 @@ export function AccountDetailSheet(props: {
                   <div className="flex items-baseline gap-2 min-w-0">
                     <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
                     <input
-                      ref={balanceInputRef}
+                      ref={setBalanceInputNode}
                       className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
                       {...expressionInputProps}
                       placeholder="0"
                       value={balanceValue}
+                      autoFocus
                       onChange={(e) => setBalanceValue(sanitizeMoneyExpressionInput(e.target.value))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
