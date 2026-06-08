@@ -318,7 +318,7 @@ export function AccountDetailSheet(props: {
     setEditingOpId(null)
     setSwipedOpId(null)
     setRenameValue(account.name)
-    setBalanceValue(toMoneyInputValue(account.balance))
+    setBalanceValue('')
     setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
@@ -554,7 +554,7 @@ export function AccountDetailSheet(props: {
     setEditingOpId(null)
     setSwipedOpId(null)
     setRenameValue(account.name)
-    setBalanceValue(toMoneyInputValue(account.balance))
+    setBalanceValue('')
     setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
@@ -1020,7 +1020,7 @@ export function AccountDetailSheet(props: {
                     onClick={() => {
                       setMoreOpen(false)
                       setNoteValue('')
-                      setBalanceValue(toMoneyInputValue(account.balance))
+                      setBalanceValue('')
                       transitionToAction('set_balance')
                     }}
                     whileTap={{ scale: 0.99 }}

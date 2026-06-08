@@ -29,8 +29,9 @@ export function EditBalanceSheet(props: {
     : ({ inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const)
 
   const submit = () => {
-    const num = Number(inputRef.current?.value ?? '')
-    if (!Number.isFinite(num)) {
+    const raw = inputRef.current?.value.trim() ?? ''
+    const num = Number(raw)
+    if (!raw || !Number.isFinite(num)) {
       toast('请输入正确余额', { tone: 'danger' })
       inputRef.current?.focus()
       inputRef.current?.select()
@@ -52,7 +53,6 @@ export function EditBalanceSheet(props: {
           <input
             className="input"
             {...inputProps}
-            defaultValue={String(initialValue)}
             ref={inputRef}
             placeholder="0"
             autoFocus

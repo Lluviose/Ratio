@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   addDaysToDateKey,
   coerceSavingsGoal,
@@ -103,6 +103,9 @@ describe('savingsGoal', () => {
   })
 
   it('uses the configured month start day for current savings periods before the boundary', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-07T12:00:00.000Z'))
+
     const summary = getSavingsGoalSummary(
       {
         ...goal,
@@ -117,6 +120,8 @@ describe('savingsGoal', () => {
       ],
       { monthStartDay: 8 },
     )
+
+    vi.useRealTimers()
 
     expect(summary?.currentPeriodStartDate).toBe('2026-05-08')
     expect(summary?.currentPeriodEndDate).toBe('2026-06-08')
