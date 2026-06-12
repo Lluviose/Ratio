@@ -91,31 +91,6 @@ export default defineConfig(() => {
                 },
               },
             },
-            {
-              urlPattern: /^https:\/\/fonts\.googleapis\.com\/css2/i,
-              handler: 'StaleWhileRevalidate',
-              options: {
-                cacheName: 'google-fonts-stylesheets',
-                expiration: {
-                  maxEntries: 10,
-                  maxAgeSeconds: 60 * 60 * 24 * 365,
-                },
-              },
-            },
-            {
-              urlPattern: /^https:\/\/fonts\.gstatic\.com\/s\//i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'google-fonts-webfonts',
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-                expiration: {
-                  maxEntries: 20,
-                  maxAgeSeconds: 60 * 60 * 24 * 365,
-                },
-              },
-            },
           ],
         },
         manifest: false,

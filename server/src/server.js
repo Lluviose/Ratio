@@ -17,6 +17,7 @@ function readBooleanEnv(name, fallback = false) {
 }
 
 const PORT = Number(process.env.PORT || 8787)
+const HOST = process.env.RATIO_HOST || process.env.HOST || '127.0.0.1'
 const DATA_DIR = process.env.RATIO_DATA_DIR || path.resolve('data')
 const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || 'http://localhost:5173'
 const MAX_BACKUP_BYTES = readPositiveNumberEnv('RATIO_MAX_BACKUP_BYTES', 2 * 1024 * 1024)
@@ -38,7 +39,13 @@ const AI_MAX_TOTAL_MESSAGE_CHARS = readPositiveNumberEnv('RATIO_AI_MAX_TOTAL_MES
 const AI_ALLOW_HTTP_UPSTREAM = readBooleanEnv('RATIO_AI_ALLOW_HTTP_UPSTREAM', false)
 const AI_ALLOW_PRIVATE_UPSTREAM = readBooleanEnv('RATIO_AI_ALLOW_PRIVATE_UPSTREAM', false)
 const TELEMETRY_MAX_DAILY_BYTES = readPositiveNumberEnv('RATIO_TELEMETRY_MAX_DAILY_BYTES', 5 * 1024 * 1024)
-const AUTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AUTH_RATE_LIMIT_PER_MINUTE', 600)
+const TELEMETRY_RETENTION_DAYS = readPositiveNumberEnv('RATIO_TELEMETRY_RETENTION_DAYS', 30)
+const TRUST_PROXY = readBooleanEnv('RATIO_TRUST_PROXY', true)
+const AUTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AUTH_RATE_LIMIT_PER_MINUTE', 60)
+const AUTH_FAILURE_WINDOW_MS = readPositiveNumberEnv('RATIO_AUTH_FAILURE_WINDOW_MS', 15 * 60 * 1000)
+const AUTH_MAX_FAILED_ATTEMPTS = readPositiveNumberEnv('RATIO_AUTH_MAX_FAILED_ATTEMPTS', 8)
+const AUTH_LOCKOUT_MS = readPositiveNumberEnv('RATIO_AUTH_LOCKOUT_MS', 5 * 60 * 1000)
+const AUTH_CACHE_TTL_MS = readPositiveNumberEnv('RATIO_AUTH_CACHE_TTL_MS', 5 * 60 * 1000)
 const REGISTER_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_REGISTER_RATE_LIMIT_PER_MINUTE', 30)
 const ADMIN_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_ADMIN_RATE_LIMIT_PER_MINUTE', 300)
 const MAX_PASSWORD_CHARS = readPositiveNumberEnv('RATIO_MAX_PASSWORD_CHARS', 256)
@@ -53,7 +60,16 @@ const ISO_STAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 const mutationQueues = new Map()
 const rateLimitBuckets = new Map()
 const aiDailyUsage = new Map()
+const failedAuthAccounts = new Map()
+const authCache = new Map()
+const telemetryPruneAt = new Map()
 const pbkdf2Async = promisify(pbkdf2)
+const PASSWORD_HASH_ITERATIONS = 160000
+const DUMMY_PASSWORD_USER = {
+  passwordSalt: 'cmF0aW8tYXV0aC1kdW1teS1zYWx0',
+  passwordIterations: PASSWORD_HASH_ITERATIONS,
+  passwordHash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+}
 
 function now() {
   return new Date().toISOString()
@@ -197,14 +213,52 @@ function checkRateLimit(scope, key, maxRequests, windowMs = 60_000) {
   return true
 }
 
+function normalizeIp(value) {
+  if (typeof value !== 'string') return ''
+  let next = value.trim().replace(/^"|"$/g, '')
+  if (!next) return ''
+  if (next.startsWith('[')) {
+    const end = next.indexOf(']')
+    if (end > 0) next = next.slice(1, end)
+  } else {
+    const ipv4WithPort = /^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/.exec(next)
+    if (ipv4WithPort) next = ipv4WithPort[1]
+  }
+  return next.slice(0, 128)
+}
+
+function directRemoteAddress(req) {
+  return normalizeIp(req.socket?.remoteAddress || '') || 'unknown'
+}
+
+function isTrustedProxyPeer(address) {
+  const normalized = normalizeIp(address)
+  if (!normalized || normalized === 'unknown') return false
+  return isPrivateHostname(normalized)
+}
+
+function forwardedClientAddress(req) {
+  const value = req.headers['x-forwarded-for']
+  const raw = Array.isArray(value) ? value[0] : value
+  if (!raw) return ''
+  const first = raw.split(',').map((part) => normalizeIp(part)).find(Boolean)
+  return first || ''
+}
+
+function clientAddress(req) {
+  const direct = directRemoteAddress(req)
+  if (!TRUST_PROXY || !isTrustedProxyPeer(direct)) return direct
+  return forwardedClientAddress(req) || direct
+}
+
 function requestRateLimit(req, res, scope, maxRequests) {
-  const key = req.socket?.remoteAddress || 'unknown'
+  const key = clientAddress(req)
   if (checkRateLimit(scope, key, maxRequests)) return true
   fail(res, 429, 'Too many requests; try again later', 'rate_limited')
   return false
 }
 
-function checkDailyLimit(scope, key, maxRequests) {
+function checkDailyLimit(scope, key, maxRequests, increment = true) {
   const day = new Date().toISOString().slice(0, 10)
   const usageKey = `${scope}:${day}:${key}`
   if (aiDailyUsage.size > 10000) {
@@ -215,8 +269,14 @@ function checkDailyLimit(scope, key, maxRequests) {
 
   const current = aiDailyUsage.get(usageKey) || 0
   if (current >= maxRequests) return false
-  aiDailyUsage.set(usageKey, current + 1)
+  if (increment) aiDailyUsage.set(usageKey, current + 1)
   return true
+}
+
+function incrementDailyLimit(scope, key) {
+  const day = new Date().toISOString().slice(0, 10)
+  const usageKey = `${scope}:${day}:${key}`
+  aiDailyUsage.set(usageKey, (aiDailyUsage.get(usageKey) || 0) + 1)
 }
 
 function isIpLiteral(hostname) {
@@ -284,7 +344,7 @@ function userId(username) {
   return createHash('sha256').update(username, 'utf8').digest('hex').slice(0, 24)
 }
 
-async function hashPassword(password, salt = randomBytes(16).toString('base64'), iterations = 160000) {
+async function hashPassword(password, salt = randomBytes(16).toString('base64'), iterations = PASSWORD_HASH_ITERATIONS) {
   const hash = (await pbkdf2Async(password, salt, iterations, 32, 'sha256')).toString('base64')
   return { salt, iterations, hash }
 }
@@ -294,6 +354,75 @@ async function verifyPassword(password, user) {
   const a = Buffer.from(next.hash, 'base64')
   const b = Buffer.from(user.passwordHash, 'base64')
   return a.length === b.length && timingSafeEqual(a, b)
+}
+
+function authCacheKey(auth) {
+  return createHash('sha256').update(`${auth.username}\0${auth.password}`, 'utf8').digest('hex')
+}
+
+function readAuthCache(key) {
+  const cached = authCache.get(key)
+  if (!cached) return null
+  if (cached.expiresAt <= Date.now()) {
+    authCache.delete(key)
+    return null
+  }
+  return cached.user
+}
+
+function writeAuthCache(key, user) {
+  const nowMs = Date.now()
+  if (authCache.size > 10000) {
+    for (const [cacheKey, cached] of authCache.entries()) {
+      if (cached.expiresAt <= nowMs) authCache.delete(cacheKey)
+    }
+  }
+  authCache.set(key, { user, expiresAt: nowMs + AUTH_CACHE_TTL_MS })
+}
+
+function authFailureKey(username) {
+  return createHash('sha256').update(username || '', 'utf8').digest('hex')
+}
+
+function pruneFailedAuthAccounts(nowMs = Date.now()) {
+  if (failedAuthAccounts.size <= 10000) return
+  for (const [key, state] of failedAuthAccounts.entries()) {
+    if (state.windowResetAt <= nowMs && state.lockedUntil <= nowMs) failedAuthAccounts.delete(key)
+  }
+}
+
+function readFailedAuthState(username) {
+  const key = authFailureKey(username)
+  const state = failedAuthAccounts.get(key)
+  const nowMs = Date.now()
+  if (!state) return { key, state: null }
+  if (state.windowResetAt <= nowMs && state.lockedUntil <= nowMs) {
+    failedAuthAccounts.delete(key)
+    return { key, state: null }
+  }
+  return { key, state }
+}
+
+function isAuthAccountLocked(username) {
+  const { state } = readFailedAuthState(username)
+  return Boolean(state && state.lockedUntil > Date.now())
+}
+
+function recordAuthFailure(username) {
+  const nowMs = Date.now()
+  pruneFailedAuthAccounts(nowMs)
+  const { key, state } = readFailedAuthState(username)
+  const current =
+    state && state.windowResetAt > nowMs
+      ? state
+      : { count: 0, windowResetAt: nowMs + AUTH_FAILURE_WINDOW_MS, lockedUntil: 0 }
+  current.count += 1
+  if (current.count >= AUTH_MAX_FAILED_ATTEMPTS) current.lockedUntil = nowMs + AUTH_LOCKOUT_MS
+  failedAuthAccounts.set(key, current)
+}
+
+function clearAuthFailure(username) {
+  failedAuthAccounts.delete(authFailureKey(username))
 }
 
 async function ensureDataDir() {
@@ -422,13 +551,26 @@ async function requireUser(req, res) {
     return null
   }
 
+  if (isAuthAccountLocked(auth.username)) {
+    fail(res, 429, 'Too many failed attempts; try again later', 'auth_rate_limited')
+    return null
+  }
+
+  const cacheKey = authCacheKey(auth)
+  const cachedUser = readAuthCache(cacheKey)
+  if (cachedUser) return cachedUser
+
   const users = await readUsers()
   const user = users.users[auth.username]
-  if (!user || !(await verifyPassword(auth.password, user))) {
+  const valid = user ? await verifyPassword(auth.password, user) : await verifyPassword(auth.password, DUMMY_PASSWORD_USER)
+  if (!user || !valid) {
+    recordAuthFailure(auth.username)
     fail(res, 401, 'Invalid username or password', 'auth_invalid')
     return null
   }
 
+  clearAuthFailure(auth.username)
+  writeAuthCache(cacheKey, user)
   return user
 }
 
@@ -538,7 +680,10 @@ async function handleRegister(req, res) {
   }
 
   const result = await mutateUsers(async (data) => {
-    if (data.users[username]) return { exists: true, user: data.users[username] }
+    if (data.users[username]) {
+      await hashPassword(password)
+      return { exists: true, user: data.users[username] }
+    }
 
     const passwordInfo = await hashPassword(password)
     const user = {
@@ -555,7 +700,7 @@ async function handleRegister(req, res) {
     return { exists: false, user }
   })
 
-  if (result.exists) return fail(res, 409, 'User already exists', 'user_exists')
+  if (result.exists) return fail(res, 409, 'Unable to create user with these credentials', 'registration_unavailable')
 
   const user = result.user
   await mkdir(path.join(DATA_DIR, 'users', user.id), { recursive: true })
@@ -672,7 +817,7 @@ function validateAiMessages(value) {
 }
 
 function checkAiLimits(req, res, user) {
-  const ip = req.socket?.remoteAddress || 'unknown'
+  const ip = clientAddress(req)
   if (!checkRateLimit('ai-ip', ip, AI_RATE_LIMIT_PER_MINUTE)) {
     fail(res, 429, 'Too many AI requests from this network; try again later', 'ai_rate_limited')
     return false
@@ -681,7 +826,7 @@ function checkAiLimits(req, res, user) {
     fail(res, 429, 'Too many AI requests for this account; try again later', 'ai_rate_limited')
     return false
   }
-  if (!checkDailyLimit('ai-user', user.id, AI_DAILY_REQUEST_LIMIT)) {
+  if (!checkDailyLimit('ai-user', user.id, AI_DAILY_REQUEST_LIMIT, false)) {
     fail(res, 429, 'Daily AI request limit reached', 'ai_daily_limit_reached')
     return false
   }
@@ -727,11 +872,7 @@ function handleAiStatus(res) {
   jsonResponse(res, 200, {
     ai: {
       configured: issue === null,
-      model: config.model,
-      reasoningEffort: config.reasoningEffort,
-      hasApiKey: Boolean(config.apiKey),
-      apiKeyMasked: maskSecret(config.apiKey),
-      issue,
+      issue: issue === null ? null : 'AI service is not available',
     },
   })
 }
@@ -788,6 +929,7 @@ async function handleAiChat(req, res, user) {
 
   try {
     const text = await readUpstreamTextLimited(upstream, AI_MAX_RESPONSE_BYTES)
+    if (upstream.ok) incrementDailyLimit('ai-user', user.id)
     responseClosed = true
     clearTimeout(timeout)
     res.off('close', onResponseClose)
@@ -811,6 +953,7 @@ async function handleAiChat(req, res, user) {
 }
 
 async function handleTelemetry(req, res, user) {
+  await pruneTelemetryForUser(user)
   const body = await parseBody(req, 256 * 1024)
   const events = Array.isArray(body.events) ? body.events : [body]
   const safeEvents = events.slice(0, 50).map((event) => ({
@@ -972,6 +1115,32 @@ async function readTelemetryEventsForUser(user, limit) {
   })
 }
 
+async function pruneTelemetryForUser(user) {
+  const nowMs = Date.now()
+  const nextPruneAt = telemetryPruneAt.get(user.id) || 0
+  if (nextPruneAt > nowMs) return
+  telemetryPruneAt.set(user.id, nowMs + 12 * 60 * 60 * 1000)
+
+  const userDir = path.join(DATA_DIR, 'users', user.id)
+  const cutoffDate = new Date(nowMs - TELEMETRY_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  let entries
+  try {
+    entries = await readdir(userDir, { withFileTypes: true })
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return
+    throw error
+  }
+
+  await Promise.all(entries.map(async (entry) => {
+    if (!entry.isFile()) return
+    const match = /^telemetry-(\d{4}-\d{2}-\d{2})\.ndjson$/.exec(entry.name)
+    if (!match || match[1] >= cutoffDate) return
+    await unlink(path.join(userDir, entry.name)).catch((error) => {
+      if (!error || error.code !== 'ENOENT') throw error
+    })
+  }))
+}
+
 async function getAdminTelemetryEvents(username, limit) {
   const data = await readUsers()
   const users = Object.values(data.users)
@@ -1021,6 +1190,8 @@ async function handleAdminOverview(res) {
     config: {
       corsOrigin: CORS_ORIGIN,
       maxBackupBytes: MAX_BACKUP_BYTES,
+      trustProxy: TRUST_PROXY,
+      telemetryRetentionDays: TELEMETRY_RETENTION_DAYS,
     },
     registration: {
       inviteRequired: Boolean(REGISTRATION_INVITE_CODE),
@@ -1046,6 +1217,8 @@ async function handleAdminOverview(res) {
       authPerMinute: AUTH_RATE_LIMIT_PER_MINUTE,
       registerPerMinute: REGISTER_RATE_LIMIT_PER_MINUTE,
       adminPerMinute: ADMIN_RATE_LIMIT_PER_MINUTE,
+      authMaxFailedAttempts: AUTH_MAX_FAILED_ATTEMPTS,
+      authLockoutMs: AUTH_LOCKOUT_MS,
       activeBuckets: rateLimitBuckets.size,
     },
     users: {
@@ -1173,6 +1346,6 @@ const server = http.createServer((req, res) => {
   })
 })
 
-server.listen(PORT, () => {
-  console.log(`ratio-server listening on ${PORT}`)
+server.listen(PORT, HOST, () => {
+  console.log(`ratio-server listening on ${HOST}:${PORT}`)
 })

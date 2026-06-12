@@ -5,6 +5,7 @@ export type UseLocalStorageStateErrorPhase = 'read' | 'write'
 
 export type UseLocalStorageStateOptions<T> = {
   coerce?: (value: unknown) => T
+  serialize?: (value: T) => unknown
   onError?: (error: unknown, context: { key: string; phase: UseLocalStorageStateErrorPhase }) => void
 }
 
@@ -101,10 +102,12 @@ function syncFromRaw<T>(
 
 export function useLocalStorageState<T>(key: string, initialValue: T, options?: UseLocalStorageStateOptions<T>) {
   const coerce = options?.coerce
+  const serialize = options?.serialize
   const onError = options?.onError
   const lastRawRef = useRef<string | null>(null)
   const initialValueRef = useRef(initialValue)
   const coerceRef = useRef(coerce)
+  const serializeRef = useRef(serialize)
   const onErrorRef = useRef(onError)
 
   const [state, setState] = useState<HookState<T>>(() => {
@@ -120,6 +123,10 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
   useEffect(() => {
     coerceRef.current = coerce
   }, [coerce])
+
+  useEffect(() => {
+    serializeRef.current = serialize
+  }, [serialize])
 
   useEffect(() => {
     onErrorRef.current = onError
@@ -182,7 +189,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
     if (!state.canPersist) return
 
     try {
-      const nextRaw = JSON.stringify(state.value)
+      const nextRaw = JSON.stringify(serializeRef.current ? serializeRef.current(state.value) : state.value)
       const prevRaw = localStorage.getItem(key)
       if (prevRaw === nextRaw) {
         lastRawRef.current = nextRaw

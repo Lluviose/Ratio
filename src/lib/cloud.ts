@@ -28,10 +28,10 @@ export type CloudBackupMeta = {
 
 export type CloudAiStatus = {
   configured: boolean
-  model: string
-  reasoningEffort: string
-  apiKeyMasked: string
-  hasApiKey: boolean
+  model?: string
+  reasoningEffort?: string
+  apiKeyMasked?: string
+  hasApiKey?: boolean
   issue: string | null
 }
 
@@ -71,16 +71,41 @@ function asString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
 }
 
+const runtimeCloudSecrets = {
+  password: '',
+  registrationInvite: '',
+}
+
+function stripPersistedSecrets(value: Record<string, unknown>, storage: Storage) {
+  if (!('password' in value) && !('registrationInvite' in value)) return
+  try {
+    const { password: _password, registrationInvite: _registrationInvite, ...rest } = value
+    const raw = JSON.stringify(rest)
+    storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
+    if (typeof localStorage !== 'undefined' && storage === localStorage) {
+      dispatchStorageWrite(CLOUD_SYNC_SETTINGS_KEY, raw)
+    }
+  } catch {
+    // Best effort cleanup for older settings written before secrets were session-only.
+  }
+}
+
 export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
-  if (!isRecord(value)) return DEFAULT_CLOUD_SYNC_SETTINGS
+  if (!isRecord(value)) return { ...DEFAULT_CLOUD_SYNC_SETTINGS, ...runtimeCloudSecrets }
+  const migratedSecret = {
+    password: runtimeCloudSecrets.password || asString(value.password),
+    registrationInvite: runtimeCloudSecrets.registrationInvite || asString(value.registrationInvite),
+  }
+  runtimeCloudSecrets.password = migratedSecret.password
+  runtimeCloudSecrets.registrationInvite = migratedSecret.registrationInvite
   return {
     serverUrl: asString(value.serverUrl, DEFAULT_CLOUD_SYNC_SETTINGS.serverUrl),
     username: asString(value.username),
-    password: asString(value.password),
+    password: migratedSecret.password,
     autoSync: value.autoSync === true,
     telemetryEnabled: value.telemetryEnabled === true,
     useCloudAi: value.useCloudAi === true,
-    registrationInvite: asString(value.registrationInvite),
+    registrationInvite: migratedSecret.registrationInvite,
     lastConnectionAt: typeof value.lastConnectionAt === 'string' ? value.lastConnectionAt : undefined,
     lastBackupAt: typeof value.lastBackupAt === 'string' ? value.lastBackupAt : undefined,
     lastRestoreAt: typeof value.lastRestoreAt === 'string' ? value.lastRestoreAt : undefined,
@@ -96,20 +121,30 @@ export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
 export function getCloudSyncSettings(storage: Storage = localStorage): CloudSyncSettings {
   try {
     const raw = storage.getItem(CLOUD_SYNC_SETTINGS_KEY)
-    if (!raw) return DEFAULT_CLOUD_SYNC_SETTINGS
-    return coerceCloudSyncSettings(JSON.parse(raw) as unknown)
+    if (!raw) return { ...DEFAULT_CLOUD_SYNC_SETTINGS, ...runtimeCloudSecrets }
+    const parsed = JSON.parse(raw) as unknown
+    if (isRecord(parsed)) stripPersistedSecrets(parsed, storage)
+    return coerceCloudSyncSettings(parsed)
   } catch {
-    return DEFAULT_CLOUD_SYNC_SETTINGS
+    return { ...DEFAULT_CLOUD_SYNC_SETTINGS, ...runtimeCloudSecrets }
   }
 }
 
 export function writeCloudSyncSettingsPatch(patch: Partial<CloudSyncSettings>, storage: Storage = localStorage) {
   const current = getCloudSyncSettings(storage)
-  const raw = JSON.stringify({ ...current, ...patch })
+  if (patch.password !== undefined) runtimeCloudSecrets.password = patch.password
+  if (patch.registrationInvite !== undefined) runtimeCloudSecrets.registrationInvite = patch.registrationInvite
+  const { password: _password, registrationInvite: _registrationInvite, ...persisted } = { ...current, ...patch }
+  const raw = JSON.stringify(persisted)
   storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
   if (typeof localStorage !== 'undefined' && storage === localStorage) {
     dispatchStorageWrite(CLOUD_SYNC_SETTINGS_KEY, raw)
   }
+}
+
+export function serializeCloudSyncSettings(settings: CloudSyncSettings) {
+  const { password: _password, registrationInvite: _registrationInvite, ...persisted } = settings
+  return persisted
 }
 
 export function hasCloudCredentials(settings: CloudSyncSettings) {
