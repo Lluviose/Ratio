@@ -108,13 +108,13 @@ export function AssetsTypeDetailPage(props: {
             <ChevronLeft size={20} strokeWidth={2.5} />
           </motion.button>
           <div className="flex-1 min-w-0">
-            <div className="font-black text-[15px] truncate" style={{ color: themeColor }}>
+            <div className="font-bold text-[15px] truncate" style={{ color: themeColor }}>
               {info.opt.name}
             </div>
             <div className="text-xs font-bold text-[var(--muted-text)] truncate">{info.group.name}</div>
           </div>
           <div className="text-right">
-            <div className={hideAmounts ? `font-black text-[15px] text-[var(--text)] ${maskedClass}` : 'font-black text-[15px] text-[var(--text)]'}>
+            <div className={hideAmounts ? `font-bold text-[15px] text-[var(--text)] ${maskedClass}` : 'font-bold text-[15px] text-[var(--text)]'}>
               {hideAmounts ? maskedText : formatCny(total)}
             </div>
           </div>
@@ -177,7 +177,7 @@ export function AssetsTypeDetailPage(props: {
             >
               {createElement(info.opt.icon, { size: 18 })}
             </div>
-            <div className="font-black text-[15px] text-[var(--text)]">{info.opt.name}</div>
+            <div className="font-bold text-[15px] text-[var(--text)]">{info.opt.name}</div>
           </div>
 
           <div className="h-[1px] bg-[var(--hairline)]" />
@@ -227,7 +227,7 @@ export function AssetsTypeDetailPage(props: {
                       </div>
                       <div className="font-bold text-sm text-slate-800 truncate">{account.name}</div>
                     </div>
-                    <div className={hideAmounts ? `font-black text-sm text-[var(--text)] ${maskedClass}` : 'font-black text-sm text-[var(--text)]'}>
+                    <div className={hideAmounts ? `font-bold text-sm text-[var(--text)] ${maskedClass}` : 'font-bold text-sm text-[var(--text)]'}>
                       {hideAmounts ? maskedText : formatCny(account.balance)}
                     </div>
                   </motion.div>

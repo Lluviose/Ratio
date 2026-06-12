@@ -244,7 +244,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     const tooltipDateLabel = p.date === exactDateLabel ? p.date : `${p.date}（${exactDateLabel}）`
     const detailHeader = (
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-        <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--muted-text)' }}>{tooltipDateLabel}</div>
+        <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--muted-text)' }}>{tooltipDateLabel}</div>
         {onClose ? (
           <button
             type="button"
@@ -262,24 +262,24 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     const breakdown = hasBreakdown ? (
       <div style={{ marginTop: 10 }}>
         <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
-        <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>分组构成</div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+        <div style={{ fontWeight: 650, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>分组构成</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>流动资金</div>
           <div style={{ color: colors.liquid }}>{formatMaybeCny(p.cash)}</div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>投资</div>
           <div style={{ color: colors.invest }}>{formatMaybeCny(p.invest)}</div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>固定资产</div>
           <div style={{ color: colors.fixed }}>{formatMaybeCny(p.fixed)}</div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>应收款</div>
           <div style={{ color: colors.receivable }}>{formatMaybeCny(p.receivable)}</div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           <div style={{ color: 'var(--muted-text)' }}>负债</div>
           <div style={{ opacity: 0.75, color: colors.debt }}>{formatMaybeCny(p.debt)}</div>
         </div>
@@ -289,20 +289,20 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     const topChangePanel = currSnap ? (
       <div style={{ marginTop: 10 }}>
         <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
-        <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>Top变动账户</div>
-        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted-text)', opacity: 0.75, marginTop: -6, marginBottom: 8 }}>
+        <div style={{ fontWeight: 650, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>Top变动账户</div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted-text)', opacity: 0.75, marginTop: -6, marginBottom: 8 }}>
           基于相邻快照余额差（含流量/估值波动）
         </div>
         {!canCompare ? (
-          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>暂无对比快照</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted-text)' }}>暂无对比快照</div>
         ) : !hasAccountDetails ? (
-          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>旧快照无账户明细</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted-text)' }}>旧快照无账户明细</div>
         ) : !topChanges || topChanges.length === 0 ? (
-          <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--muted-text)' }}>无明显变动</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--muted-text)' }}>无明显变动</div>
         ) : (
           <div style={{ display: 'grid', gap: 6 }}>
             {topChanges.map((c) => (
-              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850 }}>
+              <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650 }}>
                 <div style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
                 <div style={{ color: accountDeltaTone(c.delta, c.groupId) }}>{formatDelta(c.delta)}</div>
               </div>
@@ -316,27 +316,27 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
       mode === 'netDebt' && (p.goalTarget != null || p.goalComparison != null || projectedNetForDetail != null) ? (
         <div style={{ marginTop: 10 }}>
           <div style={{ height: 1, background: 'var(--hairline)', margin: '10px 0' }} />
-          <div style={{ fontWeight: 850, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>储蓄路径</div>
+          <div style={{ fontWeight: 650, fontSize: 12, color: 'var(--muted-text)', marginBottom: 8 }}>储蓄路径</div>
           {p.goalTarget != null ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>目标路径</div>
               <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalTarget)}</div>
             </div>
           ) : null}
           {p.goalTarget == null && p.goalComparison != null ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>目标基准</div>
               <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalComparison)}</div>
             </div>
           ) : null}
           {projectedNetForDetail != null ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>预测速度</div>
               <div style={{ color: FORECAST_STROKE }}>{formatCny(projectedNetForDetail)}</div>
             </div>
           ) : null}
           {targetDeltaAtPoint != null ? (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>{targetDeltaDisplay.label}</div>
               <div style={{ color: targetDeltaDisplay.tone ?? 'var(--text)' }}>{targetDeltaDisplay.value}</div>
             </div>
@@ -359,11 +359,11 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           {detailHeader}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
-            <div style={{ fontWeight: 900, fontSize: 14 }}>净资产 {formatMaybeCny(p.net)}</div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>净资产 {formatMaybeCny(p.net)}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
-            <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.6 }}>负债 {formatMaybeCny(p.debt)}</div>
+            <div style={{ fontWeight: 700, fontSize: 14, opacity: 0.6 }}>负债 {formatMaybeCny(p.debt)}</div>
           </div>
           {goalPanel}
           {breakdown}
@@ -386,11 +386,11 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
         {detailHeader}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: colors.liquid }} />
-          <div style={{ fontWeight: 900, fontSize: 14 }}>流动资金 {formatMaybeCny(p.cash)}</div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>流动资金 {formatMaybeCny(p.cash)}</div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--primary)' }} />
-          <div style={{ fontWeight: 900, fontSize: 14, opacity: 0.8 }}>投资 {formatMaybeCny(p.invest)}</div>
+          <div style={{ fontWeight: 700, fontSize: 14, opacity: 0.8 }}>投资 {formatMaybeCny(p.invest)}</div>
         </div>
         {breakdown}
         {topChangePanel}
@@ -590,7 +590,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               )}
             </LineChart>
           ) : (
-            <div className="muted" style={{ textAlign: 'center', paddingTop: 80, fontSize: 13, fontWeight: 800 }}>
+            <div className="muted" style={{ textAlign: 'center', paddingTop: 80, fontSize: 13, fontWeight: 600 }}>
               暂无快照数据
             </div>
           )}
@@ -625,26 +625,26 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>
                   <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.42)' }} />
                   目标路径
                 </span>
                 {hasProjectionBridge ? (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>
                     <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.28)' }} />
                     记录延伸
                   </span>
                 ) : null}
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>
                   <span style={{ width: 18, borderTop: `2px dashed ${FORECAST_STROKE}` }} />
                   预测速度
                 </span>
               </div>
-              <div style={{ fontSize: 11, fontWeight: 950, color: goalPaceColor }}>
+              <div style={{ fontSize: 11, fontWeight: 800, color: goalPaceColor }}>
                 {goalPaceText}
               </div>
               </div>
-              <div className="muted" style={{ fontSize: 11, fontWeight: 850 }}>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 650 }}>
               目标 {formatCny(goalSummary.targetAmount)} · {formatGoalDate(goalSummary.targetDate, goalDateContext)}
               {goalSummary.projectedDate ? ` · 预计 ${formatGoalDate(goalSummary.projectedDate, goalDateContext)}` : ''}
               {goalDeltaText ? ` · ${goalDeltaText}` : ''}
@@ -675,7 +675,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               animate={{ opacity: 1, y: 0 }}
               exit={tooltipExit}
               transition={quickFade}
-              style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 800 }}
+              style={{ textAlign: 'center', marginTop: 10, fontSize: 12, fontWeight: 600 }}
             >
             按最近 {RECENT_SNAPSHOT_LIMIT} 条快照展示
             </motion.div>

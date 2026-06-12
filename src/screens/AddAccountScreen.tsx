@@ -75,7 +75,7 @@ export function AddAccountScreen(props: {
             <div className="flex items-center gap-3 min-w-0">
               <span className="w-3 h-3 rounded-full" style={{ background: tone }} />
               <div className="min-w-0">
-                <div className="text-[15px] font-black text-[var(--text)] tracking-tight">
+                <div className="text-[15px] font-bold text-[var(--text)] tracking-tight">
                   {group.name}
                 </div>
                 <div className="mt-1 text-[11px] font-medium text-[var(--muted-text)]">
@@ -121,7 +121,7 @@ export function AddAccountScreen(props: {
                         >
                           <Icon size={20} strokeWidth={2.5} />
                         </span>
-                        <span className="flex-1 text-left font-black text-[15px] text-[var(--text)]">{t.name}</span>
+                        <span className="flex-1 text-left font-bold text-[15px] text-[var(--text)]">{t.name}</span>
                         <span className="w-8 h-8 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]">
                           <ChevronRight size={16} strokeWidth={3} />
                         </span>
@@ -150,7 +150,7 @@ export function AddAccountScreen(props: {
           >
             <ChevronLeft size={20} strokeWidth={2.5} />
           </motion.button>
-          <div className="text-lg font-black text-[var(--text)] tracking-tight">
+          <div className="text-lg font-bold text-[var(--text)] tracking-tight">
             添加资产
           </div>
           <div style={{ width: 40 }} />
@@ -188,7 +188,7 @@ export function AddAccountScreen(props: {
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             >
               <div className="text-center mb-6">
-                <div className="text-lg font-black text-[var(--text)]">
+                <div className="text-lg font-bold text-[var(--text)]">
                   为"{defaultAccountName(selectedType)}"命名
                 </div>
                 <div className="text-sm text-[var(--muted-text)] mt-1">
@@ -208,7 +208,7 @@ export function AddAccountScreen(props: {
               <div className="flex gap-3 mt-6">
                 <motion.button
                   type="button"
-                  className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-black"
+                  className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-bold"
                   onClick={() => setSelectedType(null)}
                   whileTap={{ scale: 0.98 }}
                 >
@@ -216,7 +216,7 @@ export function AddAccountScreen(props: {
                 </motion.button>
                 <motion.button
                   type="button"
-                  className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-black flex items-center justify-center gap-2"
+                  className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-bold flex items-center justify-center gap-2"
                   onClick={() => {
                     onPick(selectedType, customName)
                   }}

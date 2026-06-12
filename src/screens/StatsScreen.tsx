@@ -81,7 +81,7 @@ const compactTwoColumnGridTop12Style = {
 } satisfies CSSProperties
 
 const cardTitleStyle = {
-  fontWeight: 900,
+  fontWeight: 700,
   fontSize: 15,
   marginBottom: 11,
   letterSpacing: 0,
@@ -107,14 +107,14 @@ const compactMetricTileStyle = {
 
 const metricLabelStyle = {
   fontSize: 11,
-  fontWeight: 850,
+  fontWeight: 650,
   color: 'rgba(71, 85, 105, 0.82)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
 const metricValueStyle = {
   fontSize: 16,
-  fontWeight: 900,
+  fontWeight: 700,
   marginTop: 4,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
@@ -122,7 +122,7 @@ const metricValueStyle = {
 
 const metricSubStyle = {
   fontSize: 11,
-  fontWeight: 780,
+  fontWeight: 560,
   marginTop: 4,
   color: 'rgba(71, 85, 105, 0.72)',
   overflowWrap: 'anywhere',
@@ -130,13 +130,13 @@ const metricSubStyle = {
 
 const compactMetricLabelStyle = {
   fontSize: 10,
-  fontWeight: 850,
+  fontWeight: 650,
   color: 'rgba(71, 85, 105, 0.82)',
 } satisfies CSSProperties
 
 const compactMetricValueStyle = {
   fontSize: 14,
-  fontWeight: 900,
+  fontWeight: 700,
   marginTop: 3,
   lineHeight: 1.18,
   overflowWrap: 'anywhere',
@@ -144,7 +144,7 @@ const compactMetricValueStyle = {
 
 const compactMetricSubStyle = {
   fontSize: 10,
-  fontWeight: 760,
+  fontWeight: 550,
   color: 'rgba(71, 85, 105, 0.7)',
   marginTop: 3,
 } satisfies CSSProperties
@@ -398,10 +398,10 @@ function SavingsStatusCard(props: {
         <div className="cardInner">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本期储蓄状态</div>
-              <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 8 }}>当前净资产</div>
-              <div style={{ fontSize: 26, fontWeight: 950, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}>{formatCny(latestNetWorth)}</div>
-              <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-text)' }}>本期储蓄状态</div>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 8 }}>当前净资产</div>
+              <div style={{ fontSize: 26, fontWeight: 800, marginTop: 6, letterSpacing: 0, overflowWrap: 'anywhere' }}>{formatCny(latestNetWorth)}</div>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 650, marginTop: 6 }}>
                 设置目标后，这里会显示本期还需存多少和本期进度。
               </div>
             </div>
@@ -514,7 +514,7 @@ function SavingsStatusCard(props: {
       <div className="cardInner" style={{ position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-            <div style={{ fontSize: 12, fontWeight: 900, color: 'var(--muted-text)' }}>本期储蓄状态</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-text)' }}>本期储蓄状态</div>
             <button
               type="button"
               onClick={() => setExplainOpen((open) => !open)}
@@ -547,7 +547,7 @@ function SavingsStatusCard(props: {
               border: '1px solid var(--hairline)',
               color: statusTone,
               fontSize: 11,
-              fontWeight: 950,
+              fontWeight: 800,
               whiteSpace: 'nowrap',
             }}
           >
@@ -578,11 +578,11 @@ function SavingsStatusCard(props: {
               display: 'grid',
               gap: 8,
               fontSize: 11,
-              fontWeight: 850,
+              fontWeight: 650,
               color: 'var(--muted-text)',
             }}
           >
-            <div style={{ fontSize: 12, fontWeight: 950, color: 'var(--text)' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>
               {periodExplain.startLabel} 到 {periodExplain.endLabel}
             </div>
             <div>这是当前月度周期；周期终点取下一个月度开始日和目标日里更早的日期。</div>
@@ -603,17 +603,17 @@ function SavingsStatusCard(props: {
             </motion.div>
           ) : null}
         </AnimatePresence>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 900, marginTop: 10 }}>{heroLabel}</div>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 10 }}>{heroLabel}</div>
         <motion.div
           key={heroValue}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={screenTransition}
-          style={{ fontSize: 31, fontWeight: 950, marginTop: 5, letterSpacing: 0, overflowWrap: 'normal', wordBreak: 'keep-all' }}
+          style={{ fontSize: 31, fontWeight: 800, marginTop: 5, letterSpacing: 0, overflowWrap: 'normal', wordBreak: 'keep-all' }}
         >
           {heroValue}
         </motion.div>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 6 }}>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           {heroSub}
         </div>
 
@@ -623,10 +623,10 @@ function SavingsStatusCard(props: {
               initial={{ width: 0 }}
               animate={{ width: progressPct }}
               transition={{ ...progressFillTransition, duration: 0.55 }}
-              style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 18px ${color}` }}
+              style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 12px -3px ${color}` }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 850 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 650 }}>
             <span className="muted">目标 {formatCny(summary.targetAmount)}</span>
             <span style={{ color }}>{Math.round(progress * 100)}%</span>
           </div>
@@ -657,8 +657,8 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
   return (
     <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-        <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>下一里程碑</div>
-        <div style={{ fontSize: 11, fontWeight: 950, color }}>{milestone.pct}%</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>下一里程碑</div>
+        <div style={{ fontSize: 11, fontWeight: 800, color }}>{milestone.pct}%</div>
       </div>
       <div
         style={{
@@ -673,7 +673,7 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
           initial={{ width: 0 }}
           animate={{ width: progressPct }}
           transition={progressFillTransition}
-          style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 14px ${color}` }}
+          style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 10px -3px ${color}` }}
         />
         <motion.span
           aria-hidden="true"
@@ -690,7 +690,7 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
             background: '#fff',
             border: `2px solid ${color}`,
             marginLeft: -5,
-            boxShadow: `0 0 12px ${color}`,
+            boxShadow: `0 1px 4px rgba(15, 23, 42, 0.18), 0 0 8px -2px ${color}`,
           }}
         />
         {GOAL_MILESTONES.map((milestone) => (
@@ -715,7 +715,7 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
           />
         ))}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, fontWeight: 850, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 11, fontWeight: 650, flexWrap: 'wrap' }}>
         <span className="muted" style={{ minWidth: 0, flex: '1 1 176px' }}>{subtitle}</span>
         <span style={{ color: 'var(--muted-text)', flex: '0 0 auto' }}>
           {GOAL_MILESTONES.map((milestone) => `${Math.round(milestone * 100)}%`).join(' · ')}
@@ -775,8 +775,8 @@ function SavingsSliderControl(props: {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline' }}>
-        <div style={{ fontSize: 11, fontWeight: 900, color: 'var(--muted-text)' }}>{label}</div>
-        <div style={{ fontSize: 14, fontWeight: 950, color, overflowWrap: 'anywhere' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>{label}</div>
+        <div style={{ fontSize: 14, fontWeight: 800, color, overflowWrap: 'anywhere' }}>
           {formatCny(safeValue)}
         </div>
       </div>
@@ -805,7 +805,7 @@ function SavingsSliderControl(props: {
           }}
         />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 10, fontWeight: 800, color: 'var(--muted-text)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 10, fontWeight: 600, color: 'var(--muted-text)' }}>
         <span>{helper}</span>
         <span>最高 {formatCny(safeMax)}</span>
       </div>
@@ -899,7 +899,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontWeight: 950, fontSize: 14 }}>目标模拟器</div>
+              <div style={{ fontWeight: 800, fontSize: 14 }}>目标模拟器</div>
               <button
                 type="button"
                 onClick={() => setHelpOpen((open) => !open)}
@@ -923,7 +923,7 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
                 <Info size={15} strokeWidth={2.5} />
               </button>
             </div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>用一次性存入和每月多存，模拟目标日还差多少</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 650, marginTop: 3 }}>用一次性存入和每月多存，模拟目标日还差多少</div>
           </div>
           <button type="button" className="iconBtn" onClick={reset} aria-label="reset savings simulator">
             <RotateCcw size={16} strokeWidth={2.5} />
@@ -956,16 +956,16 @@ function SavingsGoalSimulatorCard(props: { summary: SavingsGoalSummary; color: s
               display: 'grid',
               gap: 7,
               fontSize: 11,
-              fontWeight: 850,
+              fontWeight: 650,
               color: 'var(--muted-text)',
             }}
           >
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>每月多存</span>：按月金额折算成每日增速，影响模拟达成日和目标日缺口。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>一次性存入</span>：先直接减少距离目标还差的金额。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>按目标日设月存</span>：把每月多存调到刚好覆盖目标日缺口；如果滑块上限不够，会改为拉满月存。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>模拟达成</span>：按当前组合预计到达目标的日期。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>目标日结果</span>：显示目标日当天预计多出或少多少；接近刚好时显示“刚好达标”。</div>
-            <div><span style={{ color: 'var(--text)', fontWeight: 950 }}>预测月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及为了踩中目标日还要补的月存额。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>每月多存</span>：按月金额折算成每日增速，影响模拟达成日和目标日缺口。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>一次性存入</span>：先直接减少距离目标还差的金额。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>按目标日设月存</span>：把每月多存调到刚好覆盖目标日缺口；如果滑块上限不够，会改为拉满月存。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>模拟达成</span>：按当前组合预计到达目标的日期。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>目标日结果</span>：显示目标日当天预计多出或少多少；接近刚好时显示“刚好达标”。</div>
+            <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>预测月增速 / 还需月存</span>：分别表示模拟后的月度净资产增长速度，以及为了踩中目标日还要补的月存额。</div>
             </motion.div>
           ) : null}
         </AnimatePresence>
@@ -1054,12 +1054,12 @@ function SavingsPaceAlgorithmCard(props: {
       <div className="cardInner">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 950, fontSize: 14 }}>预估算法</div>
-            <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 3 }}>{activeOption.sub}</div>
+            <div style={{ fontWeight: 800, fontSize: 14 }}>预估算法</div>
+            <div className="muted" style={{ fontSize: 11, fontWeight: 650, marginTop: 3 }}>{activeOption.sub}</div>
           </div>
           <div style={{ flex: '0 0 auto', textAlign: 'right' }}>
-            <div style={{ fontSize: 13, fontWeight: 950, color: summary?.avgDailyNetChange == null ? 'var(--muted-text)' : 'var(--text)' }}>{paceText}</div>
-            <div className="muted" style={{ fontSize: 10, fontWeight: 850, marginTop: 3 }}>预测基础增速</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: summary?.avgDailyNetChange == null ? 'var(--muted-text)' : 'var(--text)' }}>{paceText}</div>
+            <div className="muted" style={{ fontSize: 10, fontWeight: 650, marginTop: 3 }}>预测基础增速</div>
           </div>
         </div>
 
@@ -1072,7 +1072,7 @@ function SavingsPaceAlgorithmCard(props: {
           />
         </div>
 
-        <div className="muted" style={{ marginTop: 10, fontSize: 11, fontWeight: 850 }}>{paceSub}，用于预计达成和目标模拟器</div>
+        <div className="muted" style={{ marginTop: 10, fontSize: 11, fontWeight: 650 }}>{paceSub}，用于预计达成和目标模拟器</div>
       </div>
     </motion.div>
   )
@@ -1111,8 +1111,8 @@ function SavingsMilestoneCelebration(props: { milestone: number; color: string }
             <Sparkles size={19} strokeWidth={2.6} />
           </motion.div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 950, fontSize: 15 }}>达成 {pct}% 里程碑</div>
-            <div className="muted" style={{ fontSize: 12, fontWeight: 850, marginTop: 3 }}>储蓄目标又向前推进了一段</div>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>达成 {pct}% 里程碑</div>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 650, marginTop: 3 }}>储蓄目标又向前推进了一段</div>
           </div>
         </div>
       </div>
@@ -1170,8 +1170,8 @@ function SavingsGoalCard(props: {
               <Target size={20} strokeWidth={2.6} />
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 950, fontSize: 15 }}>储蓄目标</div>
-              <div className="muted" style={{ marginTop: 3, fontSize: 12, fontWeight: 800 }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>储蓄目标</div>
+              <div className="muted" style={{ marginTop: 3, fontSize: 12, fontWeight: 600 }}>
                 设置一个净资产目标，趋势页会显示目标路径。
               </div>
             </div>
@@ -1216,8 +1216,8 @@ function SavingsGoalCard(props: {
               <Target size={18} strokeWidth={2.7} />
             </div>
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 950, fontSize: 15 }}>储蓄目标</div>
-              <div className="muted" style={{ fontSize: 11, fontWeight: 850, marginTop: 2 }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>储蓄目标</div>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 650, marginTop: 2 }}>
                 目标日 {formatShortGoalDate(summary.targetDate, dateContext)}
               </div>
             </div>
@@ -1241,8 +1241,8 @@ function SavingsGoalCard(props: {
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-end' }}>
             <div style={{ minWidth: 0 }}>
-              <div className="muted" style={{ fontSize: 11, fontWeight: 900 }}>目标净资产</div>
-              <div style={{ fontSize: 21, fontWeight: 950, marginTop: 3, overflowWrap: 'anywhere' }}>{formatCny(summary.targetAmount)}</div>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 700 }}>目标净资产</div>
+              <div style={{ fontSize: 21, fontWeight: 800, marginTop: 3, overflowWrap: 'anywhere' }}>{formatCny(summary.targetAmount)}</div>
             </div>
             <div style={{ flex: '0 0 auto', textAlign: 'right' }}>
               <motion.div
@@ -1250,30 +1250,30 @@ function SavingsGoalCard(props: {
                 initial={{ opacity: 0, y: 5, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 transition={screenTransition}
-                style={{ fontSize: 24, fontWeight: 950, lineHeight: 1, color }}
+                style={{ fontSize: 24, fontWeight: 800, lineHeight: 1, color }}
               >
                 {progressText}
               </motion.div>
-              <div style={{ fontSize: 10, fontWeight: 900, color: 'var(--muted-text)', marginTop: 4 }}>已完成</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--muted-text)', marginTop: 4 }}>已完成</div>
             </div>
           </div>
 
           <div style={{ height: 1, background: 'var(--hairline)' }} />
 
           <div style={{ display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 850 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 650 }}>
               <span className="muted">当前净资产</span>
-              <span style={{ fontSize: 15, fontWeight: 950, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatCny(summary.currentNetWorth)}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatCny(summary.currentNetWorth)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 850 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 650 }}>
               <span className="muted">距离目标</span>
-              <span style={{ fontSize: 15, fontWeight: 950, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatCny(summary.remaining)}</span>
+              <span style={{ fontSize: 15, fontWeight: 800, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatCny(summary.remaining)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 850 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'baseline', fontSize: 12, fontWeight: 650 }}>
               <span className="muted">起点以来</span>
-              <span style={{ color: gainedTone, fontSize: 15, fontWeight: 950, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatDelta(gainedSinceStart)}</span>
+              <span style={{ color: gainedTone, fontSize: 15, fontWeight: 800, textAlign: 'right', overflowWrap: 'anywhere' }}>{formatDelta(gainedSinceStart)}</span>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 850, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 11, fontWeight: 650, flexWrap: 'wrap' }}>
               <span className="muted">{latestText}</span>
               <span className="muted">起点 {formatShortGoalDate(summary.startDate, dateContext)}</span>
             </div>
@@ -1336,7 +1336,7 @@ function SavingsGoalSheet(props: {
   return (
     <BottomSheet open={open} title="储蓄目标" onClose={onClose}>
       <div className="stack" style={{ gap: 16 }}>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>
           目标按净资产计算。保存后，趋势页会显示从起点到目标日的目标路径。
         </div>
 
@@ -1367,16 +1367,16 @@ function SavingsGoalSheet(props: {
             boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.76)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 900 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
             <CalendarDays size={15} />
             起点
           </div>
-          <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+          <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>
             {goal ? `${formatGoalDate(goal.startDate)} · ${formatCny(goal.startNetWorth)}` : `今天 · ${formatCny(currentNetWorth)}`}
           </div>
         </div>
 
-        {error ? <div style={{ color: '#ef4444', fontSize: 12, fontWeight: 850 }}>{error}</div> : null}
+        {error ? <div style={{ color: '#ef4444', fontSize: 12, fontWeight: 650 }}>{error}</div> : null}
 
         <button type="button" className="primaryBtn" onClick={() => submit(false)}>
           保存目标
@@ -1542,8 +1542,8 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <div className="iosStatsRangeHeader">
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <div style={{ minWidth: 0, flex: '1 1 160px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 950 }}>区间统计范围</div>
-                    <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 800 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800 }}>区间统计范围</div>
+                    <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 600 }}>
                       {view.rangeFallback ? (
                         <>
                           所选区间不足 2 条快照，已显示 {formatCompactDateRange(view.start.date, view.end.date)} · 净资产{' '}
@@ -1585,7 +1585,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               >
                 <div className="cardInner">
                   <div style={cardTitleStyle}>区间变化</div>
-                  <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 800 }}>
+                  <div className="muted" style={{ marginTop: -6, marginBottom: 10, fontSize: 11, fontWeight: 600 }}>
                     基于快照差值（含流量/估值波动）
                   </div>
                   <MetricGrid>
@@ -1623,7 +1623,7 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               </motion.div>
             </>
           ) : (
-            <div className="muted" style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 800 }}>
+            <div className="muted" style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 600 }}>
               暂无快照数据
             </div>
           )}

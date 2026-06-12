@@ -34,9 +34,9 @@ export function PillTabs<T extends string>(props: {
                   background: 'var(--card)',
                   borderRadius: 999,
                   zIndex: 0,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                  boxShadow: '0 3px 10px rgba(15, 23, 42, 0.10), 0 1px 2px rgba(15, 23, 42, 0.06)',
                 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 36 }}
               />
             )}
             <span style={{ position: 'relative', zIndex: 1 }}>{opt.label}</span>

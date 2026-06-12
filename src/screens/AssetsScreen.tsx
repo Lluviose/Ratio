@@ -1547,7 +1547,7 @@ export function AssetsScreen(props: {
       <div className="px-4 pt-6 pb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
-            <span>鎴戠殑鍑€璧勪骇 (CNY)</span>
+            <span>我的净资产 (CNY)</span>
           </div>
           <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">
             {hideAmounts ? <span className={maskedClass}>{maskedText}</span> : formatCny(grouped.netWorth)}
@@ -1577,7 +1577,7 @@ export function AssetsScreen(props: {
       </div>
 
       <div className="absolute left-4 bottom-4 z-20">
-        <div className="flex items-center gap-1 bg-white/80 backdrop-blur-md border border-white/70 shadow-sm rounded-full p-1">
+        <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
           <button
             type="button"
             className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
@@ -1772,7 +1772,7 @@ export function AssetsScreen(props: {
               <span>我的净资产 (CNY)</span>
               <button
                 type="button"
-                className="w-6 h-6 -m-1 rounded-full flex items-center justify-center text-slate-400 hover:bg-black/5"
+                className="w-7 h-7 -m-1.5 rounded-full flex items-center justify-center text-slate-400 hover:bg-black/5 active:bg-black/10 transition-colors"
                 onClick={() => setHideAmounts((v) => !v)}
                 aria-label={hideAmounts ? 'show amounts' : 'hide amounts'}
               >
@@ -1819,7 +1819,7 @@ export function AssetsScreen(props: {
       >
         <motion.div style={{ opacity: miniBarOpacity, y: miniBarY, pointerEvents: miniBarPointerEvents }}>
           <div ref={moreRef} className="relative">
-            <div className="flex items-center gap-1 bg-white/80 backdrop-blur-md border border-white/70 shadow-sm rounded-full p-1">
+            <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
               <button
                 type="button"
                 className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"

@@ -502,7 +502,7 @@ export function AccountDetailSheet(props: {
         sheetLayoutId={sheetLayoutId}
         onExitComplete={onExitComplete}
       >
-        <div className="muted" style={{ fontSize: 13, fontWeight: 800, textAlign: 'center', padding: 40 }}>
+        <div className="muted" style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', padding: 40 }}>
           未找到账户
         </div>
       </BottomSheet>

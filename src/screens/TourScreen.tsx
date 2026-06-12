@@ -377,7 +377,7 @@ export function TourScreen(props: { onClose: () => void }) {
              {slide.titleLines.map((line, i) => (
                <motion.div 
                  key={i}
-                 className="text-3xl font-[850] tracking-tight leading-[1.1] text-slate-900"
+                 className="text-3xl font-extrabold tracking-tight leading-[1.1] text-slate-900"
                  initial={{ opacity: 0, x: -10 }}
                  animate={{ opacity: 1, x: 0 }}
                  transition={{ delay: 0.1 + i * 0.1 }}

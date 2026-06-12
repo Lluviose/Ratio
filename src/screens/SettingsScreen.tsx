@@ -540,14 +540,14 @@ export function SettingsScreen(props: {
   return (
     <motion.div
       className="stack contentWithNavEndPadding"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.3 }}
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: standardEase }}
     >
       <div className="card">
         <div className="cardInner">
-          <div style={{ fontWeight: 950, fontSize: 16 }}>个性主题</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>个性主题</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             图标匹配主题色
           </div>
 
@@ -597,7 +597,7 @@ export function SettingsScreen(props: {
                         ),
                       )}
                     </div>
-                    <div style={{ fontWeight: 900, fontSize: 14 }}>{t.name}</div>
+                    <div style={{ fontWeight: 700, fontSize: 14 }}>{t.name}</div>
                   </div>
 
                   <motion.span
@@ -630,13 +630,13 @@ export function SettingsScreen(props: {
 
       <motion.div
         className="card"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.16 }}
+        transition={{ delay: 0.05, duration: 0.26, ease: standardEase }}
       >
         <div className="cardInner">
-          <div style={{ fontWeight: 950, fontSize: 16 }}>账户排序</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>账户排序</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             影响资产页二级与三级列表的显示顺序
           </div>
 
@@ -652,7 +652,7 @@ export function SettingsScreen(props: {
           </div>
 
           {accountSortMode === 'manual' ? (
-            <div className="muted" style={{ marginTop: 10, fontSize: 12, fontWeight: 700 }}>
+            <div className="muted" style={{ marginTop: 10, fontSize: 12, fontWeight: 550 }}>
               手动模式：可在列表右上角“…”菜单中调整顺序
             </div>
           ) : null}
@@ -661,13 +661,13 @@ export function SettingsScreen(props: {
 
       <motion.div
         className="card"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.24 }}
+        transition={{ delay: 0.09, duration: 0.26, ease: standardEase }}
       >
         <div className="cardInner">
-          <div style={{ fontWeight: 950, fontSize: 16 }}>月度开始日</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>月度开始日</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             用于按月聚合的统计口径（例如趋势页的 6月/1年）
           </div>
 
@@ -695,16 +695,16 @@ export function SettingsScreen(props: {
 
       <motion.div
         className="card"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
+        transition={{ delay: 0.13, duration: 0.26, ease: standardEase }}
       >
         <div className="cardInner">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Cloud size={18} />
-            <div style={{ fontWeight: 950, fontSize: 16 }}>云同步</div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>云同步</div>
           </div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             通过自托管后端备份 Ratio 数据。账号密码只保存在当前设备，不会写入备份文件。
           </div>
 
@@ -819,12 +819,12 @@ export function SettingsScreen(props: {
             {!cloudConfigExpanded ? (
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 {cloudSync.autoSync ? (
-                  <span className="badge" style={{ fontWeight: 800 }}>
+                  <span className="badge" style={{ fontWeight: 600 }}>
                     自动备份
                   </span>
                 ) : null}
                 {cloudSync.telemetryEnabled ? (
-                  <span className="badge" style={{ fontWeight: 800 }}>
+                  <span className="badge" style={{ fontWeight: 600 }}>
                     日志遥测
                   </span>
                 ) : null}
@@ -837,7 +837,13 @@ export function SettingsScreen(props: {
                   <RefreshCw size={16} />
                   <span>测试连接</span>
                 </button>
-                <button type="button" className="primaryBtn" disabled={busy || !cloudReady} onClick={registerCloud}>
+                <button
+                  type="button"
+                  className="ghostBtn"
+                  style={{ height: 52, borderRadius: 20 }}
+                  disabled={busy || !cloudReady}
+                  onClick={registerCloud}
+                >
                   <span>创建账号</span>
                 </button>
               </div>
@@ -860,7 +866,7 @@ export function SettingsScreen(props: {
               </button>
             </div>
 
-            <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+            <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>
               {cloudSync.lastBackupAt ? `最近上传：${cloudSync.lastBackupAt}` : '尚未上传云端备份'}
             </div>
             {cloudSync.lastSyncAt ? (
@@ -868,7 +874,7 @@ export function SettingsScreen(props: {
                 className="muted"
                 style={{
                   fontSize: 12,
-                  fontWeight: 800,
+                  fontWeight: 600,
                   color: cloudSync.lastSyncStatus === 'conflict' || cloudSync.lastSyncStatus === 'error' ? '#b91c1c' : undefined,
                 }}
               >
@@ -882,16 +888,16 @@ export function SettingsScreen(props: {
 
       <motion.div
         className="card"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.34 }}
+        transition={{ delay: 0.17, duration: 0.26, ease: standardEase }}
       >
         <div className="cardInner">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Bot size={18} />
-            <div style={{ fontWeight: 950, fontSize: 16 }}>AI 接口</div>
+            <div style={{ fontWeight: 800, fontSize: 16 }}>AI 接口</div>
           </div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             AI 对话端口由云端后台统一配置，前端只保存是否启用代理。
           </div>
 
@@ -920,7 +926,7 @@ export function SettingsScreen(props: {
             </button>
 
             {cloudAiStatus ? (
-              <div className="muted" style={{ fontSize: 12, fontWeight: 800 }}>
+              <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>
                 {cloudAiStatus}
               </div>
             ) : null}
@@ -930,13 +936,13 @@ export function SettingsScreen(props: {
 
       <motion.div
         className="card"
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.38 }}
+        transition={{ delay: 0.21, duration: 0.26, ease: standardEase }}
       >
         <div className="cardInner">
-          <div style={{ fontWeight: 950, fontSize: 16 }}>备份与恢复</div>
-          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 700 }}>
+          <div style={{ fontWeight: 800, fontSize: 16 }}>备份与恢复</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             导出为文件，或从文件导入（会覆盖当前数据）
           </div>
 

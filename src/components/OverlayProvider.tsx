@@ -227,7 +227,7 @@ export function OverlayProvider(props: { children: ReactNode }) {
         sheetStyle={{ maxHeight: '72vh' }}
       >
         {activeConfirm?.message ? (
-          <div className="muted" style={{ fontSize: 13, fontWeight: 750, lineHeight: 1.55 }}>
+          <div className="muted" style={{ fontSize: 13, fontWeight: 500, lineHeight: 1.55 }}>
             {activeConfirm.message}
           </div>
         ) : null}

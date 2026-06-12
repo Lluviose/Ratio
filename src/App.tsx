@@ -99,7 +99,7 @@ function scheduleIdleWork(work: () => void) {
 
 function ScreenLoadError() {
   return (
-    <div className="muted" style={{ padding: 28, textAlign: 'center', fontSize: 13, fontWeight: 800 }}>
+    <div className="muted" style={{ padding: 28, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
       模块加载失败，请检查网络后刷新
     </div>
   )
