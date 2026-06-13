@@ -24,6 +24,7 @@ import {
   SAVINGS_PACE_ALGORITHM_KEY,
   coerceSavingsGoal,
   coerceSavingsPaceAlgorithm,
+  dateKeyToUtcDays,
   getSavingsGoalSummary,
   getSavingsProjectionStartDate,
   toDateKey,
@@ -193,6 +194,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     showYearInData,
     goalDateContext,
   } = chartDerived
+  const xAxisDomainStart = view.domainStartDate ? dateKeyToUtcDays(view.domainStartDate) : null
+  const xAxisDomain: [number | 'dataMin', 'dataMax'] = xAxisDomainStart == null
+    ? ['dataMin', 'dataMax']
+    : [xAxisDomainStart, 'dataMax']
   const goalPaceText = !goalSummary
     ? ''
     : goalSummary.isComplete
@@ -455,7 +460,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <XAxis
                 dataKey="dateValue"
                 type="number"
-                domain={['dataMin', 'dataMax']}
+                domain={xAxisDomain}
                 tickFormatter={(value) => getDateTickLabel(value, data, showYearInData)}
                 tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
                 axisLine={false}

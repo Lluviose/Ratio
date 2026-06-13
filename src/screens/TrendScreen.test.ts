@@ -261,7 +261,7 @@ describe('buildTrendChartDerived', () => {
 })
 
 describe('withGoalTrendLines', () => {
-  it('clips an old goal start to the 30 day range cutoff', () => {
+  it('keeps the 30 day domain cutoff but starts an old goal path at the first visible record', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
 
@@ -274,14 +274,16 @@ describe('withGoalTrendLines', () => {
     const summary = getSavingsGoalSummary(goal, snapshots, { monthStartDay: 8 })
     const points = withGoalTrendLines(view.points, goal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
     const dates = points.map((point) => point.dateKey)
-    const clipPoint = points.find((point) => point.dateKey === '2026-05-06')
+    const clipPoint = points.find((point) => point.dateKey === '2026-05-20')
 
-    expect(view.clipStartDate).toBe('2026-05-06')
+    expect(view.domainStartDate).toBe('2026-05-06')
+    expect(view.clipStartDate).toBe('2026-05-20')
     expect(dates).not.toContain(goal.startDate)
-    expect(points[0]?.dateKey).toBe('2026-05-06')
-    expect(clipPoint?.net).toBeUndefined()
-    expect(clipPoint?.goalTarget).toBe(getLinearGoalValue(goal, '2026-05-06'))
-    expect(clipPoint?.goalComparison).toBe(getLinearGoalValue(goal, '2026-05-06'))
+    expect(dates).not.toContain('2026-05-06')
+    expect(points[0]?.dateKey).toBe('2026-05-20')
+    expect(clipPoint?.net).toBe(115000)
+    expect(clipPoint?.goalTarget).toBe(getLinearGoalValue(goal, '2026-05-20'))
+    expect(clipPoint?.goalComparison).toBe(getLinearGoalValue(goal, '2026-05-20'))
 
     vi.useRealTimers()
   })
@@ -307,7 +309,8 @@ describe('withGoalTrendLines', () => {
     const beforeGoalPoint = points.find((point) => point.dateKey === '2026-05-20')
     const goalStartPoint = points.find((point) => point.dateKey === inRangeGoal.startDate)
 
-    expect(view.clipStartDate).toBe('2026-05-06')
+    expect(view.domainStartDate).toBe('2026-05-06')
+    expect(view.clipStartDate).toBe('2026-05-20')
     expect(dates).toContain(inRangeGoal.startDate)
     expect(beforeGoalPoint?.goalComparison).toBeNull()
     expect(goalStartPoint?.net).toBeUndefined()
