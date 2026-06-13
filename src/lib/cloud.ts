@@ -28,8 +28,11 @@ export type CloudBackupMeta = {
 
 export type CloudAiStatus = {
   configured: boolean
+  issueCode?: string | null
+  message?: string
   model?: string
   reasoningEffort?: string
+  chatUrlSummary?: string
   apiKeyMasked?: string
   hasApiKey?: boolean
   issue: string | null
@@ -212,6 +215,15 @@ export async function cloudRequest<T>(
   apiPath: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const res = await cloudFetch(settings, apiPath, init)
+  return (await res.json()) as T
+}
+
+export async function cloudFetch(
+  settings: CloudSyncSettings,
+  apiPath: string,
+  init: RequestInit = {},
+): Promise<Response> {
   if (!hasCloudCredentials(settings)) throw new Error('Cloud account is not configured')
   const endpointIssue = getCloudEndpointIssue(settings)
   if (endpointIssue) throw new Error(endpointIssue)
@@ -225,7 +237,7 @@ export async function cloudRequest<T>(
     headers,
   })
   if (!res.ok) throw await readError(res)
-  return (await res.json()) as T
+  return res
 }
 
 export async function createCloudUser(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
@@ -301,11 +313,19 @@ export function fetchCloudAiStatus(settings: CloudSyncSettings, options: CloudRe
   })
 }
 
-export function fetchCloudAiChat(settings: CloudSyncSettings, body: { messages: unknown[]; signal?: AbortSignal }) {
+export function fetchCloudAiChat(settings: CloudSyncSettings, body: { messages: unknown[]; signal?: AbortSignal; stream?: boolean }) {
   return cloudRequest<unknown>(settings, '/api/ai/chat', {
     method: 'POST',
     signal: body.signal,
-    body: JSON.stringify({ messages: body.messages }),
+    body: JSON.stringify({ messages: body.messages, stream: body.stream === true }),
+  })
+}
+
+export function fetchCloudAiChatStream(settings: CloudSyncSettings, body: { messages: unknown[]; signal?: AbortSignal }) {
+  return cloudFetch(settings, '/api/ai/chat', {
+    method: 'POST',
+    signal: body.signal,
+    body: JSON.stringify({ messages: body.messages, stream: true }),
   })
 }
 

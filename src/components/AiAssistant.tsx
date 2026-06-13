@@ -1,9 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowUp, Sparkles, X } from 'lucide-react'
+import { ArrowUp, Copy, RotateCcw, Sparkles, Square, Trash2, X } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { buildAiFinancialContext, fetchAiChatCompletion, getAiEndpointIssue, getAiTransportLabel, type AiChatMessage } from '../lib/ai'
+import { buildAiSystemMessage, fetchAiChatCompletion, getAiEndpointIssue, getAiTransportLabel, type AiChatMessage } from '../lib/ai'
 import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSettings } from '../lib/cloud'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
@@ -11,6 +11,16 @@ type UiMessage = {
   role: 'user' | 'assistant'
   content: string
 }
+
+const AI_CHAT_SESSION_KEY = 'ratio.ai.chat.session.v1'
+const MAX_STORED_MESSAGES = 32
+const MAX_API_HISTORY_MESSAGES = 16
+const QUICK_PROMPTS = [
+  '我的资产结构健康吗？',
+  '近期净资产变化主要看哪里？',
+  '负债和现金覆盖有什么风险？',
+  '离储蓄目标还差什么？',
+]
 
 function ChatMarkdown(props: { children: string }) {
   return (
@@ -75,6 +85,37 @@ function prettyError(err: unknown) {
   return raw
 }
 
+function readSessionMessages(): UiMessage[] {
+  if (typeof sessionStorage === 'undefined') return []
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(AI_CHAT_SESSION_KEY) || '[]') as unknown
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((item): item is UiMessage => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+        const role = Reflect.get(item, 'role')
+        const content = Reflect.get(item, 'content')
+        return (role === 'user' || role === 'assistant') && typeof content === 'string'
+      })
+      .slice(-MAX_STORED_MESSAGES)
+  } catch {
+    return []
+  }
+}
+
+function writeSessionMessages(messages: UiMessage[]) {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(AI_CHAT_SESSION_KEY, JSON.stringify(messages.slice(-MAX_STORED_MESSAGES)))
+  } catch {
+    // Session persistence must never block the assistant.
+  }
+}
+
+function isAbortError(err: unknown) {
+  return err instanceof DOMException && err.name === 'AbortError'
+}
+
 export function AiAssistant(props: { initialOpen?: boolean } = {}) {
   const { initialOpen = false } = props
   const [open, setOpen] = useState(() => initialOpen)
@@ -84,9 +125,10 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
     coerce: coerceCloudSyncSettings,
   })
   const [privacyOpen, setPrivacyOpen] = useState(false)
-  const [messages, setMessages] = useState<UiMessage[]>([])
+  const [messages, setMessages] = useState<UiMessage[]>(() => readSessionMessages())
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
 
   const transportIssue = getAiEndpointIssue()
   const aiTransportLabel = getAiTransportLabel()
@@ -100,15 +142,29 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const lastAssistantMessageRef = useRef<HTMLDivElement | null>(null)
 
-  const canSend = useMemo(() => {
+  const canAsk = useMemo(() => {
     if (!open) return false
     if (privacyOpen) return false
     if (!privacyAccepted) return false
     if (sending) return false
     if (!isOnline) return false
     if (transportIssue) return false
-    return input.trim().length > 0
-  }, [input, isOnline, open, privacyAccepted, privacyOpen, sending, transportIssue])
+    return true
+  }, [isOnline, open, privacyAccepted, privacyOpen, sending, transportIssue])
+
+  const canSend = canAsk && input.trim().length > 0
+
+  const lastUserIndex = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i]?.role === 'user') return i
+    }
+    return -1
+  }, [messages])
+  const canRetry = canAsk && lastUserIndex >= 0
+
+  useEffect(() => {
+    writeSessionMessages(messages.filter((message) => message.content.trim().length > 0))
+  }, [messages])
 
   useEffect(() => {
     const update = () => setIsOnline(navigator.onLine)
@@ -175,30 +231,18 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
     container.scrollTop = container.scrollHeight
   }, [messages, sending])
 
-  function getFinancialContextMessage(): AiChatMessage {
-    const ctx = buildAiFinancialContext()
-    const json = JSON.stringify(ctx, null, 2)
-    return {
-      role: 'system',
-      content:
-        '你是一个严谨的个人财务分析助手。\n' +
-        '下面是用户在本地记录的财务数据 JSON，请把它当作本次对话的唯一事实来源。\n' +
-        '\n' +
-        '重要语义（请严格遵守）：\n' +
-        '- 本项目不是逐笔记账：用户通常不会记录每一笔交易。\n' +
-        '- accountOps.kind="adjust" 表示“期间净流量/净变动”的汇总记录，不是单笔交易；delta>0=净流入，delta<0=净流出。\n' +
-        '- accountOps.kind="set_balance" 是余额校准/覆盖；差额可能同时包含流量与估值变动。\n' +
-        '- accountOps.kind="transfer" 是账户间内部转移，不改变净资产；不要把它当作收入/支出。\n' +
-        '- snapshots 是不同日期的余额快照；相邻快照的差值代表期间总变化（可能包含流量+估值波动），不能拆成逐笔明细。\n' +
-        '- ledger（如果存在）可能是可选/不完整的明细，不要假设覆盖全部。\n' +
-        '- savingsGoal（如果存在）是用户设置的净资产储蓄目标，包含目标金额、目标日期、起点日期和起点净资产；它不是实际资产或负债。\n' +
-        '\n' +
-        '回答要求：基于 JSON 推理；缺信息先提问；不要编造不存在的交易/分类。\n\n' +
-        json,
-    }
+  function buildApiMessages(history: UiMessage[]): AiChatMessage[] {
+    return [
+      buildAiSystemMessage(),
+      ...history.slice(-MAX_API_HISTORY_MESSAGES).map((m) => ({ role: m.role, content: m.content } satisfies AiChatMessage)),
+    ]
   }
 
-  async function send(text: string) {
+  function replaceAssistantAt(index: number, content: string) {
+    setMessages((prev) => prev.map((m, i) => (i === index && m.role === 'assistant' ? { ...m, content } : m)))
+  }
+
+  async function send(text: string, baseMessages = messages) {
     if (!isOnline) {
       setMessages((prev) => [
         ...prev,
@@ -227,8 +271,9 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
     if (!trimmed) return
 
     const nextUser: UiMessage = { role: 'user', content: trimmed }
-    const history = [...messages, nextUser]
-    setMessages(history)
+    const history = [...baseMessages, nextUser]
+    const assistantIndex = history.length
+    setMessages([...history, { role: 'assistant', content: '' }])
 
     setInput('')
     setSending(true)
@@ -236,27 +281,74 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    let receivedDelta = false
 
     try {
-      const apiMessages: AiChatMessage[] = [getFinancialContextMessage()]
-
-      for (const m of history) apiMessages.push({ role: m.role, content: m.content })
-
-      const content = await fetchAiChatCompletion({ messages: apiMessages, signal: controller.signal })
+      const content = await fetchAiChatCompletion({
+        messages: buildApiMessages(history),
+        signal: controller.signal,
+        stream: true,
+        onDelta: (delta) => {
+          if (!mountedRef.current || abortRef.current !== controller) return
+          receivedDelta = true
+          setMessages((prev) =>
+            prev.map((m, i) => (i === assistantIndex && m.role === 'assistant' ? { ...m, content: m.content + delta } : m)),
+          )
+        },
+      })
       if (!mountedRef.current || abortRef.current !== controller) return
-      setMessages((prev) => [...prev, { role: 'assistant', content }])
+      if (!receivedDelta) replaceAssistantAt(assistantIndex, content)
     } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (isAbortError(err)) return
       if (!mountedRef.current || abortRef.current !== controller) return
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: `请求失败：${prettyError(err)}` },
-      ])
+      replaceAssistantAt(assistantIndex, `请求失败：${prettyError(err)}`)
     } finally {
       if (mountedRef.current && abortRef.current === controller) {
         abortRef.current = null
         setSending(false)
       }
+    }
+  }
+
+  function stopSending() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setSending(false)
+    setMessages((prev) => {
+      const last = prev[prev.length - 1]
+      if (last?.role === 'assistant' && last.content.trim().length === 0) {
+        return [...prev.slice(0, -1), { role: 'assistant', content: '已停止生成。' }]
+      }
+      return prev
+    })
+  }
+
+  function retryLastAnswer() {
+    if (!canRetry) return
+    const lastUser = messages[lastUserIndex]
+    if (!lastUser) return
+    void send(lastUser.content, messages.slice(0, lastUserIndex))
+  }
+
+  function clearChat() {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setSending(false)
+    setMessages([])
+    try {
+      sessionStorage.removeItem(AI_CHAT_SESSION_KEY)
+    } catch {
+      // ignore
+    }
+  }
+
+  async function copyAnswer(content: string, index: number) {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedIndex(index)
+      window.setTimeout(() => setCopiedIndex((current) => (current === index ? null : current)), 1200)
+    } catch {
+      setCopiedIndex(null)
     }
   }
 
@@ -276,7 +368,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
             <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" />
 
             <motion.div
-              className="absolute right-4 bottom-20 w-[min(360px,calc(100%-32px))] h-[520px] max-h-[calc(100%-112px)] rounded-[28px] bg-white/85 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
+              className="absolute right-4 bottom-20 w-[min(390px,calc(100%-32px))] h-[560px] max-h-[calc(100%-112px)] rounded-[28px] bg-white/85 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
               style={{ originX: 1, originY: 1 }}
               initial={{ opacity: 0, y: 18, scale: 0.88 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -294,7 +386,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                 <div className="min-w-0">
                   <div className="text-[14px] font-extrabold tracking-tight text-slate-900">AI 分析</div>
                   <div className="mt-1 text-[11px] font-semibold text-slate-500/80">
-                    提示：刷新页面将清空聊天记录
+                    本次浏览会话会保留记录
                   </div>
                   {transportIssue ? (
                     <div className="mt-1 text-[11px] font-semibold text-rose-600/90">
@@ -307,14 +399,36 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                     </div>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-black/5"
-                  aria-label="close"
-                  onClick={() => setOpen(false)}
-                >
-                  <X size={18} strokeWidth={2.5} />
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-black/5 disabled:opacity-40"
+                    aria-label="retry"
+                    title="重新生成"
+                    disabled={!canRetry}
+                    onClick={retryLastAnswer}
+                  >
+                    <RotateCcw size={16} strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-black/5 disabled:opacity-40"
+                    aria-label="clear chat"
+                    title="清空"
+                    disabled={messages.length === 0 && !sending}
+                    onClick={clearChat}
+                  >
+                    <Trash2 size={16} strokeWidth={2.5} />
+                  </button>
+                  <button
+                    type="button"
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-slate-600 hover:bg-black/5"
+                    aria-label="close"
+                    onClick={() => setOpen(false)}
+                  >
+                    <X size={18} strokeWidth={2.5} />
+                  </button>
+                </div>
               </div>
 
               <div
@@ -326,8 +440,24 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                     {!isOnline
                       ? '当前离线，AI 分析不可用。请联网后再试。'
                       : transportIssue
-                      ? '当前环境无法连接云端 AI 代理。请检查设置中的云端服务器地址，或为后端配置 HTTPS 反向代理。'
-                      : '你可以问我：资产结构是否健康、负债压力如何、近期变化原因、下一步优化建议等。'}
+                        ? '当前环境无法连接云端 AI 代理。请检查设置中的云端服务器地址，或为后端配置 HTTPS 反向代理。'
+                        : '你可以问我：资产结构是否健康、负债压力如何、近期变化原因、下一步优化建议等。'}
+                  </div>
+                ) : null}
+
+                {messages.length === 0 && !transportIssue && isOnline ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {QUICK_PROMPTS.map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        className="rounded-full border border-white/70 bg-white/70 px-3 py-2 text-[12px] font-extrabold text-slate-700 shadow-sm disabled:opacity-50"
+                        disabled={!canAsk}
+                        onClick={() => void send(prompt)}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
                   </div>
                 ) : null}
 
@@ -341,21 +471,40 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                         {m.content}
                       </div>
                     ) : (
-                      <div
-                        key={idx}
-                        ref={idx === messages.length - 1 ? lastAssistantMessageRef : null}
-                        className="mr-auto max-w-[85%] rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm break-words"
-                      >
-                        <ChatMarkdown>{m.content}</ChatMarkdown>
+                      <div key={idx} className="mr-auto max-w-[88%]">
+                        <div
+                          ref={idx === messages.length - 1 ? lastAssistantMessageRef : null}
+                          className="rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm break-words"
+                        >
+                          {m.content ? <ChatMarkdown>{m.content}</ChatMarkdown> : '正在思考...'}
+                        </div>
+                        {m.content ? (
+                          <div className="mt-1 flex gap-1">
+                            <button
+                              type="button"
+                              className="h-7 w-7 rounded-full flex items-center justify-center text-slate-500 hover:bg-white/70"
+                              aria-label="copy answer"
+                              title={copiedIndex === idx ? '已复制' : '复制'}
+                              onClick={() => void copyAnswer(m.content, idx)}
+                            >
+                              <Copy size={14} strokeWidth={2.4} />
+                            </button>
+                            {idx === messages.length - 1 && canRetry ? (
+                              <button
+                                type="button"
+                                className="h-7 w-7 rounded-full flex items-center justify-center text-slate-500 hover:bg-white/70"
+                                aria-label="regenerate answer"
+                                title="重新生成"
+                                onClick={retryLastAnswer}
+                              >
+                                <RotateCcw size={14} strokeWidth={2.4} />
+                              </button>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </div>
                     )
                   ))}
-
-                  {sending ? (
-                    <div className="mr-auto max-w-[85%] rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm">
-                      正在思考…
-                    </div>
-                  ) : null}
                 </div>
               </div>
 
@@ -376,9 +525,9 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                         ? '当前环境无法连接接口'
                         : !isOnline
                           ? '离线：AI 暂不可用'
-                        : privacyAccepted
-                          ? '输入你的问题…'
-                          : '请先阅读隐私提示'
+                          : privacyAccepted
+                            ? '输入你的问题...'
+                            : '请先阅读隐私提示'
                     }
                     disabled={
                       !privacyAccepted ||
@@ -394,11 +543,14 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                   <button
                     type="button"
                     className="w-11 h-11 rounded-full bg-[var(--primary)] text-[var(--primary-contrast)] flex items-center justify-center shadow-sm disabled:opacity-50"
-                    aria-label="send"
-                    disabled={!canSend}
-                    onClick={() => void send(input)}
+                    aria-label={sending ? 'stop' : 'send'}
+                    disabled={!sending && !canSend}
+                    onClick={() => {
+                      if (sending) stopSending()
+                      else void send(input)
+                    }}
                   >
-                    <ArrowUp size={18} strokeWidth={3} />
+                    {sending ? <Square size={15} fill="currentColor" strokeWidth={3} /> : <ArrowUp size={18} strokeWidth={3} />}
                   </button>
                 </div>
               </div>
@@ -425,7 +577,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                     <div className="px-5 pt-5 pb-3">
                       <div className="text-[15px] font-extrabold tracking-tight text-slate-900">隐私提示</div>
                       <div className="mt-2 text-[12px] font-semibold text-slate-600 leading-relaxed">
-                        为了进行 AI 分析，你的财务数据将以 JSON 形式发送到你配置的云端后台，再由后台转发到统一 AI 对话服务。请确认你理解并同意后继续使用。
+                        为了进行 AI 分析，你的财务摘要、最近快照和最近账户操作会发送到你配置的云端后台，再由后台转发到统一 AI 对话服务。
                       </div>
                       {transportIssue ? (
                         <div className="mt-2 text-[12px] font-semibold text-rose-600 leading-relaxed">

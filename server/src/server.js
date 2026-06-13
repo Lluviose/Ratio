@@ -641,19 +641,30 @@ function readAiConfig() {
 }
 
 function getAiConfigIssue(config) {
-  if (!config.chatUrl) return 'AI chat URL is not configured'
+  return getAiConfigIssueInfo(config)?.message ?? null
+}
+
+function getAiConfigIssueInfo(config) {
+  if (!config.chatUrl) return { code: 'ai_chat_url_missing', message: 'AI chat URL is not configured' }
   try {
     const url = new URL(config.chatUrl)
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return 'AI chat URL must use http or https'
-    if (url.protocol === 'http:' && !AI_ALLOW_HTTP_UPSTREAM) return 'AI chat URL must use https unless RATIO_AI_ALLOW_HTTP_UPSTREAM=true'
-    if (isPrivateHostname(url.hostname) && !AI_ALLOW_PRIVATE_UPSTREAM) {
-      return 'AI chat URL cannot target private or localhost addresses unless RATIO_AI_ALLOW_PRIVATE_UPSTREAM=true'
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return { code: 'ai_chat_url_protocol_invalid', message: 'AI chat URL must use http or https' }
     }
-    if (url.hostname === 'example.com') return 'AI chat URL is still the example value'
+    if (url.protocol === 'http:' && !AI_ALLOW_HTTP_UPSTREAM) {
+      return { code: 'ai_http_upstream_blocked', message: 'AI chat URL must use https unless RATIO_AI_ALLOW_HTTP_UPSTREAM=true' }
+    }
+    if (isPrivateHostname(url.hostname) && !AI_ALLOW_PRIVATE_UPSTREAM) {
+      return {
+        code: 'ai_private_upstream_blocked',
+        message: 'AI chat URL cannot target private or localhost addresses unless RATIO_AI_ALLOW_PRIVATE_UPSTREAM=true',
+      }
+    }
+    if (url.hostname === 'example.com') return { code: 'ai_chat_url_example', message: 'AI chat URL is still the example value' }
   } catch {
-    return 'AI chat URL is invalid'
+    return { code: 'ai_chat_url_invalid', message: 'AI chat URL is invalid' }
   }
-  if (!config.model) return 'AI model is not configured'
+  if (!config.model) return { code: 'ai_model_missing', message: 'AI model is not configured' }
   return null
 }
 
@@ -866,30 +877,151 @@ async function readUpstreamTextLimited(upstream, maxBytes) {
   return Buffer.concat(chunks, total).toString('utf8')
 }
 
+function aiMessageCharCount(messages) {
+  return messages.reduce((sum, message) => sum + (typeof message.content === 'string' ? message.content.length : 0), 0)
+}
+
+function sanitizeServerTelemetryPayload(payload) {
+  const safe = {}
+  for (const [key, value] of Object.entries(payload || {})) {
+    if (/password|token|secret|key|content|message/i.test(key)) continue
+    if (typeof value === 'string') safe[key] = value.slice(0, 300)
+    else if (typeof value === 'number' || typeof value === 'boolean' || value == null) safe[key] = value
+    else safe[key] = JSON.stringify(value).slice(0, 300)
+  }
+  return safe
+}
+
+async function logAiServerTelemetry(req, user, payload) {
+  try {
+    const event = {
+      receivedAt: now(),
+      userId: user.id,
+      userAgent: req.headers['user-agent'] || '',
+      event: {
+        name: 'server_ai_chat',
+        at: now(),
+        payload: sanitizeServerTelemetryPayload(payload),
+      },
+    }
+    const text = `${JSON.stringify(event)}\n`
+    const file = telemetryFileForToday(user)
+    const incomingBytes = Buffer.byteLength(text)
+    if ((await fileSize(file)) + incomingBytes > TELEMETRY_MAX_DAILY_BYTES) return
+    await mkdir(path.dirname(file), { recursive: true })
+    await appendFile(file, text, 'utf8')
+  } catch (error) {
+    console.warn('[ratio-server] ai telemetry write failed', error?.message || error)
+  }
+}
+
+function aiProxyHeaders(upstream) {
+  return {
+    'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    ...securityHeaders(),
+    ...corsHeaders(),
+  }
+}
+
+async function writeChunk(res, chunk) {
+  if (res.write(chunk)) return
+  await new Promise((resolve) => res.once('drain', resolve))
+}
+
+async function pipeUpstreamStreamLimited(upstream, res, maxBytes) {
+  if (!upstream.body) {
+    res.end()
+    return 0
+  }
+
+  const reader = upstream.body.getReader()
+  let total = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const chunk = Buffer.from(value)
+      total += chunk.length
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        const errorPayload = JSON.stringify({ error: { code: 'ai_upstream_too_large', message: 'AI upstream response is too large' } })
+        await writeChunk(res, `event: error\ndata: ${errorPayload}\n\n`)
+        break
+      }
+      await writeChunk(res, chunk)
+    }
+  } finally {
+    res.end()
+  }
+  return total
+}
+
 function handleAiStatus(res) {
   const config = readAiConfig()
-  const issue = getAiConfigIssue(config)
+  const issue = getAiConfigIssueInfo(config)
   jsonResponse(res, 200, {
     ai: {
       configured: issue === null,
-      issue: issue === null ? null : 'AI service is not available',
+      issue: issue?.message ?? null,
+      issueCode: issue?.code ?? null,
+      message: issue === null ? 'AI service is configured' : issue.message,
+      model: config.model,
+      reasoningEffort: config.reasoningEffort,
+      hasApiKey: Boolean(config.apiKey),
+      apiKeyMasked: maskSecret(config.apiKey),
+      chatUrlSummary: summarizeUrl(config.chatUrl),
+      limits: {
+        maxMessages: AI_MAX_MESSAGES,
+        maxMessageChars: AI_MAX_MESSAGE_CHARS,
+        maxTotalMessageChars: AI_MAX_TOTAL_MESSAGE_CHARS,
+        rateLimitPerMinute: AI_RATE_LIMIT_PER_MINUTE,
+        dailyRequestLimit: AI_DAILY_REQUEST_LIMIT,
+        timeoutMs: AI_UPSTREAM_TIMEOUT_MS,
+      },
     },
   })
 }
 
 async function handleAiChat(req, res, user) {
+  const startedAt = Date.now()
   const config = readAiConfig()
-  const issue = getAiConfigIssue(config)
-  if (issue) return fail(res, 503, issue, 'ai_config_missing')
-  if (!checkAiLimits(req, res, user)) return
+  const issue = getAiConfigIssueInfo(config)
+  if (issue) {
+    await logAiServerTelemetry(req, user, {
+      status: 503,
+      ok: false,
+      errorCode: issue.code,
+      durationMs: Date.now() - startedAt,
+    })
+    return fail(res, 503, issue.message, 'ai_config_missing', { issueCode: issue.code })
+  }
+  if (!checkAiLimits(req, res, user)) {
+    await logAiServerTelemetry(req, user, {
+      status: 429,
+      ok: false,
+      errorCode: 'ai_rate_limited',
+      durationMs: Date.now() - startedAt,
+    })
+    return
+  }
 
   const body = await parseBody(req, 1024 * 1024)
+  const wantsStream = body.stream === true
   let messages
   try {
     messages = validateAiMessages(body.messages)
   } catch (error) {
+    await logAiServerTelemetry(req, user, {
+      status: error.status || 400,
+      ok: false,
+      stream: wantsStream,
+      errorCode: error.code || 'ai_messages_invalid',
+      durationMs: Date.now() - startedAt,
+    })
     return fail(res, error.status || 400, error.message, error.code || 'ai_messages_invalid')
   }
+  const requestChars = aiMessageCharCount(messages)
 
   const controller = new AbortController()
   let timedOut = false
@@ -917,37 +1049,104 @@ async function handleAiChat(req, res, user) {
         model: config.model,
         messages,
         reasoning_effort: config.reasoningEffort,
+        ...(wantsStream ? { stream: true } : {}),
       }),
     })
   } catch {
     clearTimeout(timeout)
     res.off('close', onResponseClose)
-    if (timedOut) return fail(res, 504, 'AI upstream request timed out', 'ai_upstream_timeout')
+    if (timedOut) {
+      await logAiServerTelemetry(req, user, {
+        status: 504,
+        ok: false,
+        stream: wantsStream,
+        errorCode: 'ai_upstream_timeout',
+        requestChars,
+        durationMs: Date.now() - startedAt,
+      })
+      return fail(res, 504, 'AI upstream request timed out', 'ai_upstream_timeout')
+    }
     if (controller.signal.aborted) return
+    await logAiServerTelemetry(req, user, {
+      status: 502,
+      ok: false,
+      stream: wantsStream,
+      errorCode: 'ai_upstream_failed',
+      requestChars,
+      durationMs: Date.now() - startedAt,
+    })
     return fail(res, 502, 'AI upstream request failed', 'ai_upstream_failed')
   }
 
   try {
+    if (wantsStream && upstream.ok) {
+      incrementDailyLimit('ai-user', user.id)
+      res.writeHead(upstream.status, aiProxyHeaders(upstream))
+      const responseBytes = await pipeUpstreamStreamLimited(upstream, res, AI_MAX_RESPONSE_BYTES)
+      responseClosed = true
+      clearTimeout(timeout)
+      res.off('close', onResponseClose)
+      await logAiServerTelemetry(req, user, {
+        status: upstream.status,
+        ok: true,
+        stream: true,
+        requestChars,
+        responseBytes,
+        durationMs: Date.now() - startedAt,
+      })
+      return
+    }
+
     const text = await readUpstreamTextLimited(upstream, AI_MAX_RESPONSE_BYTES)
     if (upstream.ok) incrementDailyLimit('ai-user', user.id)
     responseClosed = true
     clearTimeout(timeout)
     res.off('close', onResponseClose)
-    res.writeHead(upstream.status, {
-      'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-      ...securityHeaders(),
-      ...corsHeaders(),
-    })
+    res.writeHead(upstream.status, aiProxyHeaders(upstream))
     res.end(text)
+    await logAiServerTelemetry(req, user, {
+      status: upstream.status,
+      ok: upstream.ok,
+      stream: wantsStream,
+      requestChars,
+      responseBytes: Buffer.byteLength(text, 'utf8'),
+      errorCode: upstream.ok ? '' : 'ai_upstream_http_error',
+      durationMs: Date.now() - startedAt,
+    })
   } catch (error) {
     clearTimeout(timeout)
     res.off('close', onResponseClose)
     if (error && error.code === 'ai_upstream_too_large') {
+      await logAiServerTelemetry(req, user, {
+        status: error.status || 502,
+        ok: false,
+        stream: wantsStream,
+        requestChars,
+        errorCode: error.code,
+        durationMs: Date.now() - startedAt,
+      })
       return fail(res, error.status || 502, error.message, error.code)
     }
-    if (timedOut) return fail(res, 504, 'AI upstream response timed out', 'ai_upstream_timeout')
+    if (timedOut) {
+      await logAiServerTelemetry(req, user, {
+        status: 504,
+        ok: false,
+        stream: wantsStream,
+        requestChars,
+        errorCode: 'ai_upstream_timeout',
+        durationMs: Date.now() - startedAt,
+      })
+      return fail(res, 504, 'AI upstream response timed out', 'ai_upstream_timeout')
+    }
     if (controller.signal.aborted) return
+    await logAiServerTelemetry(req, user, {
+      status: 502,
+      ok: false,
+      stream: wantsStream,
+      requestChars,
+      errorCode: 'ai_upstream_response_failed',
+      durationMs: Date.now() - startedAt,
+    })
     return fail(res, 502, 'AI upstream response failed', 'ai_upstream_failed')
   }
 }

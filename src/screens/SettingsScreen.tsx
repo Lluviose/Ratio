@@ -192,6 +192,11 @@ export function SettingsScreen(props: {
   }
 
   const cloudReady = Boolean(cloudSync.serverUrl.trim() && cloudSync.username.trim() && cloudSync.password)
+  const cloudAiHint = !cloudReady
+    ? '先完成云同步连接配置'
+    : !cloudSync.useCloudAi
+      ? '开启后可在资产页使用 AI 分析'
+      : '发送财务摘要、最近快照和最近账户操作'
 
   const isSameCloudTarget = (settings: CloudSyncSettings) => {
     const current = cloudSyncRef.current
@@ -515,14 +520,29 @@ export function SettingsScreen(props: {
         return
       }
       if (!res.ai.configured) {
-        const message = res.ai.issue ? `云端 AI 配置不完整：${res.ai.issue}` : '云端 AI 未配置'
+        const message = res.ai.issue ? `云端 AI 不可用：${res.ai.issue}` : '云端 AI 未配置'
         setCloudAiStatus(message)
         toast(message, { tone: 'neutral' })
+        trackTelemetry('cloud_ai_status_check', {
+          configured: false,
+          issueCode: res.ai.issueCode || '',
+        })
         return
       }
-      setCloudAiStatus('云端 AI 配置完整')
-      toast('云端 AI 配置完整', { tone: 'success' })
-      trackTelemetry('cloud_ai_status_check', { configured: true })
+      const details = [
+        '云端 AI 可用',
+        res.ai.model ? `模型 ${res.ai.model}` : '',
+        res.ai.reasoningEffort ? `推理 ${res.ai.reasoningEffort}` : '',
+        res.ai.chatUrlSummary || '',
+      ].filter(Boolean)
+      const message = details.join(' · ')
+      setCloudAiStatus(message)
+      toast('云端 AI 可用', { tone: 'success' })
+      trackTelemetry('cloud_ai_status_check', {
+        configured: true,
+        model: res.ai.model || '',
+        reasoningEffort: res.ai.reasoningEffort || '',
+      })
     } catch (err) {
       if (isAbortError(err)) return
       if (!mountedRef.current) return
@@ -902,10 +922,14 @@ export function SettingsScreen(props: {
               <div>
                 <div className="assetName">使用云端 AI 代理</div>
                 <div className="assetSub" style={{ marginTop: 4 }}>
-                  需要先连接云同步账号，AI 服务参数在 Docker Compose 后台配置
+                  {cloudAiHint}
                 </div>
               </div>
-              <Toggle checked={cloudSync.useCloudAi} disabled={busy} onChange={(useCloudAi) => updateCloudSync({ useCloudAi })} />
+              <Toggle
+                checked={cloudSync.useCloudAi}
+                disabled={busy || (!cloudReady && !cloudSync.useCloudAi)}
+                onChange={(useCloudAi) => updateCloudSync({ useCloudAi })}
+              />
             </div>
 
             <button

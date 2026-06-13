@@ -26,7 +26,7 @@ npm run dev
 
 ### 云端后台（Docker Compose）
 
-后台用于账号备份、云端 AI 代理和日志遥测。AI 对话端口只在后台统一配置，前端不会保存 AI Base URL、API Key 或模型参数。
+后台用于账号备份、云端 AI 代理和日志遥测。AI 对话端口只在后台统一配置，前端不会保存 AI Base URL、API Key 或模型参数。AI 助手默认只发送派生财务摘要、最近快照、最近账户操作和最近可选 ledger 明细；不会把云同步账号密码写入 AI 请求或备份文件。
 
 ```powershell
 Copy-Item .env.example .env
@@ -50,7 +50,7 @@ docker compose logs -f ratio-server
 - `RATIO_AI_MODEL` / `RATIO_AI_REASONING_EFFORT`：统一模型配置
 - `RATIO_REGISTRATION_INVITE_CODE`：创建账号的邀请码；默认必须配置，否则注册关闭
 - `RATIO_ALLOW_OPEN_REGISTRATION`：显式设为 `true` 才允许无邀请码开放注册，不建议公网使用
-- `RATIO_AI_UPSTREAM_TIMEOUT_MS`：AI 上游请求超时时间，默认 120000
+- `RATIO_AI_UPSTREAM_TIMEOUT_MS`：AI 上游请求/流式响应超时时间，默认 120000
 - `RATIO_AI_MAX_RESPONSE_BYTES`：AI 上游响应最大字节数，默认 2097152
 - `RATIO_AI_RATE_LIMIT_PER_MINUTE` / `RATIO_AI_DAILY_REQUEST_LIMIT`：AI 代理按账号和来源网络限流
 - `RATIO_AI_MAX_MESSAGES` / `RATIO_AI_MAX_MESSAGE_CHARS` / `RATIO_AI_MAX_TOTAL_MESSAGE_CHARS`：AI 对话请求体限制
@@ -62,7 +62,9 @@ docker compose logs -f ratio-server
 - `RATIO_ADMIN_RATE_LIMIT_PER_MINUTE`：控制台请求限流，默认 300
 - `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
 
-启动后后台默认监听 `http://localhost:8787`，VPS 上可用 `http://服务器IP:8787/api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份和遥测。公网部署时请放在 HTTPS 反向代理后；如果前端和后端不是同一个 origin，需要把 `RATIO_CORS_ORIGIN` 改成前端实际 origin，如果同域反代则可以保持默认。配置管理员账号后，可打开 `http://服务器IP:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
+启动后后台默认监听 `http://localhost:8787`，VPS 上可用 `http://服务器IP:8787/api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份、遥测和云端 AI。AI 状态检查会返回可用性、模型、推理档位、代理地址摘要和配置错误原因；AI 聊天接口支持 OpenAI-compatible 非流式响应，也会在前端请求 `stream: true` 时透传流式响应。公网部署时请放在 HTTPS 反向代理后；如果前端和后端不是同一个 origin，需要把 `RATIO_CORS_ORIGIN` 改成前端实际 origin，如果同域反代则可以保持默认。配置管理员账号后，可打开 `http://服务器IP:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
+
+AI 助手定位为分析和建议，不会直接修改资产数据。聊天记录只保存在当前浏览器 `sessionStorage`，关闭本次浏览会话后会自然清除，也不会进入云备份。
 
 ### 常用命令
 
