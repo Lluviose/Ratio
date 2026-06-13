@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarDays, Info, Pencil, RotateCcw, Sparkles, Target } from 'lucide-react'
+import { CalendarDays, CircleDollarSign, Info, Pencil, RotateCcw, Save, Sparkles, Target, X } from 'lucide-react'
 import { BottomSheet } from '../components/BottomSheet'
 import { PillTabs } from '../components/PillTabs'
 import { formatCny } from '../lib/format'
@@ -25,6 +25,12 @@ import { DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY, clampMonthStartDay } from
 import type { ThemeColors } from '../lib/themes'
 import type { Snapshot } from '../lib/snapshots'
 import { buildSavingsSimulationPlan } from '../lib/savingsGoalSimulation'
+import {
+  MONTHLY_ESTIMATED_INCOME_KEY,
+  buildMonthlyDisposablePlan,
+  coerceMonthlyEstimatedIncome,
+  type MonthlyDisposablePlan,
+} from '../lib/monthlyDisposable'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { shouldShowYearForDateKeys } from '../lib/dateSeries'
 import {
@@ -361,6 +367,241 @@ function MetricTile(props: {
       <div style={compact ? compactMetricLabelStyle : metricLabelStyle}>{label}</div>
       <div style={valueStyle}>{value}</div>
       {sub ? <div style={compact ? compactMetricSubStyle : metricSubStyle}>{sub}</div> : null}
+    </motion.div>
+  )
+}
+
+function formatMonthlyIncomeInput(value: number) {
+  return value > 0 ? formatGoalInputAmount(value) : ''
+}
+
+function formatNullableCny(value: number | null) {
+  return value == null ? '—' : formatCny(value)
+}
+
+function formatDisposableValue(value: number | null) {
+  if (value == null) return '—'
+  if (value < 0) return `缺 ${formatCny(Math.abs(value))}`
+  return formatCny(value)
+}
+
+function getDisposableTone(value: number | null, color: string) {
+  if (value == null) return 'var(--muted-text)'
+  if (value < 0) return '#ef4444'
+  if (value === 0) return 'var(--text)'
+  return color
+}
+
+function getTargetSavingsSub(plan: MonthlyDisposablePlan, summary: SavingsGoalSummary | null) {
+  if (!summary) return '设置储蓄目标后计算'
+  if (plan.targetSource === 'complete') return '目标已完成'
+  if (plan.targetSource === 'past-due') return summary.isDueToday ? '今日到期缺口' : '逾期目标缺口'
+  if (plan.targetSource === 'current-period') return '按本期目标路径'
+  return '等待本期路径'
+}
+
+function getDisposableSub(plan: MonthlyDisposablePlan) {
+  if (plan.targetDisposable == null) return '等待目标'
+  if (plan.isIncomeShort) return `收入还差 ${formatCny(plan.incomeGap ?? 0)}`
+  return '预留本期目标后'
+}
+
+function getRemainingSavingsSub(plan: MonthlyDisposablePlan, summary: SavingsGoalSummary | null) {
+  if (!summary) return '设置目标后计算'
+  if (plan.currentPeriodRemaining == null) return '等待本期路径'
+  if (plan.currentPeriodRemaining <= 0) return '本期已覆盖'
+  return plan.targetSource === 'past-due' ? '目标缺口' : '扣除本期已增'
+}
+
+function MonthlyDisposableCard(props: {
+  estimatedIncome: number
+  summary: SavingsGoalSummary | null
+  color: string
+  onChange: (value: number) => void
+}) {
+  const { estimatedIncome, summary, color, onChange } = props
+  const [inputValue, setInputValue] = useState(() => formatMonthlyIncomeInput(estimatedIncome))
+  const [error, setError] = useState<string | null>(null)
+  const plan = useMemo(
+    () => buildMonthlyDisposablePlan(estimatedIncome, summary),
+    [estimatedIncome, summary],
+  )
+  const disposableTone = getDisposableTone(plan.targetDisposable, color)
+  const statusText = plan.targetDisposable == null
+    ? '等待目标'
+    : plan.isIncomeShort
+      ? '收入不足'
+      : '已预留'
+
+  useEffect(() => {
+    setInputValue(formatMonthlyIncomeInput(estimatedIncome))
+    setError(null)
+  }, [estimatedIncome])
+
+  const saveIncome = () => {
+    const parsed = inputValue.trim() ? parseMoneyInput(inputValue) : 0
+    if (parsed == null || parsed < 0) {
+      setError('请输入不小于 0 的收入金额')
+      return
+    }
+
+    const next = coerceMonthlyEstimatedIncome(parsed)
+    onChange(next)
+    setInputValue(formatMonthlyIncomeInput(next))
+    setError(null)
+  }
+
+  const clearIncome = () => {
+    onChange(0)
+    setInputValue('')
+    setError(null)
+  }
+
+  return (
+    <motion.div
+      className="card"
+      initial={cardEntranceInitial}
+      animate={cardEntranceAnimate}
+      transition={cardEntranceTransition}
+      style={{ overflow: 'hidden', position: 'relative' }}
+    >
+      <motion.div
+        aria-hidden="true"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: plan.targetDisposable != null && plan.targetDisposable >= 0 ? 0.1 : 0.06 }}
+        transition={{ duration: 0.35 }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: `linear-gradient(135deg, ${color}, transparent 66%)`,
+          borderRadius: 'inherit',
+          pointerEvents: 'none',
+        }}
+      />
+      <div className="cardInner" style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <div
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 15,
+                background: 'rgb(var(--primary-rgb) / 0.12)',
+                color,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: '0 0 auto',
+              }}
+            >
+              <CircleDollarSign size={18} strokeWidth={2.7} />
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 15 }}>月度可支配</div>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 650, marginTop: 2 }}>
+                按本期储蓄目标预留
+              </div>
+            </div>
+          </div>
+          <div
+            style={{
+              flex: '0 0 auto',
+              borderRadius: 999,
+              padding: '7px 10px',
+              background: 'rgb(255 255 255 / 0.84)',
+              border: '1px solid rgba(15, 23, 42, 0.06)',
+              color: disposableTone,
+              fontSize: 11,
+              fontWeight: 800,
+              boxShadow: '0 8px 20px -18px rgba(15, 23, 42, 0.36)',
+            }}
+          >
+            {statusText}
+          </div>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            saveIncome()
+          }}
+          style={{ display: 'grid', gap: 8, marginTop: 14 }}
+        >
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+              gap: 8,
+              alignItems: 'end',
+            }}
+          >
+            <label className="field" style={{ minWidth: 0 }}>
+              <div className="fieldLabel">预估月收入</div>
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="例如 18000"
+                value={inputValue}
+                onChange={(e) => {
+                  setInputValue(e.target.value)
+                  setError(null)
+                }}
+              />
+            </label>
+            <button
+              type="submit"
+              className="iconBtn iconBtnPrimary"
+              aria-label="保存预估月收入"
+              title="保存预估月收入"
+              style={{ width: 48, height: 48, alignSelf: 'end' }}
+            >
+              <Save size={18} strokeWidth={2.6} />
+            </button>
+            <button
+              type="button"
+              className="iconBtn"
+              aria-label="清空预估月收入"
+              title="清空预估月收入"
+              onClick={clearIncome}
+              style={{ width: 48, height: 48, alignSelf: 'end' }}
+            >
+              <X size={18} strokeWidth={2.6} />
+            </button>
+          </div>
+          {error ? <div style={{ color: '#ef4444', fontSize: 12, fontWeight: 650 }}>{error}</div> : null}
+        </form>
+
+        <MetricGrid layout="compactTop12">
+          <MetricTile
+            compact
+            label="预估月收入"
+            value={formatCny(plan.estimatedIncome)}
+            valueColor={plan.estimatedIncome > 0 ? 'var(--text)' : 'var(--muted-text)'}
+            sub={plan.estimatedIncome > 0 ? '长期沿用' : '未填写'}
+          />
+          <MetricTile
+            compact
+            label="本期应存目标"
+            value={formatNullableCny(plan.targetSavings)}
+            valueColor={plan.targetSource === 'past-due' ? '#ef4444' : undefined}
+            sub={getTargetSavingsSub(plan, summary)}
+          />
+          <MetricTile
+            compact
+            label="目标可支配"
+            value={formatDisposableValue(plan.targetDisposable)}
+            valueColor={disposableTone}
+            sub={getDisposableSub(plan)}
+          />
+          <MetricTile
+            compact
+            label="本期还需存入"
+            value={formatNullableCny(plan.currentPeriodRemaining)}
+            valueColor={plan.currentPeriodRemaining != null && plan.currentPeriodRemaining > 0 ? '#ef4444' : '#10b981'}
+            sub={getRemainingSavingsSub(plan, summary)}
+          />
+        </MetricGrid>
+      </div>
     </motion.div>
   )
 }
@@ -1417,6 +1658,9 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const [goal, setGoal] = useLocalStorageState<SavingsGoal | null>(SAVINGS_GOAL_KEY, null, {
     coerce: coerceSavingsGoal,
   })
+  const [monthlyEstimatedIncome, setMonthlyEstimatedIncome] = useLocalStorageState<number>(MONTHLY_ESTIMATED_INCOME_KEY, 0, {
+    coerce: coerceMonthlyEstimatedIncome,
+  })
   const [goalSheetOpen, setGoalSheetOpen] = useState(false)
   const [celebrationMilestone, setCelebrationMilestone] = useState<number | null>(null)
   const celebrationKeyRef = useRef<string | null>(null)
@@ -1472,6 +1716,13 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             snapshotCount={snapshots.length}
             color={colors.invest}
             onEdit={() => setGoalSheetOpen(true)}
+          />
+
+          <MonthlyDisposableCard
+            estimatedIncome={monthlyEstimatedIncome}
+            summary={goalSummary}
+            color={colors.invest}
+            onChange={setMonthlyEstimatedIncome}
           />
 
           <SavingsGoalCard
