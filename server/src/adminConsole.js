@@ -64,6 +64,35 @@ export const adminHtml = `<!doctype html>
             <div id="aiState" class="metricValue">-</div>
             <div id="aiMeta" class="metricMeta">-</div>
           </div>
+          <div class="metric">
+            <div class="metricLabel">遥测</div>
+            <div id="telemetryToday" class="metricValue">-</div>
+            <div id="telemetryMeta" class="metricMeta">-</div>
+          </div>
+        </section>
+
+        <section class="chartGrid" aria-label="趋势可视化">
+          <div class="panel">
+            <div class="panelHeader">
+              <h2>近 7 天遥测</h2>
+              <span id="telemetryTrendBadge" class="badge">-</span>
+            </div>
+            <div id="telemetryTrendChart" class="chartBox"></div>
+          </div>
+          <div class="panel">
+            <div class="panelHeader">
+              <h2>AI 请求</h2>
+              <span id="aiTrendBadge" class="badge">-</span>
+            </div>
+            <div id="aiTrendChart" class="chartBox"></div>
+          </div>
+          <div class="panel">
+            <div class="panelHeader">
+              <h2>Top 存储用户</h2>
+              <span id="storageTrendBadge" class="badge">-</span>
+            </div>
+            <div id="storageTopChart" class="chartBox"></div>
+          </div>
         </section>
 
         <section class="layout">
@@ -77,10 +106,14 @@ export const adminHtml = `<!doctype html>
 
           <div class="panel">
             <div class="panelHeader">
-              <h2>遥测摘要</h2>
-              <span id="telemetryBadge" class="badge">-</span>
+              <h2>创建用户</h2>
+              <span class="badge">Admin</span>
             </div>
-            <div id="telemetrySummary" class="kvList"></div>
+            <form id="createUserForm" class="inlineForm">
+              <input id="createUsername" name="username" placeholder="username" autocomplete="off" required />
+              <input id="createPassword" name="password" type="password" placeholder="password" autocomplete="new-password" required />
+              <button type="submit">创建</button>
+            </form>
           </div>
         </section>
 
@@ -94,11 +127,10 @@ export const adminHtml = `<!doctype html>
               <thead>
                 <tr>
                   <th>账号</th>
-                  <th>创建时间</th>
-                  <th>最近备份</th>
-                  <th>备份项目</th>
-                  <th>今日遥测</th>
+                  <th>备份</th>
+                  <th>遥测</th>
                   <th>用户目录</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody id="usersTable"></tbody>
@@ -108,18 +140,55 @@ export const adminHtml = `<!doctype html>
 
         <section class="panel">
           <div class="panelHeader">
-            <h2>最近遥测</h2>
-            <div class="filters">
-              <select id="telemetryUser"></select>
-              <select id="telemetryLimit">
-                <option value="20">20 条</option>
-                <option value="50" selected>50 条</option>
-                <option value="100">100 条</option>
-                <option value="200">200 条</option>
-              </select>
-            </div>
+            <h2 id="filesTitle">用户文件</h2>
+            <span id="filesBadge" class="badge">未选择</span>
           </div>
-          <div id="telemetryList" class="eventList"></div>
+          <div class="tableWrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>文件名</th>
+                  <th>大小</th>
+                  <th>修改时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="filesTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="layout">
+          <div class="panel">
+            <div class="panelHeader">
+              <h2>最近遥测</h2>
+              <div class="filters">
+                <select id="telemetryUser"></select>
+                <select id="telemetryLimit">
+                  <option value="20">20 条</option>
+                  <option value="50" selected>50 条</option>
+                  <option value="100">100 条</option>
+                  <option value="200">200 条</option>
+                </select>
+              </div>
+            </div>
+            <div id="telemetryList" class="eventList"></div>
+          </div>
+
+          <div class="panel">
+            <div class="panelHeader">
+              <h2>管理员审计</h2>
+              <div class="filters">
+                <select id="auditLimit">
+                  <option value="20">20 条</option>
+                  <option value="50" selected>50 条</option>
+                  <option value="100">100 条</option>
+                  <option value="200">200 条</option>
+                </select>
+              </div>
+            </div>
+            <div id="auditList" class="eventList"></div>
+          </div>
         </section>
       </main>
     </div>
@@ -163,30 +232,30 @@ export const adminCss = `:root {
   --green: #0f8a5f;
   --amber: #b7791f;
   --red: #c2413a;
+  --cyan: #0891b2;
   --shadow: 0 18px 50px -38px rgba(15, 23, 42, 0.55);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); letter-spacing: 0; }
-button, select { font: inherit; }
+button, select, input { font: inherit; }
 button {
-  height: 36px;
+  height: 34px;
   border: 1px solid #1d4ed8;
   border-radius: 8px;
   background: var(--accent);
   color: #fff;
-  padding: 0 14px;
+  padding: 0 12px;
   font-weight: 850;
   cursor: pointer;
+  white-space: nowrap;
 }
 button:disabled { opacity: 0.62; cursor: progress; }
-button.secondary {
-  border-color: var(--line);
-  background: #fff;
-  color: var(--text);
-}
-select {
+button.secondary { border-color: var(--line); background: #fff; color: var(--text); }
+button.danger { border-color: #b91c1c; background: var(--red); }
+button.tiny { height: 28px; padding: 0 8px; font-size: 11px; }
+select, input {
   height: 34px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -196,7 +265,7 @@ select {
   font-weight: 750;
 }
 
-.shell { width: min(1180px, calc(100vw - 28px)); margin: 0 auto; padding: 24px 0 40px; }
+.shell { width: min(1280px, calc(100vw - 28px)); margin: 0 auto; padding: 24px 0 40px; }
 .topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
 .eyebrow { color: var(--muted); font-size: 12px; font-weight: 850; text-transform: uppercase; letter-spacing: 0.08em; }
 h1 { margin: 4px 0 0; font-size: clamp(24px, 4vw, 34px); line-height: 1.05; letter-spacing: 0; }
@@ -205,12 +274,7 @@ h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .muted { color: var(--muted); font-size: 12px; font-weight: 750; }
 .isHidden { display: none !important; }
 
-.loginPanel {
-  display: grid;
-  place-items: center;
-  min-height: 58vh;
-}
-
+.loginPanel { display: grid; place-items: center; min-height: 58vh; }
 .loginBox {
   width: min(420px, 100%);
   display: grid;
@@ -221,20 +285,9 @@ h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
   box-shadow: var(--shadow);
   padding: 20px;
 }
-
 .loginBox h2 { font-size: 18px; }
 .loginBox p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; font-weight: 750; }
 .loginBox label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; font-weight: 850; }
-.loginBox input {
-  height: 38px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--text);
-  padding: 0 10px;
-  font: inherit;
-  font-weight: 800;
-}
 .loginError { min-height: 18px; color: var(--red); font-size: 12px; font-weight: 850; }
 
 .statusStrip {
@@ -255,35 +308,43 @@ h2 { margin: 0; font-size: 15px; letter-spacing: 0; }
 .dot.warn { background: var(--amber); }
 .dot.bad { background: var(--red); }
 
-.metricsGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
-.metric, .panel {
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-.metric { padding: 14px; min-height: 116px; display: flex; flex-direction: column; justify-content: space-between; }
+.metricsGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.metric, .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: var(--shadow); }
+.metric { padding: 14px; min-height: 108px; display: flex; flex-direction: column; justify-content: space-between; }
 .metricLabel { color: var(--muted); font-size: 12px; font-weight: 850; }
-.metricValue { margin-top: 8px; font-size: 26px; line-height: 1; font-weight: 950; letter-spacing: 0; }
+.metricValue { margin-top: 8px; font-size: 25px; line-height: 1; font-weight: 950; letter-spacing: 0; }
 .metricMeta { margin-top: 10px; color: var(--muted); font-size: 12px; line-height: 1.45; font-weight: 750; word-break: break-word; }
 .metricValue.ok { color: var(--green); }
 .metricValue.warn { color: var(--amber); }
 .metricValue.bad { color: var(--red); }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); gap: 12px; margin-bottom: 12px; }
+.chartGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 12px; margin-bottom: 12px; }
 .panel { padding: 14px; margin-bottom: 12px; }
 .panelHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
 .badge { min-height: 24px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 0 9px; color: var(--muted); font-size: 11px; font-weight: 850; white-space: nowrap; }
 .badge.warn { border-color: rgba(183, 121, 31, 0.35); background: rgba(245, 158, 11, 0.1); color: var(--amber); }
-.filters { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.filters, .rowActions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.inlineForm { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
 
 .kvList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .kv { border-top: 1px solid var(--line-soft); padding-top: 9px; min-width: 0; }
 .kvKey { color: var(--muted); font-size: 11px; font-weight: 850; }
 .kvValue { margin-top: 4px; font-size: 13px; font-weight: 850; line-height: 1.35; word-break: break-word; }
 
+.chartBox { min-height: 184px; }
+.chartSvg { width: 100%; height: 184px; display: block; }
+.chartAxis { fill: #647084; font-size: 10px; font-weight: 800; }
+.chartLabel { fill: #334155; font-size: 11px; font-weight: 900; }
+.chartLine { stroke: #e2e8f0; stroke-width: 1; }
+.barPrimary { fill: var(--accent); }
+.barGood { fill: var(--green); }
+.barBad { fill: var(--red); }
+.barCyan { fill: var(--cyan); }
+.barMuted { fill: #94a3b8; }
+
 .tableWrap { overflow: auto; border: 1px solid var(--line-soft); border-radius: 8px; }
-table { width: 100%; border-collapse: collapse; min-width: 760px; }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
 th, td { padding: 11px 12px; border-bottom: 1px solid var(--line-soft); text-align: left; font-size: 12px; vertical-align: top; }
 th { color: var(--muted); font-weight: 900; background: #f8fafc; }
 td { font-weight: 750; }
@@ -292,12 +353,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .subtle { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; font-weight: 750; }
 
 .eventList { display: grid; gap: 8px; }
-.event {
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
-  padding: 10px;
-  background: #fbfdff;
-}
+.event { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px; background: #fbfdff; }
 .eventTop { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
 .eventName { font-size: 13px; font-weight: 950; }
 .eventTime { color: var(--muted); font-size: 11px; font-weight: 800; white-space: nowrap; }
@@ -317,11 +373,16 @@ pre {
 }
 .empty { color: var(--muted); font-size: 13px; font-weight: 800; padding: 12px 0; }
 
-@media (max-width: 860px) {
-  .shell { width: min(100% - 20px, 1180px); padding-top: 14px; }
+@media (max-width: 1100px) {
+  .metricsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chartGrid, .layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 680px) {
+  .shell { width: min(100% - 20px, 1280px); padding-top: 14px; }
   .topbar { align-items: flex-start; flex-direction: column; }
   .actions { justify-content: flex-start; }
-  .metricsGrid, .layout, .kvList { grid-template-columns: 1fr; }
+  .metricsGrid, .kvList, .inlineForm { grid-template-columns: 1fr; }
   .metric { min-height: 96px; }
 }`
 
@@ -345,15 +406,29 @@ export const adminJs = `const els = {
   storageFiles: document.getElementById('storageFiles'),
   aiState: document.getElementById('aiState'),
   aiMeta: document.getElementById('aiMeta'),
+  telemetryToday: document.getElementById('telemetryToday'),
+  telemetryMeta: document.getElementById('telemetryMeta'),
+  telemetryTrendBadge: document.getElementById('telemetryTrendBadge'),
+  telemetryTrendChart: document.getElementById('telemetryTrendChart'),
+  aiTrendBadge: document.getElementById('aiTrendBadge'),
+  aiTrendChart: document.getElementById('aiTrendChart'),
+  storageTrendBadge: document.getElementById('storageTrendBadge'),
+  storageTopChart: document.getElementById('storageTopChart'),
   configBadge: document.getElementById('configBadge'),
   configList: document.getElementById('configList'),
-  telemetryBadge: document.getElementById('telemetryBadge'),
-  telemetrySummary: document.getElementById('telemetrySummary'),
+  createUserForm: document.getElementById('createUserForm'),
+  createUsername: document.getElementById('createUsername'),
+  createPassword: document.getElementById('createPassword'),
   usersBadge: document.getElementById('usersBadge'),
   usersTable: document.getElementById('usersTable'),
+  filesTitle: document.getElementById('filesTitle'),
+  filesBadge: document.getElementById('filesBadge'),
+  filesTable: document.getElementById('filesTable'),
   telemetryUser: document.getElementById('telemetryUser'),
   telemetryLimit: document.getElementById('telemetryLimit'),
   telemetryList: document.getElementById('telemetryList'),
+  auditLimit: document.getElementById('auditLimit'),
+  auditList: document.getElementById('auditList'),
 }
 
 const AUTH_STORAGE_KEY = 'ratio.admin.basicAuth'
@@ -403,9 +478,9 @@ function fmtDate(value) {
   return date.toLocaleString('zh-CN', { hour12: false })
 }
 
-function setStatus(kind, text) {
-  const cls = kind === 'ok' ? 'ok' : kind === 'bad' ? 'bad' : 'warn'
-  els.statusStrip.innerHTML = '<span class="dot ' + cls + '"></span><span>' + escapeHtml(text) + '</span>'
+function fmtDay(value) {
+  if (!value) return '-'
+  return String(value).slice(5)
 }
 
 function escapeHtml(value) {
@@ -418,12 +493,21 @@ function escapeHtml(value) {
   })[ch])
 }
 
-async function api(path) {
+function setStatus(kind, text) {
+  const cls = kind === 'ok' ? 'ok' : kind === 'bad' ? 'bad' : 'warn'
+  els.statusStrip.innerHTML = '<span class="dot ' + cls + '"></span><span>' + escapeHtml(text) + '</span>'
+}
+
+async function api(path, options = {}) {
   if (!state.auth) throw new Error('请先登录')
+  const headers = new Headers(options.headers || {})
+  headers.set('Authorization', state.auth)
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const res = await fetch(path, {
+    ...options,
     credentials: 'omit',
     cache: 'no-store',
-    headers: { Authorization: state.auth },
+    headers,
   })
   if (!res.ok) {
     let message = res.status + ' ' + res.statusText
@@ -437,7 +521,31 @@ async function api(path) {
     }
     throw new Error(message)
   }
-  return res.json()
+  const type = res.headers.get('content-type') || ''
+  if (type.includes('application/json')) return res.json()
+  return res.text()
+}
+
+async function download(path, fallbackName) {
+  if (!state.auth) throw new Error('请先登录')
+  const res = await fetch(path, {
+    credentials: 'omit',
+    cache: 'no-store',
+    headers: { Authorization: state.auth },
+  })
+  if (!res.ok) throw new Error(res.status + ' ' + res.statusText)
+  const blob = await res.blob()
+  const header = res.headers.get('content-disposition') || ''
+  const match = /filename="([^"]+)"/.exec(header)
+  const name = match ? match[1] : fallbackName
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }
 
 function renderMetric(el, value, tone) {
@@ -452,6 +560,88 @@ function renderKv(container, rows) {
   )).join('')
 }
 
+function emptyChart(text) {
+  return '<div class="empty">' + escapeHtml(text) + '</div>'
+}
+
+function barChart(items, valueKey, colorClass) {
+  if (!items || !items.length) return emptyChart('暂无数据')
+  const max = Math.max(1, ...items.map((item) => Number(item[valueKey] || 0)))
+  const width = 420
+  const height = 180
+  const left = 28
+  const bottom = 34
+  const top = 16
+  const plotW = width - left - 12
+  const plotH = height - top - bottom
+  const gap = 10
+  const barW = Math.max(12, (plotW - gap * (items.length - 1)) / items.length)
+  let svg = '<svg class="chartSvg" viewBox="0 0 ' + width + ' ' + height + '" role="img">'
+  svg += '<line class="chartLine" x1="' + left + '" y1="' + (top + plotH) + '" x2="' + (left + plotW) + '" y2="' + (top + plotH) + '"></line>'
+  items.forEach((item, index) => {
+    const value = Number(item[valueKey] || 0)
+    const h = Math.round((value / max) * plotH)
+    const x = left + index * (barW + gap)
+    const y = top + plotH - h
+    svg += '<rect class="' + colorClass + '" x="' + x.toFixed(1) + '" y="' + y + '" width="' + barW.toFixed(1) + '" height="' + h + '" rx="4"></rect>'
+    svg += '<text class="chartLabel" x="' + (x + barW / 2).toFixed(1) + '" y="' + (y - 4) + '" text-anchor="middle">' + escapeHtml(value) + '</text>'
+    svg += '<text class="chartAxis" x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 10) + '" text-anchor="middle">' + escapeHtml(fmtDay(item.date)) + '</text>'
+  })
+  svg += '</svg>'
+  return svg
+}
+
+function aiChart(items) {
+  if (!items || !items.length) return emptyChart('暂无数据')
+  const max = Math.max(1, ...items.map((item) => Number(item.aiSuccess || 0) + Number(item.aiFailure || 0)))
+  const width = 420
+  const height = 180
+  const left = 28
+  const bottom = 34
+  const top = 16
+  const plotW = width - left - 12
+  const plotH = height - top - bottom
+  const gap = 10
+  const barW = Math.max(12, (plotW - gap * (items.length - 1)) / items.length)
+  let svg = '<svg class="chartSvg" viewBox="0 0 ' + width + ' ' + height + '" role="img">'
+  svg += '<line class="chartLine" x1="' + left + '" y1="' + (top + plotH) + '" x2="' + (left + plotW) + '" y2="' + (top + plotH) + '"></line>'
+  items.forEach((item, index) => {
+    const ok = Number(item.aiSuccess || 0)
+    const bad = Number(item.aiFailure || 0)
+    const okH = Math.round((ok / max) * plotH)
+    const badH = Math.round((bad / max) * plotH)
+    const x = left + index * (barW + gap)
+    const yOk = top + plotH - okH
+    const yBad = yOk - badH
+    svg += '<rect class="barGood" x="' + x.toFixed(1) + '" y="' + yOk + '" width="' + barW.toFixed(1) + '" height="' + okH + '" rx="4"></rect>'
+    svg += '<rect class="barBad" x="' + x.toFixed(1) + '" y="' + yBad + '" width="' + barW.toFixed(1) + '" height="' + badH + '" rx="4"></rect>'
+    svg += '<text class="chartLabel" x="' + (x + barW / 2).toFixed(1) + '" y="' + (Math.min(yBad, yOk) - 4) + '" text-anchor="middle">' + escapeHtml(ok + bad) + '</text>'
+    svg += '<text class="chartAxis" x="' + (x + barW / 2).toFixed(1) + '" y="' + (height - 10) + '" text-anchor="middle">' + escapeHtml(fmtDay(item.date)) + '</text>'
+  })
+  svg += '</svg>'
+  return svg
+}
+
+function horizontalBars(items) {
+  if (!items || !items.length) return emptyChart('暂无数据')
+  const max = Math.max(1, ...items.map((item) => Number(item.bytes || 0)))
+  const width = 420
+  const height = Math.max(150, items.length * 30 + 24)
+  const labelW = 116
+  const barW = width - labelW - 24
+  let svg = '<svg class="chartSvg" viewBox="0 0 ' + width + ' ' + height + '" role="img">'
+  items.forEach((item, index) => {
+    const y = 18 + index * 30
+    const valueW = Math.max(4, Math.round((Number(item.bytes || 0) / max) * barW))
+    svg += '<text class="chartAxis" x="8" y="' + (y + 9) + '">' + escapeHtml(item.username) + '</text>'
+    svg += '<rect class="barMuted" x="' + labelW + '" y="' + y + '" width="' + barW + '" height="12" rx="6"></rect>'
+    svg += '<rect class="barCyan" x="' + labelW + '" y="' + y + '" width="' + valueW + '" height="12" rx="6"></rect>'
+    svg += '<text class="chartLabel" x="' + (labelW + valueW + 6) + '" y="' + (y + 10) + '">' + escapeHtml(fmtBytes(item.bytes)) + '</text>'
+  })
+  svg += '</svg>'
+  return svg
+}
+
 function renderOverview(data) {
   const registrationLabel = data.registration.inviteRequired
     ? '邀请码注册'
@@ -459,8 +649,7 @@ function renderOverview(data) {
       ? '开放注册'
       : '注册关闭'
   const registrationTone = data.registration.inviteRequired || data.registration.openRegistration ? '' : 'warn'
-  const serviceTone = data.service.ok ? 'ok' : 'bad'
-  renderMetric(els.serviceState, data.service.ok ? '正常' : '异常', serviceTone)
+  renderMetric(els.serviceState, data.service.ok ? '正常' : '异常', data.service.ok ? 'ok' : 'bad')
   els.serviceMeta.textContent = '运行 ' + Math.round(data.service.uptimeSeconds || 0) + ' 秒 · ' + fmtDate(data.service.time)
 
   renderMetric(els.userCount, String(data.users.total), null)
@@ -471,6 +660,16 @@ function renderOverview(data) {
 
   renderMetric(els.aiState, data.ai.configured ? '已配置' : '未配置', data.ai.configured ? 'ok' : 'warn')
   els.aiMeta.textContent = data.ai.issue || (data.ai.model + ' · ' + data.ai.reasoningEffort)
+
+  renderMetric(els.telemetryToday, fmtBytes(data.telemetry.todayBytes), null)
+  els.telemetryMeta.textContent = data.telemetry.recentEvents + ' recent · limit ' + fmtBytes(data.telemetry.maxDailyBytes)
+
+  els.telemetryTrendBadge.textContent = (data.telemetry.trend || []).reduce((sum, day) => sum + Number(day.events || 0), 0) + ' events'
+  els.telemetryTrendChart.innerHTML = barChart(data.telemetry.trend || [], 'events', 'barPrimary')
+  els.aiTrendBadge.textContent = (data.aiSummary?.ok || 0) + ' ok / ' + (data.aiSummary?.failed || 0) + ' failed'
+  els.aiTrendChart.innerHTML = aiChart(data.telemetry.trend || [])
+  els.storageTrendBadge.textContent = (data.storage.topUsers || []).length + ' users'
+  els.storageTopChart.innerHTML = horizontalBars(data.storage.topUsers || [])
 
   els.configBadge.textContent = registrationLabel
   els.configBadge.classList.toggle('warn', registrationTone === 'warn')
@@ -484,14 +683,8 @@ function renderOverview(data) {
     ['AI 上游超时', data.ai.timeoutMs + ' ms'],
     ['AI 响应上限', fmtBytes(data.ai.maxResponseBytes)],
     ['AI Key', data.ai.hasApiKey ? data.ai.apiKeyMasked : '未配置'],
+    ['AI 平均耗时', data.aiSummary?.avgDurationMs ? data.aiSummary.avgDurationMs + ' ms' : '-'],
     ['活跃限流桶', String(data.limits.activeBuckets)],
-  ])
-
-  els.telemetryBadge.textContent = fmtBytes(data.telemetry.todayBytes) + ' today'
-  renderKv(els.telemetrySummary, [
-    ['今日日志', fmtBytes(data.telemetry.todayBytes)],
-    ['单日上限', fmtBytes(data.telemetry.maxDailyBytes)],
-    ['最近事件', String(data.telemetry.recentEvents)],
     ['数据目录', data.storage.dataDir],
   ])
 }
@@ -504,13 +697,19 @@ function renderUsers(users) {
     const itemCount = user.backup?.itemCount ?? '-'
     return '<tr>' +
       '<td><span class="userName">' + escapeHtml(user.username) + '</span><span class="subtle">' + escapeHtml(user.id) + '</span></td>' +
-      '<td>' + escapeHtml(fmtDate(user.createdAt)) + '<span class="subtle">updated ' + escapeHtml(fmtDate(user.updatedAt)) + '</span></td>' +
-      '<td>' + escapeHtml(backupAt) + '<span class="subtle">' + escapeHtml(user.backup?.device || '') + '</span></td>' +
-      '<td>' + escapeHtml(itemCount) + '<span class="subtle">' + escapeHtml(fmtBytes(user.backupBytes)) + '</span></td>' +
-      '<td>' + escapeHtml(fmtBytes(user.telemetryTodayBytes)) + '</td>' +
+      '<td>' + escapeHtml(backupAt) + '<span class="subtle">' + escapeHtml(itemCount) + ' items · ' + escapeHtml(fmtBytes(user.backupBytes)) + '</span></td>' +
+      '<td>' + escapeHtml(fmtBytes(user.telemetryBytes || 0)) + '<span class="subtle">' + escapeHtml(user.telemetryFiles || 0) + ' files · ' + escapeHtml(fmtDate(user.latestTelemetryAt)) + '</span></td>' +
       '<td>' + escapeHtml(fmtBytes(user.directoryBytes)) + '<span class="subtle">' + escapeHtml(user.directoryFiles + ' files') + '</span></td>' +
+      '<td><div class="rowActions">' +
+        '<button class="tiny secondary" data-action="files" data-user="' + escapeHtml(user.username) + '">文件</button>' +
+        '<button class="tiny secondary" data-action="export" data-user="' + escapeHtml(user.username) + '">导出</button>' +
+        '<button class="tiny secondary" data-action="reset" data-user="' + escapeHtml(user.username) + '">重置密码</button>' +
+        '<button class="tiny secondary" data-action="deleteBackup" data-user="' + escapeHtml(user.username) + '">删备份</button>' +
+        '<button class="tiny secondary" data-action="clearTelemetry" data-user="' + escapeHtml(user.username) + '">清遥测</button>' +
+        '<button class="tiny danger" data-action="deleteUser" data-user="' + escapeHtml(user.username) + '">删除用户</button>' +
+      '</div></td>' +
       '</tr>'
-  }).join('') : '<tr><td colspan="6"><div class="empty">暂无账号</div></td></tr>'
+  }).join('') : '<tr><td colspan="5"><div class="empty">暂无账号</div></td></tr>'
 
   const previous = state.selectedUser
   els.telemetryUser.innerHTML = '<option value="">全部账号</option>' + users.map((user) => (
@@ -522,20 +721,38 @@ function renderUsers(users) {
 function eventTitle(entry) {
   const event = entry.event || {}
   if (event.name) return event.name
+  if (entry.action) return entry.action
   if (entry.name) return entry.name
   return 'event'
 }
 
-function renderTelemetry(events) {
-  els.telemetryList.innerHTML = events.length ? events.map((entry) => {
+function renderEventList(container, events, emptyText) {
+  container.innerHTML = events.length ? events.map((entry) => {
     const time = entry.receivedAt || entry.at
     const payload = entry.event || entry
     return '<article class="event">' +
-      '<div class="eventTop"><div><div class="eventName">' + escapeHtml(eventTitle(entry)) + '</div><span class="subtle">' + escapeHtml(entry.username || entry.userId || '-') + '</span></div>' +
+      '<div class="eventTop"><div><div class="eventName">' + escapeHtml(eventTitle(entry)) + '</div><span class="subtle">' + escapeHtml(entry.username || entry.admin || entry.userId || entry.target || '-') + '</span></div>' +
       '<div class="eventTime">' + escapeHtml(fmtDate(time)) + '</div></div>' +
       '<pre>' + escapeHtml(JSON.stringify(payload, null, 2)) + '</pre>' +
       '</article>'
-  }).join('') : '<div class="empty">暂无遥测事件</div>'
+  }).join('') : '<div class="empty">' + escapeHtml(emptyText) + '</div>'
+}
+
+function renderFiles(user, files) {
+  state.selectedUser = user
+  els.filesTitle.textContent = user ? '用户文件 · ' + user : '用户文件'
+  els.filesBadge.textContent = files.length + ' files'
+  els.filesTable.innerHTML = files.length ? files.map((file) => (
+    '<tr>' +
+      '<td><span class="userName">' + escapeHtml(file.name) + '</span><span class="subtle">' + (file.safe ? 'safe' : 'locked') + '</span></td>' +
+      '<td>' + escapeHtml(fmtBytes(file.size)) + '</td>' +
+      '<td>' + escapeHtml(fmtDate(file.mtime)) + '</td>' +
+      '<td><div class="rowActions">' +
+        '<button class="tiny secondary" data-file-action="download" data-file="' + escapeHtml(file.name) + '"' + (file.safe ? '' : ' disabled') + '>下载</button>' +
+        '<button class="tiny danger" data-file-action="delete" data-file="' + escapeHtml(file.name) + '"' + (file.safe ? '' : ' disabled') + '>删除</button>' +
+      '</div></td>' +
+    '</tr>'
+  )).join('') : '<tr><td colspan="4"><div class="empty">暂无文件</div></td></tr>'
 }
 
 async function loadTelemetry() {
@@ -544,7 +761,18 @@ async function loadTelemetry() {
   const params = new URLSearchParams({ limit })
   if (state.selectedUser) params.set('username', state.selectedUser)
   const data = await api('/api/admin/telemetry/recent?' + params.toString())
-  renderTelemetry(data.events || [])
+  renderEventList(els.telemetryList, data.events || [], '暂无遥测事件')
+}
+
+async function loadAudit() {
+  const limit = els.auditLimit.value || '50'
+  const data = await api('/api/admin/audit/recent?limit=' + encodeURIComponent(limit))
+  renderEventList(els.auditList, data.events || [], '暂无审计事件')
+}
+
+async function loadFiles(username) {
+  const data = await api('/api/admin/users/' + encodeURIComponent(username) + '/files')
+  renderFiles(username, data.files || [])
 }
 
 async function loadAll() {
@@ -559,13 +787,61 @@ async function loadAll() {
     const users = await api('/api/admin/users')
     renderOverview(overview)
     renderUsers(users.users || [])
+    if (state.selectedUser && (users.users || []).some((user) => user.username === state.selectedUser)) {
+      await loadFiles(state.selectedUser)
+    } else {
+      renderFiles('', [])
+    }
     await loadTelemetry()
+    await loadAudit()
     els.lastUpdated.textContent = '更新于 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false })
     setStatus(overview.service.ok ? 'ok' : 'bad', overview.service.ok ? '后端运行正常' : '后端健康检查异常')
   } catch (error) {
     setStatus('bad', error instanceof Error ? error.message : '刷新失败')
   } finally {
     els.refreshBtn.disabled = !state.auth
+  }
+}
+
+async function userAction(action, username) {
+  try {
+    if (action === 'files') return loadFiles(username)
+    if (action === 'export') return download('/api/admin/users/' + encodeURIComponent(username) + '/export', 'ratio-user-' + username + '-files.json')
+    if (action === 'reset') {
+      const password = window.prompt('输入新密码，至少 8 位')
+      if (!password) return
+      await api('/api/admin/users/' + encodeURIComponent(username) + '/password', { method: 'POST', body: JSON.stringify({ password }) })
+    } else if (action === 'deleteBackup') {
+      if (!window.confirm('确认删除用户 ' + username + ' 的云端备份？')) return
+      await api('/api/admin/users/' + encodeURIComponent(username) + '/backup', { method: 'DELETE' })
+    } else if (action === 'clearTelemetry') {
+      if (!window.confirm('确认清理用户 ' + username + ' 的遥测文件？')) return
+      await api('/api/admin/users/' + encodeURIComponent(username) + '/telemetry', { method: 'DELETE' })
+    } else if (action === 'deleteUser') {
+      if (!window.confirm('确认删除用户 ' + username + ' 及其全部云端文件？')) return
+      await api('/api/admin/users/' + encodeURIComponent(username), { method: 'DELETE' })
+      if (state.selectedUser === username) state.selectedUser = ''
+    }
+    await loadAll()
+  } catch (error) {
+    setStatus('bad', error instanceof Error ? error.message : '操作失败')
+  }
+}
+
+async function fileAction(action, filename) {
+  if (!state.selectedUser || !filename) return
+  try {
+    const base = '/api/admin/users/' + encodeURIComponent(state.selectedUser) + '/files/' + encodeURIComponent(filename)
+    if (action === 'download') {
+      await download(base + '/download', filename)
+    } else if (action === 'delete') {
+      if (!window.confirm('确认删除文件 ' + filename + '？')) return
+      await api(base, { method: 'DELETE' })
+      await loadFiles(state.selectedUser)
+      await loadAudit()
+    }
+  } catch (error) {
+    setStatus('bad', error instanceof Error ? error.message : '文件操作失败')
   }
 }
 
@@ -584,6 +860,21 @@ els.loginForm.addEventListener('submit', (event) => {
   void loadAll()
 })
 
+els.createUserForm.addEventListener('submit', async (event) => {
+  event.preventDefault()
+  const username = els.createUsername.value.trim()
+  const password = els.createPassword.value
+  if (!username || !password) return
+  try {
+    await api('/api/admin/users', { method: 'POST', body: JSON.stringify({ username, password }) })
+    els.createUsername.value = ''
+    els.createPassword.value = ''
+    await loadAll()
+  } catch (error) {
+    setStatus('bad', error instanceof Error ? error.message : '创建失败')
+  }
+})
+
 els.logoutBtn.addEventListener('click', () => {
   els.adminPassword.value = ''
   clearAuth('')
@@ -592,6 +883,17 @@ els.logoutBtn.addEventListener('click', () => {
 els.refreshBtn.addEventListener('click', () => void loadAll())
 els.telemetryUser.addEventListener('change', () => void loadTelemetry())
 els.telemetryLimit.addEventListener('change', () => void loadTelemetry())
+els.auditLimit.addEventListener('change', () => void loadAudit())
+els.usersTable.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-action]')
+  if (!button) return
+  void userAction(button.dataset.action, button.dataset.user)
+})
+els.filesTable.addEventListener('click', (event) => {
+  const button = event.target.closest('button[data-file-action]')
+  if (!button) return
+  void fileAction(button.dataset.fileAction, button.dataset.file)
+})
 
 setLoggedIn(Boolean(state.auth))
 void loadAll()`

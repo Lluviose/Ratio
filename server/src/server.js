@@ -1,5 +1,5 @@
 import http from 'node:http'
-import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink, open, readdir } from 'node:fs/promises'
+import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink, open, readdir, rm } from 'node:fs/promises'
 import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -127,6 +127,28 @@ function textResponse(res, status, text, contentType = 'text/plain; charset=utf-
     ...headers,
   })
   res.end(text)
+}
+
+function downloadJsonResponse(res, filename, body) {
+  const safeName = String(filename || 'download.json').replace(/["\r\n]/g, '_')
+  const text = JSON.stringify(body, null, 2)
+  textResponse(res, 200, `${text}\n`, 'application/json; charset=utf-8', {
+    'Content-Disposition': `attachment; filename="${safeName}"`,
+    ...corsHeaders(),
+  })
+}
+
+function downloadBufferResponse(res, filename, buffer, contentType = 'application/octet-stream') {
+  const safeName = String(filename || 'download.bin').replace(/["\r\n]/g, '_')
+  res.writeHead(200, {
+    'Content-Type': contentType,
+    'Content-Length': buffer.length,
+    'Content-Disposition': `attachment; filename="${safeName}"`,
+    'Cache-Control': 'no-store',
+    ...securityHeaders(),
+    ...corsHeaders(),
+  })
+  res.end(buffer)
 }
 
 function emptyResponse(res, status = 204) {
@@ -1310,6 +1332,233 @@ function summarizeUrl(value) {
   }
 }
 
+function recentDateKeys(days = 7) {
+  const keys = []
+  const nowMs = Date.now()
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    keys.push(new Date(nowMs - offset * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+  }
+  return keys
+}
+
+function telemetryFileForDate(user, dateKey) {
+  return userFile(user, `telemetry-${dateKey}.ndjson`)
+}
+
+function adminAuditFileForDate(dateKey) {
+  return path.join(DATA_DIR, `admin-audit-${dateKey}.ndjson`)
+}
+
+function adminActor(req) {
+  const auth = readBasicAuth(req)
+  return typeof auth?.username === 'string' && auth.username.trim() ? auth.username.trim().slice(0, 64) : 'admin'
+}
+
+function isSafeUserFileName(name) {
+  return (
+    typeof name === 'string' &&
+    name.length > 0 &&
+    name.length <= 180 &&
+    !name.startsWith('.') &&
+    !name.includes('..') &&
+    !name.includes('/') &&
+    !name.includes('\\') &&
+    /^[\w.-]+$/.test(name)
+  )
+}
+
+function safeUserFilePath(user, filename) {
+  if (!isSafeUserFileName(filename)) throw httpError('Invalid file name', 400, 'admin_file_name_invalid')
+  const userDir = path.resolve(DATA_DIR, 'users', user.id)
+  const file = path.resolve(userDir, filename)
+  if (file !== path.join(userDir, path.basename(file))) {
+    throw httpError('Invalid file path', 400, 'admin_file_path_invalid')
+  }
+  return file
+}
+
+function decodePathSegment(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    throw httpError('Invalid URL path segment', 400, 'path_invalid')
+  }
+}
+
+function validateAdminUsername(username) {
+  if (!/^[\w.@-]{3,64}$/.test(username)) {
+    throw httpError('Username must be 3-64 letters, numbers, dot, underscore or dash', 400, 'username_invalid')
+  }
+}
+
+function validateAdminPassword(password) {
+  if (typeof password !== 'string' || password.length < 8) {
+    throw httpError('Password must be at least 8 characters', 400, 'password_too_short')
+  }
+  if (password.length > MAX_PASSWORD_CHARS) {
+    throw httpError(`Password must be at most ${MAX_PASSWORD_CHARS} characters`, 400, 'password_too_long')
+  }
+}
+
+async function findUserByUsername(username) {
+  validateAdminUsername(username)
+  const data = await readUsers()
+  const user = data.users[username]
+  if (!user || typeof user !== 'object') throw httpError('User not found', 404, 'user_not_found')
+  return user
+}
+
+function clearUserAuthState(username) {
+  failedAuthAccounts.delete(authFailureKey(username))
+  for (const [cacheKey, cached] of authCache.entries()) {
+    if (cached?.user?.username === username) authCache.delete(cacheKey)
+  }
+}
+
+function contentTypeForFile(name) {
+  if (name.endsWith('.json')) return 'application/json; charset=utf-8'
+  if (name.endsWith('.ndjson')) return 'application/x-ndjson; charset=utf-8'
+  if (name.endsWith('.txt') || name.endsWith('.log')) return 'text/plain; charset=utf-8'
+  return 'application/octet-stream'
+}
+
+function auditDetails(details = {}) {
+  const safe = {}
+  for (const [key, value] of Object.entries(details || {})) {
+    if (/password|token|secret|apiKey|authorization|backup|body|content/i.test(key)) continue
+    if (typeof value === 'string') safe[key] = value.slice(0, 300)
+    else if (typeof value === 'number' || typeof value === 'boolean' || value == null) safe[key] = value
+    else safe[key] = JSON.stringify(value).slice(0, 300)
+  }
+  return safe
+}
+
+async function writeAdminAudit(req, actor, action, target, result, details = {}) {
+  const dateKey = new Date().toISOString().slice(0, 10)
+  const file = adminAuditFileForDate(dateKey)
+  const event = {
+    at: now(),
+    admin: actor,
+    action,
+    target: target || '',
+    result,
+    code: typeof details.code === 'string' ? details.code : '',
+    details: auditDetails(details),
+    ip: clientAddress(req),
+    userAgent: String(req.headers['user-agent'] || '').slice(0, 160),
+  }
+  await mkdir(path.dirname(file), { recursive: true })
+  await runQueuedMutation(file, () => appendFile(file, `${JSON.stringify(event)}\n`, 'utf8'))
+}
+
+async function auditAdminAction(req, action, target, task) {
+  const actor = adminActor(req)
+  try {
+    const result = await task(actor)
+    await writeAdminAudit(req, actor, action, target, 'ok', result?.audit || {})
+    return result
+  } catch (error) {
+    await writeAdminAudit(req, actor, action, target, 'error', {
+      code: error?.code || 'error',
+      message: error?.message || 'Unknown error',
+    }).catch((auditError) => {
+      console.warn('[ratio-server] admin audit write failed', auditError?.message || auditError)
+    })
+    throw error
+  }
+}
+
+async function readNdjsonFile(file) {
+  try {
+    const text = await readFile(file, 'utf8')
+    if (!text.trim()) return []
+    return text.trim().split('\n').flatMap((line) => {
+      try {
+        return [JSON.parse(line)]
+      } catch {
+        return []
+      }
+    })
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return []
+    throw error
+  }
+}
+
+function telemetryInfo(entry) {
+  const event = entry && typeof entry.event === 'object' && entry.event !== null ? entry.event : entry
+  const payload = event && typeof event.payload === 'object' && event.payload !== null ? event.payload : {}
+  const name = typeof event?.name === 'string' ? event.name : typeof entry?.name === 'string' ? entry.name : 'event'
+  const time = entry?.receivedAt || event?.at || entry?.at || ''
+  return { name, payload, time }
+}
+
+function isTelemetryError(info) {
+  return (
+    /error|failed|failure|rejection|timeout|conflict/i.test(info.name) ||
+    info.payload?.ok === false ||
+    typeof info.payload?.errorCode === 'string'
+  )
+}
+
+async function userTelemetryFileSummary(user) {
+  let entries
+  try {
+    entries = await readdir(path.join(DATA_DIR, 'users', user.id), { withFileTypes: true })
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return { files: 0, bytes: 0, latestAt: '' }
+    throw error
+  }
+
+  let files = 0
+  let bytes = 0
+  let latestAt = ''
+  for (const entry of entries) {
+    if (!entry.isFile() || !/^telemetry-\d{4}-\d{2}-\d{2}\.ndjson$/.test(entry.name)) continue
+    const file = userFile(user, entry.name)
+    try {
+      const info = await stat(file)
+      files += 1
+      bytes += info.size
+      const stamp = info.mtime.toISOString()
+      if (!latestAt || stamp > latestAt) latestAt = stamp
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw error
+    }
+  }
+  return { files, bytes, latestAt }
+}
+
+async function listUserFiles(user) {
+  let entries
+  const userDir = path.join(DATA_DIR, 'users', user.id)
+  try {
+    entries = await readdir(userDir, { withFileTypes: true })
+  } catch (error) {
+    if (error && error.code === 'ENOENT') return []
+    throw error
+  }
+
+  const files = []
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    const file = path.join(userDir, entry.name)
+    try {
+      const info = await stat(file)
+      files.push({
+        name: entry.name,
+        size: info.size,
+        mtime: info.mtime.toISOString(),
+        safe: isSafeUserFileName(entry.name),
+      })
+    } catch (error) {
+      if (!error || error.code !== 'ENOENT') throw error
+    }
+  }
+  files.sort((left, right) => left.name.localeCompare(right.name))
+  return files
+}
+
 async function getAdminUsers() {
   const data = await readUsers()
   const users = Object.values(data.users)
@@ -1322,20 +1571,26 @@ async function getAdminUsers() {
     const backup = backupMeta(backupPayload)
     const userDir = path.join(DATA_DIR, 'users', user.id)
     const usage = await directoryUsage(userDir)
+    const telemetry = await userTelemetryFileSummary(user)
+    const files = await listUserFiles(user)
 
     return {
       ...publicUser(user),
       backup,
       backupBytes: await fileSize(backupFile),
       telemetryTodayBytes: await fileSize(telemetryFileForToday(user)),
+      telemetryFiles: telemetry.files,
+      telemetryBytes: telemetry.bytes,
+      latestTelemetryAt: telemetry.latestAt,
       directoryBytes: usage.totalBytes,
       directoryFiles: usage.files,
+      files,
     }
   }))
 }
 
-async function readTelemetryEventsForUser(user, limit) {
-  const text = await readFileTail(telemetryFileForToday(user), Math.min(TELEMETRY_MAX_DAILY_BYTES, 512 * 1024))
+async function readTelemetryEventsForUser(user, limit, dateKey = new Date().toISOString().slice(0, 10)) {
+  const text = await readFileTail(telemetryFileForDate(user, dateKey), Math.min(TELEMETRY_MAX_DAILY_BYTES, 512 * 1024))
   if (!text.trim()) return []
 
   return text.trim().split('\n').slice(-limit).flatMap((line) => {
@@ -1346,6 +1601,65 @@ async function readTelemetryEventsForUser(user, limit) {
       return []
     }
   })
+}
+
+async function readRecentTelemetryEventsForUser(user, limit) {
+  const perDateLimit = Math.max(10, Math.ceil(limit / 3))
+  const events = []
+  for (const date of recentDateKeys(7)) {
+    events.push(...await readTelemetryEventsForUser(user, perDateLimit, date))
+  }
+  events.sort((left, right) => {
+    const a = Date.parse(left.receivedAt || left.event?.at || left.at || '')
+    const b = Date.parse(right.receivedAt || right.event?.at || right.at || '')
+    return (Number.isNaN(b) ? 0 : b) - (Number.isNaN(a) ? 0 : a)
+  })
+  return events.slice(0, limit)
+}
+
+async function buildTelemetryTrend(users, dateKeys) {
+  const byDate = new Map(dateKeys.map((date) => [date, {
+    date,
+    events: 0,
+    errors: 0,
+    aiSuccess: 0,
+    aiFailure: 0,
+    bytes: 0,
+  }]))
+  const aiSummary = { total: 0, ok: 0, failed: 0, avgDurationMs: null }
+  let durationTotal = 0
+  let durationCount = 0
+
+  for (const user of users) {
+    for (const date of dateKeys) {
+      const file = telemetryFileForDate(user, date)
+      const day = byDate.get(date)
+      day.bytes += await fileSize(file)
+      const entries = await readNdjsonFile(file)
+      for (const entry of entries) {
+        const info = telemetryInfo(entry)
+        day.events += 1
+        if (isTelemetryError(info)) day.errors += 1
+        if (info.name === 'server_ai_chat') {
+          aiSummary.total += 1
+          if (info.payload?.ok === true) {
+            aiSummary.ok += 1
+            day.aiSuccess += 1
+          } else {
+            aiSummary.failed += 1
+            day.aiFailure += 1
+          }
+          if (typeof info.payload?.durationMs === 'number' && Number.isFinite(info.payload.durationMs)) {
+            durationTotal += info.payload.durationMs
+            durationCount += 1
+          }
+        }
+      }
+    }
+  }
+
+  if (durationCount > 0) aiSummary.avgDurationMs = Math.round(durationTotal / durationCount)
+  return { trend: [...byDate.values()], aiSummary }
 }
 
 async function pruneTelemetryForUser(user) {
@@ -1388,10 +1702,25 @@ async function getAdminTelemetryEvents(username, limit) {
   }
 
   const perUserLimit = username ? limit : Math.max(10, Math.ceil(limit / Math.max(users.length, 1)) + 10)
-  const events = (await Promise.all(users.map((user) => readTelemetryEventsForUser(user, perUserLimit)))).flat()
+  const events = (await Promise.all(users.map((user) => readRecentTelemetryEventsForUser(user, perUserLimit)))).flat()
   events.sort((left, right) => {
     const a = Date.parse(left.receivedAt || left.at || '')
     const b = Date.parse(right.receivedAt || right.at || '')
+    return (Number.isNaN(b) ? 0 : b) - (Number.isNaN(a) ? 0 : a)
+  })
+  return events.slice(0, limit)
+}
+
+async function getAdminAuditEvents(limit) {
+  const events = []
+  for (const date of recentDateKeys(7).reverse()) {
+    const entries = await readNdjsonFile(adminAuditFileForDate(date))
+    events.push(...entries)
+    if (events.length >= limit * 2) break
+  }
+  events.sort((left, right) => {
+    const a = Date.parse(left.at || '')
+    const b = Date.parse(right.at || '')
     return (Number.isNaN(b) ? 0 : b) - (Number.isNaN(a) ? 0 : a)
   })
   return events.slice(0, limit)
@@ -1411,6 +1740,12 @@ async function handleAdminOverview(res) {
   const storage = await directoryUsage(DATA_DIR)
   const telemetryTodayBytes = users.reduce((sum, user) => sum + user.telemetryTodayBytes, 0)
   const recentEvents = await getAdminTelemetryEvents('', 100)
+  const telemetryStats = await buildTelemetryTrend(users, recentDateKeys(7))
+  const topStorageUsers = users
+    .slice()
+    .sort((left, right) => right.directoryBytes - left.directoryBytes)
+    .slice(0, 5)
+    .map((user) => ({ username: user.username, bytes: user.directoryBytes, files: user.directoryFiles }))
 
   jsonResponse(res, 200, {
     service: {
@@ -1445,7 +1780,9 @@ async function handleAdminOverview(res) {
       todayBytes: telemetryTodayBytes,
       maxDailyBytes: TELEMETRY_MAX_DAILY_BYTES,
       recentEvents: recentEvents.length,
+      trend: telemetryStats.trend,
     },
+    aiSummary: telemetryStats.aiSummary,
     limits: {
       authPerMinute: AUTH_RATE_LIMIT_PER_MINUTE,
       registerPerMinute: REGISTER_RATE_LIMIT_PER_MINUTE,
@@ -1463,6 +1800,7 @@ async function handleAdminOverview(res) {
       totalBytes: storage.totalBytes,
       files: storage.files,
       directories: storage.directories,
+      topUsers: topStorageUsers,
     },
   })
 }
@@ -1481,6 +1819,165 @@ async function handleAdminTelemetryRecent(req, res) {
     if (error && error.status === 404) return fail(res, 404, error.message, error.code || 'not_found')
     throw error
   }
+}
+
+async function handleAdminAuditRecent(req, res) {
+  const url = new URL(req.url, 'http://localhost')
+  const limit = parseLimitParam(url.searchParams.get('limit'), 50, 300)
+  jsonResponse(res, 200, { events: await getAdminAuditEvents(limit) })
+}
+
+async function handleAdminUserCreate(req, res) {
+  const body = await parseBody(req, 64 * 1024)
+  const username = typeof body.username === 'string' ? body.username.trim() : ''
+  const password = typeof body.password === 'string' ? body.password : ''
+  const result = await auditAdminAction(req, 'user.create', username, async () => {
+    validateAdminUsername(username)
+    validateAdminPassword(password)
+    const mutation = await mutateUsers(async (data) => {
+      if (data.users[username]) throw httpError('User already exists', 409, 'user_exists')
+      const passwordInfo = await hashPassword(password)
+      const user = {
+        id: userId(username),
+        username,
+        passwordHash: passwordInfo.hash,
+        passwordSalt: passwordInfo.salt,
+        passwordIterations: passwordInfo.iterations,
+        createdAt: now(),
+        updatedAt: now(),
+      }
+      data.users[username] = user
+      return user
+    })
+    await mkdir(path.join(DATA_DIR, 'users', mutation.id), { recursive: true })
+    return { user: publicUser(mutation), audit: { username } }
+  })
+  jsonResponse(res, 201, { user: result.user })
+}
+
+async function handleAdminPasswordReset(req, res, username) {
+  const body = await parseBody(req, 64 * 1024)
+  const password = typeof body.password === 'string' ? body.password : ''
+  const result = await auditAdminAction(req, 'user.password_reset', username, async () => {
+    validateAdminUsername(username)
+    validateAdminPassword(password)
+    const user = await mutateUsers(async (data) => {
+      const current = data.users[username]
+      if (!current) throw httpError('User not found', 404, 'user_not_found')
+      const passwordInfo = await hashPassword(password)
+      current.passwordHash = passwordInfo.hash
+      current.passwordSalt = passwordInfo.salt
+      current.passwordIterations = passwordInfo.iterations
+      current.updatedAt = now()
+      return current
+    })
+    clearUserAuthState(username)
+    return { user: publicUser(user), audit: { username } }
+  })
+  jsonResponse(res, 200, { user: result.user })
+}
+
+async function handleAdminUserDelete(req, res, username) {
+  const result = await auditAdminAction(req, 'user.delete', username, async () => {
+    validateAdminUsername(username)
+    const user = await mutateUsers(async (data) => {
+      const current = data.users[username]
+      if (!current) throw httpError('User not found', 404, 'user_not_found')
+      delete data.users[username]
+      return current
+    })
+    clearUserAuthState(username)
+    await rm(path.join(DATA_DIR, 'users', user.id), { recursive: true, force: true })
+    return { audit: { username, userId: user.id } }
+  })
+  jsonResponse(res, 200, { ok: true, audit: result.audit })
+}
+
+async function handleAdminBackupDelete(req, res, username) {
+  const result = await auditAdminAction(req, 'backup.delete', username, async () => {
+    const user = await findUserByUsername(username)
+    const file = userFile(user, 'backup.json')
+    const bytes = await fileSize(file)
+    await unlink(file).catch((error) => {
+      if (!error || error.code !== 'ENOENT') throw error
+    })
+    return { audit: { username, bytes } }
+  })
+  jsonResponse(res, 200, { ok: true, ...result.audit })
+}
+
+async function handleAdminTelemetryClear(req, res, username) {
+  const result = await auditAdminAction(req, 'telemetry.clear', username, async () => {
+    const user = await findUserByUsername(username)
+    const files = await listUserFiles(user)
+    let deleted = 0
+    let bytes = 0
+    for (const file of files) {
+      if (!/^telemetry-\d{4}-\d{2}-\d{2}\.ndjson$/.test(file.name)) continue
+      bytes += file.size
+      await unlink(safeUserFilePath(user, file.name)).catch((error) => {
+        if (!error || error.code !== 'ENOENT') throw error
+      })
+      deleted += 1
+    }
+    telemetryPruneAt.delete(user.id)
+    return { audit: { username, deleted, bytes } }
+  })
+  jsonResponse(res, 200, { ok: true, ...result.audit })
+}
+
+async function handleAdminUserFiles(res, username) {
+  const user = await findUserByUsername(username)
+  jsonResponse(res, 200, { user: publicUser(user), files: await listUserFiles(user) })
+}
+
+async function handleAdminUserFileDownload(req, res, username, filename) {
+  const result = await auditAdminAction(req, 'file.download', `${username}/${filename}`, async () => {
+    const user = await findUserByUsername(username)
+    const file = safeUserFilePath(user, filename)
+    const buffer = await readFile(file)
+    return { buffer, audit: { username, filename, bytes: buffer.length } }
+  })
+  downloadBufferResponse(res, filename, result.buffer, contentTypeForFile(filename))
+}
+
+async function handleAdminUserFileDelete(req, res, username, filename) {
+  const result = await auditAdminAction(req, 'file.delete', `${username}/${filename}`, async () => {
+    const user = await findUserByUsername(username)
+    const file = safeUserFilePath(user, filename)
+    const bytes = await fileSize(file)
+    await unlink(file)
+    return { audit: { username, filename, bytes } }
+  })
+  jsonResponse(res, 200, { ok: true, ...result.audit })
+}
+
+async function handleAdminUserExport(req, res, username) {
+  const result = await auditAdminAction(req, 'user.export', username, async () => {
+    const user = await findUserByUsername(username)
+    const files = []
+    for (const file of await listUserFiles(user)) {
+      if (!file.safe) continue
+      const content = await readFile(safeUserFilePath(user, file.name), 'utf8')
+      files.push({
+        name: file.name,
+        size: file.size,
+        mtime: file.mtime,
+        encoding: 'utf8',
+        content,
+      })
+    }
+    return {
+      package: {
+        schema: 'ratio.admin.user-files.v1',
+        exportedAt: now(),
+        user: publicUser(user),
+        files,
+      },
+      audit: { username, files: files.length },
+    }
+  })
+  downloadJsonResponse(res, `ratio-user-${username}-files.json`, result.package)
 }
 
 function adminAssetHeaders() {
@@ -1507,12 +2004,46 @@ function handleAdminAsset(req, res, pathname) {
 }
 
 async function handleAdminApi(req, res, pathname) {
-  if (req.method !== 'GET') return fail(res, 405, 'Method not allowed', 'method_not_allowed')
   if (!requireAdmin(req, res)) return
 
-  if (pathname === '/api/admin' || pathname === '/api/admin/overview') return handleAdminOverview(res)
-  if (pathname === '/api/admin/users') return handleAdminUsers(res)
-  if (pathname === '/api/admin/telemetry/recent') return handleAdminTelemetryRecent(req, res)
+  const parts = pathname.split('/').filter(Boolean).map(decodePathSegment)
+  if (req.method === 'GET' && (pathname === '/api/admin' || pathname === '/api/admin/overview')) return handleAdminOverview(res)
+  if (req.method === 'GET' && pathname === '/api/admin/users') return handleAdminUsers(res)
+  if (req.method === 'GET' && pathname === '/api/admin/telemetry/recent') return handleAdminTelemetryRecent(req, res)
+  if (req.method === 'GET' && pathname === '/api/admin/audit/recent') return handleAdminAuditRecent(req, res)
+
+  if (parts[0] === 'api' && parts[1] === 'admin' && parts[2] === 'users') {
+    if (parts.length === 3 && req.method === 'POST') return handleAdminUserCreate(req, res)
+
+    const username = parts[3]
+    if (!username) return fail(res, 404, 'Not found', 'not_found')
+    if (parts.length === 4 && req.method === 'DELETE') return handleAdminUserDelete(req, res, username)
+    if (parts.length === 5 && parts[4] === 'password' && req.method === 'POST') {
+      return handleAdminPasswordReset(req, res, username)
+    }
+    if (parts.length === 5 && parts[4] === 'backup' && req.method === 'DELETE') {
+      return handleAdminBackupDelete(req, res, username)
+    }
+    if (parts.length === 5 && parts[4] === 'telemetry' && req.method === 'DELETE') {
+      return handleAdminTelemetryClear(req, res, username)
+    }
+    if (parts.length === 5 && parts[4] === 'files' && req.method === 'GET') {
+      return handleAdminUserFiles(res, username)
+    }
+    if (parts.length === 5 && parts[4] === 'export' && req.method === 'GET') {
+      return handleAdminUserExport(req, res, username)
+    }
+    if (parts.length === 6 && parts[4] === 'files' && req.method === 'DELETE') {
+      return handleAdminUserFileDelete(req, res, username, parts[5])
+    }
+    if (parts.length === 7 && parts[4] === 'files' && parts[6] === 'download' && req.method === 'GET') {
+      return handleAdminUserFileDownload(req, res, username, parts[5])
+    }
+  }
+
+  if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'DELETE') {
+    return fail(res, 405, 'Method not allowed', 'method_not_allowed')
+  }
 
   return fail(res, 404, 'Not found', 'not_found')
 }
