@@ -4,6 +4,7 @@ import {
   fetchCloudMe,
   fetchCloudBackupMeta,
   getCloudEndpointIssue,
+  writeCloudSyncSettingsPatch,
   mergeCloudSyncSettings,
   type CloudSyncSettings,
 } from './cloud'
@@ -56,6 +57,17 @@ describe('mergeCloudSyncSettings', () => {
     expect(next.lastSyncAt).toBeUndefined()
     expect(next.lastSyncStatus).toBeUndefined()
     expect(next.lastSyncMessage).toBeUndefined()
+  })
+})
+
+describe('writeCloudSyncSettingsPatch', () => {
+  it('persists cloud credentials so sync survives reloads', () => {
+    writeCloudSyncSettingsPatch(withSyncState({ registrationInvite: 'invite-code' }))
+
+    const stored = JSON.parse(localStorage.getItem('ratio.cloudSync') ?? '{}') as Record<string, unknown>
+
+    expect(stored.password).toBe('secret')
+    expect(stored.registrationInvite).toBe('invite-code')
   })
 })
 

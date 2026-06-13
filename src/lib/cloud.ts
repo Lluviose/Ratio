@@ -71,50 +71,16 @@ function asString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback
 }
 
-const runtimeCloudSecrets = {
-  password: '',
-  registrationInvite: '',
-}
-
-function omitCloudSecrets<T extends { password?: unknown; registrationInvite?: unknown }>(
-  value: T,
-): Omit<T, 'password' | 'registrationInvite'> {
-  const persisted = { ...value }
-  delete persisted.password
-  delete persisted.registrationInvite
-  return persisted
-}
-
-function stripPersistedSecrets(value: Record<string, unknown>, storage: Storage) {
-  if (!('password' in value) && !('registrationInvite' in value)) return
-  try {
-    const rest = omitCloudSecrets(value)
-    const raw = JSON.stringify(rest)
-    storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
-    if (typeof localStorage !== 'undefined' && storage === localStorage) {
-      dispatchStorageWrite(CLOUD_SYNC_SETTINGS_KEY, raw)
-    }
-  } catch {
-    // Best effort cleanup for older settings written before secrets were session-only.
-  }
-}
-
 export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
-  if (!isRecord(value)) return { ...DEFAULT_CLOUD_SYNC_SETTINGS, ...runtimeCloudSecrets }
-  const migratedSecret = {
-    password: runtimeCloudSecrets.password || asString(value.password),
-    registrationInvite: runtimeCloudSecrets.registrationInvite || asString(value.registrationInvite),
-  }
-  runtimeCloudSecrets.password = migratedSecret.password
-  runtimeCloudSecrets.registrationInvite = migratedSecret.registrationInvite
+  if (!isRecord(value)) return DEFAULT_CLOUD_SYNC_SETTINGS
   return {
     serverUrl: asString(value.serverUrl, DEFAULT_CLOUD_SYNC_SETTINGS.serverUrl),
     username: asString(value.username),
-    password: migratedSecret.password,
+    password: asString(value.password),
     autoSync: value.autoSync === true,
     telemetryEnabled: value.telemetryEnabled === true,
     useCloudAi: value.useCloudAi === true,
-    registrationInvite: migratedSecret.registrationInvite,
+    registrationInvite: asString(value.registrationInvite),
     lastConnectionAt: typeof value.lastConnectionAt === 'string' ? value.lastConnectionAt : undefined,
     lastBackupAt: typeof value.lastBackupAt === 'string' ? value.lastBackupAt : undefined,
     lastRestoreAt: typeof value.lastRestoreAt === 'string' ? value.lastRestoreAt : undefined,
@@ -130,29 +96,20 @@ export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
 export function getCloudSyncSettings(storage: Storage = localStorage): CloudSyncSettings {
   try {
     const raw = storage.getItem(CLOUD_SYNC_SETTINGS_KEY)
-    if (!raw) return { ...DEFAULT_CLOUD_SYNC_SETTINGS, ...runtimeCloudSecrets }
-    const parsed = JSON.parse(raw) as unknown
-    if (isRecord(parsed)) stripPersistedSecrets(parsed, storage)
-    return coerceCloudSyncSettings(parsed)
+    if (!raw) return DEFAULT_CLOUD_SYNC_SETTINGS
+    return coerceCloudSyncSettings(JSON.parse(raw) as unknown)
   } catch {
-    return { ...DEFAULT_CLOUD_SYNC_SETTINGS, ...runtimeCloudSecrets }
+    return DEFAULT_CLOUD_SYNC_SETTINGS
   }
 }
 
 export function writeCloudSyncSettingsPatch(patch: Partial<CloudSyncSettings>, storage: Storage = localStorage) {
   const current = getCloudSyncSettings(storage)
-  if (patch.password !== undefined) runtimeCloudSecrets.password = patch.password
-  if (patch.registrationInvite !== undefined) runtimeCloudSecrets.registrationInvite = patch.registrationInvite
-  const persisted = omitCloudSecrets({ ...current, ...patch })
-  const raw = JSON.stringify(persisted)
+  const raw = JSON.stringify({ ...current, ...patch })
   storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
   if (typeof localStorage !== 'undefined' && storage === localStorage) {
     dispatchStorageWrite(CLOUD_SYNC_SETTINGS_KEY, raw)
   }
-}
-
-export function serializeCloudSyncSettings(settings: CloudSyncSettings) {
-  return omitCloudSecrets(settings)
 }
 
 export function hasCloudCredentials(settings: CloudSyncSettings) {

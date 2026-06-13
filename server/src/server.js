@@ -40,7 +40,7 @@ const AI_ALLOW_HTTP_UPSTREAM = readBooleanEnv('RATIO_AI_ALLOW_HTTP_UPSTREAM', fa
 const AI_ALLOW_PRIVATE_UPSTREAM = readBooleanEnv('RATIO_AI_ALLOW_PRIVATE_UPSTREAM', false)
 const TELEMETRY_MAX_DAILY_BYTES = readPositiveNumberEnv('RATIO_TELEMETRY_MAX_DAILY_BYTES', 5 * 1024 * 1024)
 const TELEMETRY_RETENTION_DAYS = readPositiveNumberEnv('RATIO_TELEMETRY_RETENTION_DAYS', 30)
-const TRUST_PROXY = readBooleanEnv('RATIO_TRUST_PROXY', true)
+const TRUST_PROXY = readBooleanEnv('RATIO_TRUST_PROXY', false)
 const AUTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_AUTH_RATE_LIMIT_PER_MINUTE', 60)
 const AUTH_FAILURE_WINDOW_MS = readPositiveNumberEnv('RATIO_AUTH_FAILURE_WINDOW_MS', 15 * 60 * 1000)
 const AUTH_MAX_FAILED_ATTEMPTS = readPositiveNumberEnv('RATIO_AUTH_MAX_FAILED_ATTEMPTS', 8)
@@ -234,7 +234,7 @@ function directRemoteAddress(req) {
 function isTrustedProxyPeer(address) {
   const normalized = normalizeIp(address)
   if (!normalized || normalized === 'unknown') return false
-  return isPrivateHostname(normalized)
+  return normalized === '127.0.0.1' || normalized === '::1' || normalized === '::ffff:127.0.0.1'
 }
 
 function forwardedClientAddress(req) {

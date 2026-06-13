@@ -21,7 +21,6 @@ import {
   fetchCloudAiStatus,
   fetchCloudMe,
   mergeCloudSyncSettings,
-  serializeCloudSyncSettings,
   uploadCloudBackup,
   writeCloudSyncSettingsPatch,
   type CloudBackupMeta,
@@ -92,7 +91,6 @@ export function SettingsScreen(props: {
   )
   const [cloudSync, setCloudSync] = useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
     coerce: coerceCloudSyncSettings,
-    serialize: serializeCloudSyncSettings,
   })
   const [cloudAiStatus, setCloudAiStatus] = useState<string>('')
   const [cloudConfigExpanded, setCloudConfigExpanded] = useState(() => !cloudSync.lastBackupAt)
