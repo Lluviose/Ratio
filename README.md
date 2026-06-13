@@ -45,7 +45,8 @@ docker compose logs -f ratio-server
 
 在 `.env` 中配置：
 
-- `RATIO_AI_CHAT_URL`：OpenAI-compatible `/v1/chat/completions` 完整地址；或使用 `RATIO_AI_BASE_URL` + `RATIO_AI_CHAT_PATH`
+- `RATIO_AI_RESPONSES_URL`：OpenAI Responses API `/v1/responses` 完整地址；旧的 `RATIO_AI_CHAT_URL` 仍可作为兼容变量使用
+- `RATIO_AI_BASE_URL` / `RATIO_AI_RESPONSES_PATH`：不填完整地址时使用，默认路径为 `/v1/responses`
 - `RATIO_AI_API_KEY`：后台转发 AI 请求时使用的密钥
 - `RATIO_AI_MODEL` / `RATIO_AI_REASONING_EFFORT`：统一模型配置
 - `RATIO_REGISTRATION_INVITE_CODE`：创建账号的邀请码；默认必须配置，否则注册关闭
@@ -62,7 +63,7 @@ docker compose logs -f ratio-server
 - `RATIO_ADMIN_RATE_LIMIT_PER_MINUTE`：控制台请求限流，默认 300
 - `RATIO_CORS_ORIGIN`：生产环境建议改成前端实际域名
 
-启动后后台默认监听 `http://localhost:8787`，VPS 上可用 `http://服务器IP:8787/api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份、遥测和云端 AI。AI 状态检查会返回可用性、模型、推理档位、代理地址摘要和配置错误原因；AI 聊天接口支持 OpenAI-compatible 非流式响应，也会在前端请求 `stream: true` 时透传流式响应。公网部署时请放在 HTTPS 反向代理后；如果前端和后端不是同一个 origin，需要把 `RATIO_CORS_ORIGIN` 改成前端实际 origin，如果同域反代则可以保持默认。配置管理员账号后，可打开 `http://服务器IP:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
+启动后后台默认监听 `http://localhost:8787`，VPS 上可用 `http://服务器IP:8787/api/health` 检查状态。应用内进入「设置」填写服务器地址、账号、密码和可选邀请码后，可创建账号、测试连接、上传/恢复云端备份、开启自动备份、遥测和云端 AI。AI 状态检查会返回可用性、模型、推理档位、代理地址摘要和配置错误原因；AI 聊天接口使用 OpenAI Responses API 请求格式，支持非流式响应，也会在前端请求 `stream: true` 时透传流式响应。公网部署时请放在 HTTPS 反向代理后；如果前端和后端不是同一个 origin，需要把 `RATIO_CORS_ORIGIN` 改成前端实际 origin，如果同域反代则可以保持默认。配置管理员账号后，可打开 `http://服务器IP:8787/admin` 查看服务健康、账号备份、AI 代理和遥测状态。
 
 AI 助手定位为分析和建议，不会直接修改资产数据。聊天记录只保存在当前浏览器 `sessionStorage`，关闭本次浏览会话后会自然清除，也不会进入云备份。
 

@@ -713,6 +713,23 @@ export function readResponseContent(value: unknown): string | undefined {
   }
 
   if (typeof value.output_text === 'string') return value.output_text
+  const output = value.output
+  if (Array.isArray(output) && output.length > 0) {
+    const chunks: string[] = []
+    output.forEach((item) => {
+      if (!isRecord(item)) return
+      const content = item.content
+      if (Array.isArray(content)) {
+        content.forEach((part) => {
+          if (!isRecord(part)) return
+          if (typeof part.text === 'string' && (part.type === 'output_text' || !part.type)) chunks.push(part.text)
+        })
+      } else if (typeof item.text === 'string' && item.type === 'output_text') {
+        chunks.push(item.text)
+      }
+    })
+    if (chunks.length > 0) return chunks.join('')
+  }
   if (typeof value.text === 'string') return value.text
   return undefined
 }
@@ -723,6 +740,7 @@ function isAbortError(err: unknown) {
 
 function readStreamDelta(value: unknown) {
   if (!isRecord(value)) return ''
+  if (typeof value.delta === 'string') return value.delta
   const choices = value.choices
   if (Array.isArray(choices) && choices.length > 0) {
     return choices
@@ -738,7 +756,27 @@ function readStreamDelta(value: unknown) {
       .join('')
   }
 
+  if (typeof value.type === 'string') return ''
   return readResponseContent(value) ?? ''
+}
+
+function readStreamEventDeltas(event: string) {
+  const deltas: string[] = []
+  const dataLines = event
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trimStart())
+  for (const data of dataLines) {
+    if (!data || data === '[DONE]') continue
+    try {
+      const delta = readStreamDelta(JSON.parse(data) as unknown)
+      if (!delta) continue
+      deltas.push(delta)
+    } catch {
+      // Ignore malformed stream events; the final empty response check catches unusable streams.
+    }
+  }
+  return deltas
 }
 
 async function readStreamingResponse(res: Response, onDelta: (delta: string) => void) {
@@ -767,26 +805,21 @@ async function readStreamingResponse(res: Response, onDelta: (delta: string) => 
     buffer = events.pop() ?? ''
 
     for (const event of events) {
-      const dataLines = event
-        .split(/\r?\n/)
-        .filter((line) => line.startsWith('data:'))
-        .map((line) => line.slice(5).trimStart())
-      for (const data of dataLines) {
-        if (!data || data === '[DONE]') continue
-        try {
-          const delta = readStreamDelta(JSON.parse(data) as unknown)
-          if (!delta) continue
-          content += delta
-          onDelta(delta)
-        } catch {
-          // Ignore malformed stream events; the final empty response check catches unusable streams.
-        }
+      for (const delta of readStreamEventDeltas(event)) {
+        content += delta
+        onDelta(delta)
       }
     }
   }
 
   const tail = decoder.decode()
   if (tail) buffer += tail
+  if (buffer) {
+    for (const delta of readStreamEventDeltas(buffer)) {
+      content += delta
+      onDelta(delta)
+    }
+  }
   if (content.trim().length === 0) throw new Error('Empty AI response')
   return content
 }

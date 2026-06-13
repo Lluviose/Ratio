@@ -95,6 +95,22 @@ describe('readResponseContent', () => {
     expect(readResponseContent({ output_text: 'output text' })).toBe('output text')
   })
 
+  it('reads Responses API output items', () => {
+    expect(readResponseContent({
+      output: [
+        { type: 'reasoning', content: [] },
+        {
+          type: 'message',
+          role: 'assistant',
+          content: [
+            { type: 'output_text', text: 'hello ' },
+            { type: 'output_text', text: 'responses' },
+          ],
+        },
+      ],
+    })).toBe('hello responses')
+  })
+
   it('returns undefined for empty or unsupported responses', () => {
     expect(readResponseContent({ choices: [] })).toBeUndefined()
     expect(readResponseContent(null)).toBeUndefined()

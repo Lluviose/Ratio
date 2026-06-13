@@ -23,9 +23,11 @@ const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || 'http://localhost:5173'
 const MAX_BACKUP_BYTES = readPositiveNumberEnv('RATIO_MAX_BACKUP_BYTES', 2 * 1024 * 1024)
 const REGISTRATION_INVITE_CODE = (process.env.RATIO_REGISTRATION_INVITE_CODE || '').trim()
 const ALLOW_OPEN_REGISTRATION = readBooleanEnv('RATIO_ALLOW_OPEN_REGISTRATION', false)
+const AI_RESPONSES_URL = process.env.RATIO_AI_RESPONSES_URL || ''
 const AI_CHAT_URL = process.env.RATIO_AI_CHAT_URL || ''
 const AI_BASE_URL = process.env.RATIO_AI_BASE_URL || ''
-const AI_CHAT_PATH = process.env.RATIO_AI_CHAT_PATH || '/v1/chat/completions'
+const AI_RESPONSES_PATH = process.env.RATIO_AI_RESPONSES_PATH || ''
+const AI_CHAT_PATH = process.env.RATIO_AI_CHAT_PATH || ''
 const AI_API_KEY = process.env.RATIO_AI_API_KEY || ''
 const AI_MODEL = process.env.RATIO_AI_MODEL || 'gpt-5.2'
 const AI_REASONING_EFFORT = process.env.RATIO_AI_REASONING_EFFORT || 'high'
@@ -616,16 +618,43 @@ function trimConfig(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function migrateChatCompletionsPath(value) {
+  const trimmed = trimConfig(value).replace(/\/+$/, '')
+  if (!trimmed) return ''
+  return trimmed.endsWith('/v1/chat/completions')
+    ? `${trimmed.slice(0, -'/v1/chat/completions'.length)}/v1/responses`
+    : trimmed
+}
+
+function migrateChatCompletionsUrl(value) {
+  const trimmed = trimConfig(value)
+  if (!trimmed) return ''
+  try {
+    const url = new URL(trimmed)
+    const migratedPath = migrateChatCompletionsPath(url.pathname)
+    if (migratedPath && migratedPath !== url.pathname.replace(/\/+$/, '')) {
+      url.pathname = migratedPath
+      return url.toString()
+    }
+  } catch {
+    // Non-URL values are handled as opaque endpoint strings below.
+  }
+  return migrateChatCompletionsPath(trimmed)
+}
+
 function resolveAiChatUrl() {
-  const direct = trimConfig(AI_CHAT_URL)
+  const direct = trimConfig(AI_RESPONSES_URL)
   if (direct) return direct
+  const legacyDirect = migrateChatCompletionsUrl(AI_CHAT_URL)
+  if (legacyDirect) return legacyDirect
 
   const baseUrl = trimConfig(AI_BASE_URL)
   if (!baseUrl) return ''
 
   const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+  const responsesPath = trimConfig(AI_RESPONSES_PATH) || migrateChatCompletionsPath(AI_CHAT_PATH) || '/v1/responses'
   try {
-    return new URL(AI_CHAT_PATH || '/v1/chat/completions', base).toString()
+    return new URL(responsesPath, base).toString()
   } catch {
     return baseUrl
   }
@@ -825,6 +854,16 @@ function validateAiMessages(value) {
 
     return { role, content }
   })
+}
+
+function buildResponsesRequestBody(config, messages, wantsStream) {
+  return {
+    model: config.model,
+    input: messages,
+    store: false,
+    ...(config.reasoningEffort ? { reasoning: { effort: config.reasoningEffort } } : {}),
+    ...(wantsStream ? { stream: true } : {}),
+  }
 }
 
 function checkAiLimits(req, res, user) {
@@ -1045,12 +1084,7 @@ async function handleAiChat(req, res, user) {
         'Content-Type': 'application/json',
         ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       },
-      body: JSON.stringify({
-        model: config.model,
-        messages,
-        reasoning_effort: config.reasoningEffort,
-        ...(wantsStream ? { stream: true } : {}),
-      }),
+      body: JSON.stringify(buildResponsesRequestBody(config, messages, wantsStream)),
     })
   } catch {
     clearTimeout(timeout)
