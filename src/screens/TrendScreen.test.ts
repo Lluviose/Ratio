@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withGoalTrendLines } from './trendGoalLines'
 import { buildTrendChartDerived, buildTrendView, type RangeId } from './trendView'
-import { getSavingsGoalSummary, type SavingsGoal, type SavingsGoalSummary } from '../lib/savingsGoal'
+import { getLinearGoalValue, getSavingsGoalSummary, type SavingsGoal, type SavingsGoalSummary } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 
 const goal: SavingsGoal = {
@@ -145,7 +145,7 @@ describe('buildTrendView', () => {
       }
       const view = buildTrendView(snapshots, range, 8)
       const summary = getSavingsGoalSummary(goalStartingAfterClose, snapshots, { monthStartDay: 8 })
-      const points = withGoalTrendLines(view.points, goalStartingAfterClose, summary, view.futureCadence)
+      const points = withGoalTrendLines(view.points, goalStartingAfterClose, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
       const dates = points.map((point) => point.dateKey)
 
       expect(points.find((point) => point.dateKey === '2026-05-07')?.net).toBe(110000)
@@ -261,6 +261,102 @@ describe('buildTrendChartDerived', () => {
 })
 
 describe('withGoalTrendLines', () => {
+  it('clips an old goal start to the 30 day range cutoff', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+    const snapshots = [
+      snapshot('2026-01-01', 100000),
+      snapshot('2026-05-20', 115000),
+      snapshot('2026-06-05', 120000),
+    ]
+    const view = buildTrendView(snapshots, '30d', 8)
+    const summary = getSavingsGoalSummary(goal, snapshots, { monthStartDay: 8 })
+    const points = withGoalTrendLines(view.points, goal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
+    const dates = points.map((point) => point.dateKey)
+    const clipPoint = points.find((point) => point.dateKey === '2026-05-06')
+
+    expect(view.clipStartDate).toBe('2026-05-06')
+    expect(dates).not.toContain(goal.startDate)
+    expect(points[0]?.dateKey).toBe('2026-05-06')
+    expect(clipPoint?.net).toBeUndefined()
+    expect(clipPoint?.goalTarget).toBe(getLinearGoalValue(goal, '2026-05-06'))
+    expect(clipPoint?.goalComparison).toBe(getLinearGoalValue(goal, '2026-05-06'))
+
+    vi.useRealTimers()
+  })
+
+  it('keeps the goal start as the path start when it is inside the current range', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+    const inRangeGoal = {
+      ...goal,
+      startDate: '2026-05-25',
+      startNetWorth: 116000,
+      createdAt: '2026-05-25T00:00:00.000Z',
+    }
+    const snapshots = [
+      snapshot('2026-05-20', 115000),
+      snapshot('2026-06-05', 120000),
+    ]
+    const view = buildTrendView(snapshots, '30d', 8)
+    const summary = getSavingsGoalSummary(inRangeGoal, snapshots, { monthStartDay: 8 })
+    const points = withGoalTrendLines(view.points, inRangeGoal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
+    const dates = points.map((point) => point.dateKey)
+    const beforeGoalPoint = points.find((point) => point.dateKey === '2026-05-20')
+    const goalStartPoint = points.find((point) => point.dateKey === inRangeGoal.startDate)
+
+    expect(view.clipStartDate).toBe('2026-05-06')
+    expect(dates).toContain(inRangeGoal.startDate)
+    expect(beforeGoalPoint?.goalComparison).toBeNull()
+    expect(goalStartPoint?.net).toBeUndefined()
+    expect(goalStartPoint?.goalTarget).toBe(inRangeGoal.startNetWorth)
+    expect(goalStartPoint?.goalComparison).toBe(inRangeGoal.startNetWorth)
+
+    vi.useRealTimers()
+  })
+
+  it.each(['6m', '1y'] satisfies RangeId[])(
+    'clips an old goal start to the first visible monthly point in %s data',
+    (range) => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
+
+      const oldGoal = {
+        ...goal,
+        startDate: '2025-01-01',
+        startNetWorth: 80000,
+        createdAt: '2025-01-01T00:00:00.000Z',
+      }
+      const snapshots = [
+        snapshot('2025-07-07', 90000),
+        snapshot('2025-08-07', 92000),
+        snapshot('2025-09-07', 94000),
+        snapshot('2025-10-07', 96000),
+        snapshot('2025-11-07', 98000),
+        snapshot('2025-12-07', 100000),
+        snapshot('2026-01-07', 102000),
+        snapshot('2026-02-07', 104000),
+        snapshot('2026-03-07', 106000),
+        snapshot('2026-04-07', 108000),
+        snapshot('2026-05-07', 110000),
+        snapshot('2026-06-05', 120000),
+      ]
+      const view = buildTrendView(snapshots, range, 8)
+      const summary = getSavingsGoalSummary(oldGoal, snapshots, { monthStartDay: 8 })
+      const points = withGoalTrendLines(view.points, oldGoal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
+      const dates = points.map((point) => point.dateKey)
+      const clipPoint = points.find((point) => point.dateKey === view.clipStartDate)
+
+      expect(view.clipStartDate).toBe(view.points[0]?.dateKey)
+      expect(dates).not.toContain(oldGoal.startDate)
+      expect(clipPoint?.goalComparison).toBe(getLinearGoalValue(oldGoal, view.clipStartDate!))
+
+      vi.useRealTimers()
+    },
+  )
+
   it('anchors projected net worth at the latest recorded point when the forecast starts later', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-01T12:00:00.000Z'))

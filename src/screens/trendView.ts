@@ -26,6 +26,7 @@ type TrendView = {
   selected: Snapshot[]
   showYear: boolean
   futureCadence: FutureCadence
+  clipStartDate: string | null
 }
 
 export type TrendChartDerived = {
@@ -189,16 +190,18 @@ function getEntryLabel(entry: TrendSelectionEntry, showYear: boolean) {
 
 export function buildTrendView(snapshots: Snapshot[], range: RangeId, monthStartDay: number): TrendView {
   if (!snapshots || snapshots.length === 0) {
-    return { points: [], selected: [], showYear: false, futureCadence: DEFAULT_FUTURE_CADENCE }
+    return { points: [], selected: [], showYear: false, futureCadence: DEFAULT_FUTURE_CADENCE, clipStartDate: null }
   }
 
   const sorted = snapshots.slice().sort((a, b) => a.date.localeCompare(b.date))
   const latest = sorted[sorted.length - 1] ?? null
 
   let entries: TrendSelectionEntry[] = []
+  let clipStartDate: string | null = null
 
   if (range === '30d') {
     const cutoffKey = getRangeCutoffKey(range)
+    clipStartDate = cutoffKey
     entries = sorted.filter((s) => s.date >= cutoffKey).map((snapshot) => ({ snapshot }))
   } else if (range === '6m') {
     entries = pickMonthlyLastFromSorted(sorted, 6, monthStartDay, getMonthlyRangeStartKey(range, monthStartDay, latest))
@@ -216,12 +219,14 @@ export function buildTrendView(snapshots: Snapshot[], range: RangeId, monthStart
   const selected = entries.map((entry) => entry.snapshot)
   const labels = entries.map((entry) => getEntryLabel(entry, showYear))
   const points = selected.map((s, idx) => toPoint(s, idx, labels[idx] ?? formatLabel(s.date, { showYear })))
+  clipStartDate = clipStartDate ?? points[0]?.dateKey ?? null
 
   return {
     points,
     selected,
     showYear,
     futureCadence: getFutureCadence(range, points),
+    clipStartDate,
   }
 }
 

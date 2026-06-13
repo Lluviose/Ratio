@@ -117,11 +117,14 @@ export function withGoalTrendLines(
   summary: SavingsGoalSummary | null,
   futureCadence: FutureCadence,
   labelForDate: (dateKey: string) => string = (dateKey) => dateKey,
+  clipStartDate?: string | null,
 ) {
   if (!goal || !summary || points.length === 0) return points
 
   const firstDate = points[0]?.dateKey
   if (!firstDate) return points
+  const lineClipStartDate = clipStartDate && dateKeyToUtcDays(clipStartDate) != null ? clipStartDate : firstDate
+  const goalLineStartDate = goal.startDate > lineClipStartDate ? goal.startDate : lineClipStartDate
 
   const byDate = new Map<string, TrendPoint>()
   for (const point of points) {
@@ -136,7 +139,7 @@ export function withGoalTrendLines(
   }
 
   const ensurePoint = (dateKey: string, label?: string) => {
-    if (dateKey < firstDate) return
+    if (dateKey < lineClipStartDate) return
     if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label ?? labelForDate(dateKey)))
   }
 
@@ -147,7 +150,7 @@ export function withGoalTrendLines(
   const targetTrendEnd = getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence)
 
   ensurePoint(targetTrendEnd, targetTrendEnd === goal.targetDate ? '目标' : '展望')
-  if (goal.startDate >= firstDate) ensurePoint(goal.startDate)
+  ensurePoint(goalLineStartDate)
   if (targetTrendEnd > forecastStartDate) addFutureCheckpoints(ensurePoint, forecastStartDate, targetTrendEnd, futureCadence)
 
   let projectionEnd: string | null = null
@@ -182,8 +185,8 @@ export function withGoalTrendLines(
 
   const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
   for (const point of merged) {
-    point.goalTarget = getLinearGoalValue(goal, point.dateKey)
-    point.goalComparison = point.dateKey >= goal.startDate ? getGoalComparisonValue(goal, point.dateKey) : null
+    point.goalTarget = point.dateKey >= goalLineStartDate ? getLinearGoalValue(goal, point.dateKey) : null
+    point.goalComparison = point.dateKey >= goalLineStartDate ? getGoalComparisonValue(goal, point.dateKey) : null
 
     if (projectionEnd && projectionAnchorDate && summary.avgDailyNetChange != null) {
       let bridgeValue: number | null = null

@@ -171,8 +171,8 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     [goal, monthStartDay, paceAlgorithm, snapshots],
   )
   const goalTrendPoints = useMemo(
-    () => withGoalTrendLines(view.points, goal, goalSummary, view.futureCadence, (dateKey) => formatLabel(dateKey, { showYear: view.showYear })),
-    [goal, goalSummary, view.futureCadence, view.points, view.showYear],
+    () => withGoalTrendLines(view.points, goal, goalSummary, view.futureCadence, (dateKey) => formatLabel(dateKey, { showYear: view.showYear }), view.clipStartDate),
+    [goal, goalSummary, view.clipStartDate, view.futureCadence, view.points, view.showYear],
   )
   const chartDerived = useMemo(
     () => buildTrendChartDerived({
