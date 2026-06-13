@@ -104,6 +104,7 @@
 html,
 body {
   height: 100%;
+  background: var(--bg);
   touch-action: pan-x pan-y;
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
@@ -132,6 +133,7 @@ select {
 
 #root {
   height: 100%;
+  background: var(--bg);
 }
 
 .themeTransitionLayer {
@@ -235,7 +237,7 @@ a {
   overscroll-behavior: none;
 }
 
-@media (pointer: coarse) and (max-width: 520px), (pointer: coarse) and (max-height: 520px) {
+@media (max-width: 520px), (max-height: 520px) {
   .appViewport {
     padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
     background: var(--bg);
