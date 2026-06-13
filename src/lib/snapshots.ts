@@ -49,8 +49,8 @@ function isAccountTypeId(value: unknown): value is AccountTypeId {
 
 function normalizeSnapshotGroupAmount(groupId: AccountGroupId, value: unknown): number {
   const normalized = toFiniteMoney(value)
-  if (normalized >= 0) return normalized
-  return groupId === 'debt' ? normalizeMoney(Math.abs(normalized)) : 0
+  if (normalized >= 0 || groupId !== 'debt') return normalized
+  return normalizeMoney(Math.abs(normalized))
 }
 
 export function normalizeSnapshot(s: Snapshot): Snapshot {

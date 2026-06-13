@@ -214,7 +214,7 @@ describe('localStorage coercion', () => {
     })
   })
 
-  it('migrates legacy negative account balances to the non-negative model', async () => {
+  it('preserves asset negative balances while migrating legacy debt negatives', async () => {
     localStorage.setItem(
       'ratio.accounts',
       JSON.stringify([
@@ -247,12 +247,12 @@ describe('localStorage coercion', () => {
 
     render(<Reader />)
 
-    expect(screen.getByTestId('cash')).toHaveTextContent('0')
+    expect(screen.getByTestId('cash')).toHaveTextContent('-12.34')
     expect(screen.getByTestId('debt')).toHaveTextContent('56.78')
 
     await waitFor(() => {
       const stored = JSON.parse(localStorage.getItem('ratio.accounts') ?? '[]') as Array<{ id: string; balance: number }>
-      expect(stored.find((a) => a.id === 'cash1')?.balance).toBe(0)
+      expect(stored.find((a) => a.id === 'cash1')?.balance).toBe(-12.34)
       expect(stored.find((a) => a.id === 'debt1')?.balance).toBe(56.78)
     })
   })

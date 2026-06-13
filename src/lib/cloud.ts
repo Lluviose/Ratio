@@ -76,10 +76,19 @@ const runtimeCloudSecrets = {
   registrationInvite: '',
 }
 
+function omitCloudSecrets<T extends { password?: unknown; registrationInvite?: unknown }>(
+  value: T,
+): Omit<T, 'password' | 'registrationInvite'> {
+  const persisted = { ...value }
+  delete persisted.password
+  delete persisted.registrationInvite
+  return persisted
+}
+
 function stripPersistedSecrets(value: Record<string, unknown>, storage: Storage) {
   if (!('password' in value) && !('registrationInvite' in value)) return
   try {
-    const { password: _password, registrationInvite: _registrationInvite, ...rest } = value
+    const rest = omitCloudSecrets(value)
     const raw = JSON.stringify(rest)
     storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
     if (typeof localStorage !== 'undefined' && storage === localStorage) {
@@ -134,7 +143,7 @@ export function writeCloudSyncSettingsPatch(patch: Partial<CloudSyncSettings>, s
   const current = getCloudSyncSettings(storage)
   if (patch.password !== undefined) runtimeCloudSecrets.password = patch.password
   if (patch.registrationInvite !== undefined) runtimeCloudSecrets.registrationInvite = patch.registrationInvite
-  const { password: _password, registrationInvite: _registrationInvite, ...persisted } = { ...current, ...patch }
+  const persisted = omitCloudSecrets({ ...current, ...patch })
   const raw = JSON.stringify(persisted)
   storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
   if (typeof localStorage !== 'undefined' && storage === localStorage) {
@@ -143,8 +152,7 @@ export function writeCloudSyncSettingsPatch(patch: Partial<CloudSyncSettings>, s
 }
 
 export function serializeCloudSyncSettings(settings: CloudSyncSettings) {
-  const { password: _password, registrationInvite: _registrationInvite, ...persisted } = settings
-  return persisted
+  return omitCloudSecrets(settings)
 }
 
 export function hasCloudCredentials(settings: CloudSyncSettings) {
@@ -192,6 +200,23 @@ function cloudUrl(settings: CloudSyncSettings, apiPath: string) {
   return `${normalizeServerUrl(settings.serverUrl)}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`
 }
 
+export function getCloudEndpointIssue(settings: Pick<CloudSyncSettings, 'serverUrl'>): string | null {
+  if (typeof window === 'undefined') return null
+
+  let serverUrl: URL
+  try {
+    serverUrl = new URL(normalizeServerUrl(settings.serverUrl))
+  } catch {
+    return 'Cloud server URL is invalid'
+  }
+
+  if (window.location.protocol === 'https:' && serverUrl.protocol === 'http:') {
+    return 'Current page uses HTTPS, so the cloud server must also use HTTPS'
+  }
+
+  return null
+}
+
 function basicAuth(username: string, password: string) {
   const text = `${username}:${password}`
   const bytes = new TextEncoder().encode(text)
@@ -231,6 +256,8 @@ export async function cloudRequest<T>(
   init: RequestInit = {},
 ): Promise<T> {
   if (!hasCloudCredentials(settings)) throw new Error('Cloud account is not configured')
+  const endpointIssue = getCloudEndpointIssue(settings)
+  if (endpointIssue) throw new Error(endpointIssue)
 
   const headers = new Headers(init.headers)
   headers.set('Authorization', basicAuth(settings.username.trim(), settings.password))
@@ -245,6 +272,9 @@ export async function cloudRequest<T>(
 }
 
 export async function createCloudUser(settings: CloudSyncSettings, options: CloudRequestOptions = {}) {
+  const endpointIssue = getCloudEndpointIssue(settings)
+  if (endpointIssue) throw new Error(endpointIssue)
+
   const res = await fetch(cloudUrl(settings, '/api/users'), {
     method: 'POST',
     signal: options.signal,

@@ -17,8 +17,8 @@ export function normalizeStoredAccountBalance(type: AccountTypeId, value: unknow
 
   // Legacy debt entries were sometimes stored as negative numbers because users
   // naturally typed liabilities with a minus sign. The domain model stores debt
-  // as a positive amount owed, so migrate those values to their absolute amount.
-  return isDebtAccountType(type) ? normalizeMoney(Math.abs(normalized)) : 0
+  // as a positive amount owed, so migrate only those values to their absolute amount.
+  return isDebtAccountType(type) ? normalizeMoney(Math.abs(normalized)) : normalized
 }
 
 export function canApplyBalanceDelta(balance: number, delta: number) {

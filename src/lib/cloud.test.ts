@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_CLOUD_SYNC_SETTINGS,
+  fetchCloudMe,
   fetchCloudBackupMeta,
+  getCloudEndpointIssue,
   mergeCloudSyncSettings,
   type CloudSyncSettings,
 } from './cloud'
@@ -89,5 +91,15 @@ describe('fetchCloudBackupMeta', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[0][0]).toBe('https://example.com/api/backup/meta')
     expect(fetchMock.mock.calls[1][0]).toBe('https://example.com/api/backup')
+  })
+})
+
+describe('cloud endpoint checks', () => {
+  it('explains HTTPS to HTTP mixed-content cloud requests', async () => {
+    vi.stubGlobal('location', new URL('https://ratio.example/app'))
+    const settings = withSyncState({ serverUrl: 'http://vps.example:8787' })
+
+    expect(getCloudEndpointIssue(settings)).toBe('Current page uses HTTPS, so the cloud server must also use HTTPS')
+    await expect(fetchCloudMe(settings)).rejects.toThrow('Current page uses HTTPS, so the cloud server must also use HTTPS')
   })
 })

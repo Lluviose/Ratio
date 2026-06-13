@@ -85,6 +85,7 @@ export function useBubblePhysics(
   const burstCounterRef = useRef(0)
   const knownIdsRef = useRef(new Set<string>())
   const clusterBoostRef = useRef<ClusterBoost | null>(null)
+  const runnerRunningRef = useRef(false)
 
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
@@ -314,6 +315,7 @@ export function useBubblePhysics(
       Matter.Events.off(engine, 'beforeUpdate', onBeforeUpdate)
       Matter.Events.off(engine, 'afterUpdate', onAfterUpdate)
       Matter.Runner.stop(runner)
+      runnerRunningRef.current = false
       Matter.World.clear(world, false)
       Matter.Engine.clear(engine)
       engineRef.current = null
@@ -337,10 +339,12 @@ export function useBubblePhysics(
 
     const shouldRun = isActive || (keepBurstsVisible && burstStatesRef.current.size > 0)
 
-    if (shouldRun) {
+    if (shouldRun && !runnerRunningRef.current) {
       Matter.Runner.run(runner, engine)
-    } else {
+      runnerRunningRef.current = true
+    } else if (!shouldRun && runnerRunningRef.current) {
       Matter.Runner.stop(runner)
+      runnerRunningRef.current = false
     }
   }, [height, isActive, keepBurstsVisible, nodes.length, runtimeRevision, width])
 

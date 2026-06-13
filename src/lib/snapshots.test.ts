@@ -42,7 +42,7 @@ describe('normalizeSnapshot', () => {
     ])
   })
 
-  it('migrates negative snapshot balances to the non-negative account model', () => {
+  it('preserves negative asset balances while migrating negative debt balances', () => {
     const raw = {
       date: '2025-01-01',
       net: 9999,
@@ -60,15 +60,15 @@ describe('normalizeSnapshot', () => {
     const s = normalizeSnapshot(raw)
 
     expect(s).toMatchObject({
-      net: 0,
+      net: -15,
       debt: 50,
-      cash: 0,
+      cash: -10,
       invest: 20,
       fixed: 30,
-      receivable: 0,
+      receivable: -5,
     })
     expect(s.accounts).toEqual([
-      { id: 'asset', type: 'cash', name: 'Cash', balance: 0 },
+      { id: 'asset', type: 'cash', name: 'Cash', balance: -10 },
       { id: 'debt', type: 'credit_card', name: 'Card', balance: 50 },
     ])
   })
