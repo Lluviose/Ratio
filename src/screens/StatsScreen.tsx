@@ -692,25 +692,19 @@ function SavingsStatusCard(props: {
     : summary.isPastDue || summary.isDueToday || summary.currentPeriodIsOnTrack === false
       ? '#ef4444'
       : 'var(--muted-text)'
-  const heroLabel = summary.isComplete
-    ? '当前净资产'
-    : periodRemaining == null
-      ? '距离目标还差'
-      : periodRemaining > 0
-        ? '本期还需存入'
-        : '本期已达标'
-  const heroValue = summary.isComplete
-    ? formatCny(summary.currentNetWorth)
-    : periodRemaining == null
-      ? formatCny(summary.remaining)
-      : periodRemaining > 0
-        ? formatCny(periodRemaining)
-        : formatDelta(Math.abs(periodDelta ?? 0))
+  const heroValue = formatCny(summary.currentNetWorth)
   const heroSub = summary.isComplete
     ? '目标已覆盖'
-    : summary.currentPeriodTarget == null
-      ? `距离目标还差 ${formatCny(summary.remaining)}`
-      : `本期已增 ${formatDelta(summary.currentPeriodActual)} · 距离总目标还差 ${formatCny(summary.remaining)}`
+    : `距离总目标还差 ${formatCny(summary.remaining)}`
+  const periodAction = summary.isComplete
+    ? { label: '目标状态', value: '已达成', tone: '#10b981' }
+    : summary.isPastDue || summary.isDueToday
+      ? { label: summary.isDueToday ? '今日到期缺口' : '目标缺口', value: formatCny(summary.remaining), tone: '#ef4444' }
+      : periodRemaining == null
+        ? { label: '本期还需存入', value: '—', tone: 'var(--muted-text)' }
+        : periodRemaining > 0
+          ? { label: '本期还需存入', value: formatCny(periodRemaining), tone: '#ef4444' }
+          : { label: '本期已达标', value: formatDelta(Math.abs(periodDelta ?? 0)), tone: '#10b981' }
   const progressPct = `${Math.round(progress * 1000) / 10}%`
   const projectionSub = summary.avgDailyNetChange != null ? formatSummaryPaceSource(summary) : '等待更多快照'
   const goalDateContext = [summary.startDate, summary.latestDate, summary.targetDate, summary.projectedDate]
@@ -737,7 +731,7 @@ function SavingsStatusCard(props: {
       initial={cardEntranceInitial}
       animate={cardEntranceAnimate}
       transition={cardEntranceTransition}
-      style={{ overflow: 'visible', position: 'relative' }}
+      style={{ overflow: 'hidden', position: 'relative' }}
     >
       <motion.div
         aria-hidden="true"
@@ -800,51 +794,47 @@ function SavingsStatusCard(props: {
             <motion.div
               id="savings-period-explain"
               role="tooltip"
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={tooltipExit}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
               transition={quickFade}
-            style={{
-              position: 'absolute',
-              top: 43,
-              left: 0,
-              right: 0,
-              zIndex: 12,
-              borderRadius: 16,
-              padding: 12,
-              background: 'var(--card)',
-              border: '1px solid var(--hairline)',
-              boxShadow: '0 18px 44px rgb(15 23 42 / 0.18)',
-              backdropFilter: 'blur(16px)',
-              display: 'grid',
-              gap: 8,
-              fontSize: 11,
-              fontWeight: 650,
-              color: 'var(--muted-text)',
-            }}
-          >
-            <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>
-              {periodExplain.startLabel} 到 {periodExplain.endLabel}
-            </div>
-            <div>这是当前月度周期；周期终点取下一个月度开始日和目标日里更早的日期。</div>
-            <div>总目标路径：{formatShortGoalDate(summary.startDate, periodDateContext)} 从 {formatCny(summary.startNetWorth)} 出发，到 {formatShortGoalDate(summary.targetDate, periodDateContext)} 达到 {formatCny(summary.targetAmount)}，中间按天平均推进。</div>
-            <div>本期起点：{periodExplain.startLabel} 的净资产按 {formatCny(summary.currentPeriodStartNetWorth)} 计算。</div>
-            <div>本期期末应达到：{periodExplain.endLabel} 的目标净资产是 {formatCny(periodExplain.targetNetWorth)}。</div>
-            {periodExplain.targetIncrease <= 0 ? (
-              <div>本期应增加：期初净资产已经高于本期期末要求，所以本期目标按 ¥0 计算。</div>
-            ) : (
-              <div>本期应增加：{formatCny(periodExplain.targetNetWorth)} - {formatCny(summary.currentPeriodStartNetWorth)} = {formatCny(periodExplain.periodTarget)}。</div>
-            )}
-            <div>当前已增加：{formatCny(summary.currentNetWorth)} - {formatCny(summary.currentPeriodStartNetWorth)} = {formatDelta(periodExplain.actual)}（截至 {periodExplain.currentLabel}）。</div>
-            <div>
-              本期还需：{periodExplain.remaining > 0
-                ? `${formatCny(periodExplain.targetNetWorth)} - ${formatCny(summary.currentNetWorth)} = ${formatCny(periodExplain.remaining)}`
-                : '当前净资产已达到本期期末要求。'}
-            </div>
+              style={{
+                marginTop: 10,
+                overflow: 'hidden',
+                borderRadius: 16,
+                padding: 12,
+                background: 'var(--card)',
+                border: '1px solid var(--hairline)',
+                boxShadow: '0 10px 26px -22px rgba(15, 23, 42, 0.42)',
+                display: 'grid',
+                gap: 8,
+                fontSize: 11,
+                fontWeight: 650,
+                color: 'var(--muted-text)',
+              }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text)' }}>
+                {periodExplain.startLabel} 到 {periodExplain.endLabel}
+              </div>
+              <div>这是当前月度周期；周期终点取下一个月度开始日和目标日里更早的日期。</div>
+              <div>总目标路径：{formatShortGoalDate(summary.startDate, periodDateContext)} 从 {formatCny(summary.startNetWorth)} 出发，到 {formatShortGoalDate(summary.targetDate, periodDateContext)} 达到 {formatCny(summary.targetAmount)}，中间按天平均推进。</div>
+              <div>本期起点：{periodExplain.startLabel} 的净资产按 {formatCny(summary.currentPeriodStartNetWorth)} 计算。</div>
+              <div>本期期末应达到：{periodExplain.endLabel} 的目标净资产是 {formatCny(periodExplain.targetNetWorth)}。</div>
+              {periodExplain.targetIncrease <= 0 ? (
+                <div>本期应增加：期初净资产已经高于本期期末要求，所以本期目标按 ¥0 计算。</div>
+              ) : (
+                <div>本期应增加：{formatCny(periodExplain.targetNetWorth)} - {formatCny(summary.currentPeriodStartNetWorth)} = {formatCny(periodExplain.periodTarget)}。</div>
+              )}
+              <div>当前已增加：{formatCny(summary.currentNetWorth)} - {formatCny(summary.currentPeriodStartNetWorth)} = {formatDelta(periodExplain.actual)}（截至 {periodExplain.currentLabel}）。</div>
+              <div>
+                本期还需：{periodExplain.remaining > 0
+                  ? `${formatCny(periodExplain.targetNetWorth)} - ${formatCny(summary.currentNetWorth)} = ${formatCny(periodExplain.remaining)}`
+                  : '当前净资产已达到本期期末要求。'}
+              </div>
             </motion.div>
           ) : null}
         </AnimatePresence>
-        <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 10 }}>{heroLabel}</div>
+        <div className="muted" style={{ fontSize: 12, fontWeight: 700, marginTop: 10 }}>当前净资产</div>
         <motion.div
           key={heroValue}
           initial={{ opacity: 0, y: 8 }}
@@ -856,6 +846,29 @@ function SavingsStatusCard(props: {
         </motion.div>
         <div className="muted" style={{ fontSize: 12, fontWeight: 650, marginTop: 6 }}>
           {heroSub}
+        </div>
+
+        <div
+          style={{
+            marginTop: 10,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            borderRadius: 14,
+            padding: '10px 12px',
+            border: '1px solid rgba(15, 23, 42, 0.06)',
+            background: 'rgba(248, 250, 252, 0.66)',
+            boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.76)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 999, background: periodAction.tone, flex: '0 0 auto' }} />
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted-text)' }}>{periodAction.label}</div>
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: periodAction.tone, textAlign: 'right', overflowWrap: 'anywhere' }}>
+            {periodAction.value}
+          </div>
         </div>
 
         <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
@@ -905,17 +918,24 @@ function SavingsMilestoneStrip(props: { summary: SavingsGoalSummary; color: stri
         style={{
           position: 'relative',
           height: 12,
-          borderRadius: 999,
-          background: 'rgba(100,116,139,0.14)',
-          overflow: 'hidden',
         }}
       >
-        <motion.div
-          initial={{ width: 0 }}
-          animate={{ width: progressPct }}
-          transition={progressFillTransition}
-          style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 10px -3px ${color}` }}
-        />
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 999,
+            background: 'rgba(100,116,139,0.14)',
+            overflow: 'hidden',
+          }}
+        >
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: progressPct }}
+            transition={progressFillTransition}
+            style={{ height: '100%', borderRadius: 999, background: color, boxShadow: `0 0 10px -3px ${color}` }}
+          />
+        </div>
         <motion.span
           aria-hidden="true"
           initial={{ opacity: 0, scale: 0.7 }}
@@ -1748,6 +1768,14 @@ export function StatsScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
 
           {currentStats ? (
             <>
+              <div className="iosStatsRangeHeader">
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 800 }}>当前快照概览</div>
+                  <div className="muted" style={{ marginTop: 4, fontSize: 12, fontWeight: 600 }}>
+                    基于最新一条快照，不受下方区间选择影响
+                  </div>
+                </div>
+              </div>
               <motion.div
                 className="card"
                 initial={scaleInInitial}

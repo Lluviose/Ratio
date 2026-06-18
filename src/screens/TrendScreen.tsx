@@ -421,7 +421,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   }
 
   return (
-    <div className="stack iosInsightsPage iosTrendPage" style={{ padding: '0 16px', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
+    <div className="stack iosInsightsPage iosTrendPage" style={{ padding: '0 16px calc(92px + var(--safe-bottom))', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
       <motion.div
         initial={trendPageInitial}
         animate={fadeUpAnimate}
