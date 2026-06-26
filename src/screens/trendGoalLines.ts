@@ -3,12 +3,11 @@ import {
   dateKeyToUtcDays,
   diffDateDays,
   getActiveSavingsGoalDate,
-  getGoalComparisonValue,
-  getLinearGoalValue,
   getSavingsProjectionStartDate,
   type SavingsGoal,
   type SavingsGoalSummary,
 } from '../lib/savingsGoal'
+import { normalizeMoney } from '../lib/money'
 
 export type TrendPoint = {
   date: string
@@ -80,6 +79,27 @@ function interpolateValue(startValue: number, endValue: number, startDate: strin
   return startValue + (endValue - startValue) * (offsetDays / totalDays)
 }
 
+// 目标路径线从"起点日·起点净值"线性走到"目标日·目标金额"。起点随最新记录日
+// 实时移动，避免路径线在设定目标日到今天这段历史区间与实际净值线长段重叠。
+// holdAfterTarget 控制目标日之后是否保持目标金额（goalComparison 保持，goalTarget 置空）。
+function getRequiredPathValue(
+  startDate: string,
+  startNet: number,
+  targetAmount: number,
+  targetDate: string,
+  dateKey: string,
+  holdAfterTarget: boolean,
+): number | null {
+  if (dateKey < startDate) return null
+  if (dateKey > targetDate) return holdAfterTarget ? normalizeMoney(targetAmount) : null
+  const totalDays = diffDateDays(startDate, targetDate)
+  const offsetDays = diffDateDays(startDate, dateKey)
+  if (totalDays == null || totalDays <= 0) return normalizeMoney(targetAmount)
+  if (offsetDays == null || offsetDays <= 0) return normalizeMoney(startNet)
+  const progress = offsetDays / totalDays
+  return normalizeMoney(startNet + (targetAmount - startNet) * progress)
+}
+
 function findLastRecordedPointBefore(points: TrendPoint[], dateKey: string) {
   let best: TrendPoint | null = null
   for (const point of points) {
@@ -124,7 +144,19 @@ export function withGoalTrendLines(
   const firstDate = points[0]?.dateKey
   if (!firstDate) return points
   const lineClipStartDate = clipStartDate && dateKeyToUtcDays(clipStartDate) != null ? clipStartDate : firstDate
-  const goalLineStartDate = goal.startDate > lineClipStartDate ? goal.startDate : lineClipStartDate
+
+  const projectionStartDate = getSavingsProjectionStartDate(summary.latestDate)
+  const forecastStartDate = projectionStartDate >= firstDate
+    ? projectionStartDate
+    : getActiveSavingsGoalDate(summary.latestDate)
+  // 目标路径线起点随最新记录日/今天实时移动：设定目标日已过时从最新记录日出发，
+  // 设定目标日还在未来时仍从设定目标日出发（目标尚未启动）。
+  const goalLineStartDate = [lineClipStartDate, goal.startDate, forecastStartDate].reduce(
+    (acc, date) => (date > acc ? date : acc),
+  )
+  // 设定目标日还在未来时，起点净值用用户设定的起始净值；否则对齐当前实际净值，
+  // 让目标路径线与实际净值线、预测线在起点相连。
+  const goalLineStartNet = goal.startDate > forecastStartDate ? goal.startNetWorth : summary.currentNetWorth
 
   const byDate = new Map<string, TrendPoint>()
   for (const point of points) {
@@ -143,10 +175,6 @@ export function withGoalTrendLines(
     if (!byDate.has(dateKey)) byDate.set(dateKey, makeGoalPoint(dateKey, label ?? labelForDate(dateKey)))
   }
 
-  const projectionStartDate = getSavingsProjectionStartDate(summary.latestDate)
-  const forecastStartDate = projectionStartDate >= firstDate
-    ? projectionStartDate
-    : getActiveSavingsGoalDate(summary.latestDate)
   const targetTrendEnd = getForecastEndDate(forecastStartDate, goal.targetDate, futureCadence)
 
   ensurePoint(targetTrendEnd, targetTrendEnd === goal.targetDate ? '目标' : '展望')
@@ -185,8 +213,12 @@ export function withGoalTrendLines(
 
   const merged = Array.from(byDate.values()).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
   for (const point of merged) {
-    point.goalTarget = point.dateKey >= goalLineStartDate ? getLinearGoalValue(goal, point.dateKey) : null
-    point.goalComparison = point.dateKey >= goalLineStartDate ? getGoalComparisonValue(goal, point.dateKey) : null
+    point.goalTarget = point.dateKey >= goalLineStartDate
+      ? getRequiredPathValue(goalLineStartDate, goalLineStartNet, goal.targetAmount, goal.targetDate, point.dateKey, false)
+      : null
+    point.goalComparison = point.dateKey >= goalLineStartDate
+      ? getRequiredPathValue(goalLineStartDate, goalLineStartNet, goal.targetAmount, goal.targetDate, point.dateKey, true)
+      : null
 
     if (projectionEnd && projectionAnchorDate && summary.avgDailyNetChange != null) {
       let bridgeValue: number | null = null

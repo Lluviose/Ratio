@@ -90,7 +90,7 @@ describe('TrendScreen rendering', () => {
     vi.restoreAllMocks()
   })
 
-  it('connects recorded net and debt lines across synthetic goal points', async () => {
+  it('connects recorded net and debt lines and starts the goal path at the latest record', async () => {
     render(
       <TrendScreen
         snapshots={[
@@ -109,10 +109,13 @@ describe('TrendScreen rendering', () => {
     expect(rechartsState.lines.some((line) => line.dataKey === 'net')).toBe(true)
 
     const chartData = rechartsState.charts.at(-1)?.data ?? []
-    const goalStartPoint = chartData.find((point) => point.dateKey === '2026-05-08')
-    expect(goalStartPoint?.net).toBeUndefined()
+    const latestPoint = chartData.find((point) => point.dateKey === '2026-06-05')
     expect(chartData.find((point) => point.dateKey === '2026-05-07')?.net).toBe(110000)
-    expect(chartData.find((point) => point.dateKey === '2026-06-05')?.net).toBe(120000)
+    expect(latestPoint?.net).toBe(120000)
+    // 设定目标日已过，目标路径线起点移到最新记录日，不再合成设定目标日点
+    expect(chartData.find((point) => point.dateKey === '2026-05-08')).toBeUndefined()
+    // 目标路径线从最新记录日出发，起点对齐实际净值
+    expect(latestPoint?.goalComparison).toBe(120000)
 
     expect(rechartsState.lines.find((line) => line.dataKey === 'net')?.connectNulls).toBe(true)
     expect(rechartsState.lines.find((line) => line.dataKey === 'debt')?.connectNulls).toBe(true)

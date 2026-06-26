@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { withGoalTrendLines } from './trendGoalLines'
 import { buildTrendChartDerived, buildTrendView, type RangeId } from './trendView'
-import { getLinearGoalValue, getSavingsGoalSummary, type SavingsGoal, type SavingsGoalSummary } from '../lib/savingsGoal'
+import { getSavingsGoalSummary, type SavingsGoal, type SavingsGoalSummary } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 
 const goal: SavingsGoal = {
@@ -128,7 +128,7 @@ describe('buildTrendView', () => {
   })
 
   it.each(['30d', '6m', '1y'] satisfies RangeId[])(
-    'keeps real records around a synthetic goal start in %s data',
+    'keeps real records and starts the goal path at the latest record in %s data',
     (range) => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
@@ -147,12 +147,16 @@ describe('buildTrendView', () => {
       const summary = getSavingsGoalSummary(goalStartingAfterClose, snapshots, { monthStartDay: 8 })
       const points = withGoalTrendLines(view.points, goalStartingAfterClose, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
       const dates = points.map((point) => point.dateKey)
+      const latestPoint = points.find((point) => point.dateKey === '2026-06-05')
 
       expect(points.find((point) => point.dateKey === '2026-05-07')?.net).toBe(110000)
-      expect(points.find((point) => point.dateKey === '2026-05-08')?.net).toBeUndefined()
       expect(points.find((point) => point.dateKey === '2026-06-05')?.net).toBe(120000)
-      expect(dates.indexOf('2026-05-07')).toBeLessThan(dates.indexOf('2026-05-08'))
-      expect(dates.indexOf('2026-05-08')).toBeLessThan(dates.indexOf('2026-06-05'))
+      // 设定目标日已过，目标路径线起点移到最新记录日，不再合成设定目标日点
+      expect(dates).not.toContain(goalStartingAfterClose.startDate)
+      expect(dates.indexOf('2026-05-07')).toBeLessThan(dates.indexOf('2026-06-05'))
+      // 目标路径线从最新记录日出发，起点对齐实际净值
+      expect(latestPoint?.goalComparison).toBe(120000)
+      expect(latestPoint?.goalTarget).toBe(120000)
 
       vi.useRealTimers()
     },
@@ -261,7 +265,7 @@ describe('buildTrendChartDerived', () => {
 })
 
 describe('withGoalTrendLines', () => {
-  it('keeps the 30 day domain cutoff but starts an old goal path at the first visible record', () => {
+  it('starts an old goal path at the latest record date within the 30 day range', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
 
@@ -275,20 +279,25 @@ describe('withGoalTrendLines', () => {
     const points = withGoalTrendLines(view.points, goal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
     const dates = points.map((point) => point.dateKey)
     const clipPoint = points.find((point) => point.dateKey === '2026-05-20')
+    const latestPoint = points.find((point) => point.dateKey === '2026-06-05')
 
     expect(view.domainStartDate).toBe('2026-05-06')
     expect(view.clipStartDate).toBe('2026-05-20')
     expect(dates).not.toContain(goal.startDate)
-    expect(dates).not.toContain('2026-05-06')
     expect(points[0]?.dateKey).toBe('2026-05-20')
     expect(clipPoint?.net).toBe(115000)
-    expect(clipPoint?.goalTarget).toBe(getLinearGoalValue(goal, '2026-05-20'))
-    expect(clipPoint?.goalComparison).toBe(getLinearGoalValue(goal, '2026-05-20'))
+    // 设定目标日已过，目标路径线在 clip 点（最新记录日之前）不绘制
+    expect(clipPoint?.goalTarget).toBeNull()
+    expect(clipPoint?.goalComparison).toBeNull()
+    // 目标路径线从最新记录日出发，起点对齐实际净值
+    expect(latestPoint?.net).toBe(120000)
+    expect(latestPoint?.goalTarget).toBe(120000)
+    expect(latestPoint?.goalComparison).toBe(120000)
 
     vi.useRealTimers()
   })
 
-  it('keeps the goal start as the path start when it is inside the current range', () => {
+  it('starts the goal path at the latest record date even when the goal start is inside the range', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
 
@@ -306,22 +315,23 @@ describe('withGoalTrendLines', () => {
     const summary = getSavingsGoalSummary(inRangeGoal, snapshots, { monthStartDay: 8 })
     const points = withGoalTrendLines(view.points, inRangeGoal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
     const dates = points.map((point) => point.dateKey)
-    const beforeGoalPoint = points.find((point) => point.dateKey === '2026-05-20')
-    const goalStartPoint = points.find((point) => point.dateKey === inRangeGoal.startDate)
+    const beforeLatestPoint = points.find((point) => point.dateKey === '2026-05-20')
+    const latestPoint = points.find((point) => point.dateKey === '2026-06-05')
 
     expect(view.domainStartDate).toBe('2026-05-06')
     expect(view.clipStartDate).toBe('2026-05-20')
-    expect(dates).toContain(inRangeGoal.startDate)
-    expect(beforeGoalPoint?.goalComparison).toBeNull()
-    expect(goalStartPoint?.net).toBeUndefined()
-    expect(goalStartPoint?.goalTarget).toBe(inRangeGoal.startNetWorth)
-    expect(goalStartPoint?.goalComparison).toBe(inRangeGoal.startNetWorth)
+    // 设定目标日虽在可见范围内但已过去，路径线起点仍移到最新记录日
+    expect(dates).not.toContain(inRangeGoal.startDate)
+    expect(beforeLatestPoint?.goalComparison).toBeNull()
+    expect(latestPoint?.net).toBe(120000)
+    expect(latestPoint?.goalTarget).toBe(120000)
+    expect(latestPoint?.goalComparison).toBe(120000)
 
     vi.useRealTimers()
   })
 
   it.each(['6m', '1y'] satisfies RangeId[])(
-    'clips an old goal start to the first visible monthly point in %s data',
+    'starts an old goal path at the latest record date in %s data',
     (range) => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-06-05T12:00:00.000Z'))
@@ -351,10 +361,15 @@ describe('withGoalTrendLines', () => {
       const points = withGoalTrendLines(view.points, oldGoal, summary, view.futureCadence, (dateKey) => dateKey, view.clipStartDate)
       const dates = points.map((point) => point.dateKey)
       const clipPoint = points.find((point) => point.dateKey === view.clipStartDate)
+      const latestPoint = points.find((point) => point.dateKey === '2026-06-05')
 
       expect(view.clipStartDate).toBe(view.points[0]?.dateKey)
       expect(dates).not.toContain(oldGoal.startDate)
-      expect(clipPoint?.goalComparison).toBe(getLinearGoalValue(oldGoal, view.clipStartDate!))
+      // clip 点早于最新记录日，目标路径线在此不绘制
+      expect(clipPoint?.goalComparison).toBeNull()
+      // 目标路径线从最新记录日出发，起点对齐实际净值
+      expect(latestPoint?.goalComparison).toBe(120000)
+      expect(latestPoint?.goalTarget).toBe(120000)
 
       vi.useRealTimers()
     },
