@@ -30,3 +30,6 @@ test-results
 
 # Design reference images (local only)
 项目设计参考图片/
+
+# Local agent working files (planning scripts, logs)
+.codex/

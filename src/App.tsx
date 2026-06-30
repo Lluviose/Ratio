@@ -580,7 +580,7 @@ export default function App() {
                     >
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="stats" />}>
-                          <StatsScreen snapshots={liveSnapshots} colors={themeColors} />
+                          <StatsScreen snapshots={liveSnapshots} accountOps={accountOps.ops} colors={themeColors} />
                         </Suspense>
                       </LazyLoadBoundary>
                     </motion.div>

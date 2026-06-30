@@ -1,40 +1,49 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildMonthlyDisposablePlan,
+  buildDisposableEstimate,
   coerceMonthlyEstimatedIncome,
+  type DisposableEstimateInput,
 } from './monthlyDisposable'
+import type { AccountOp } from './accountOps'
+import type { AccountTypeId } from './accounts'
+import { normalizeMoney } from './money'
 import type { SavingsGoalSummary } from './savingsGoal'
+import type { Snapshot } from './snapshots'
+
+function snap(date: string, net: number, cash = net): Snapshot {
+  return { date, net, debt: 0, cash, invest: 0, fixed: 0, receivable: 0 }
+}
 
 const baseSummary: SavingsGoalSummary = {
-  latestDate: '2026-06-15',
-  currentNetWorth: 110200,
-  targetAmount: 124000,
+  latestDate: '2026-07-01',
+  currentNetWorth: 109000,
+  targetAmount: 200000,
   targetDate: '2026-12-31',
   startDate: '2026-01-01',
   startNetWorth: 100000,
-  currentPeriodStartDate: '2026-06-01',
-  currentPeriodStartNetWorth: 110000,
-  currentPeriodActual: 200,
-  currentPeriodTargetNetWorth: 111934.07,
+  currentPeriodStartDate: '2026-07-01',
+  currentPeriodStartNetWorth: 109000,
+  currentPeriodActual: 0,
+  currentPeriodTargetNetWorth: 110934.07,
   currentPeriodTarget: 1934.07,
-  currentPeriodRemaining: 1734.07,
-  currentPeriodDelta: -1734.07,
-  currentPeriodEndDate: '2026-07-01',
+  currentPeriodRemaining: 1934.07,
+  currentPeriodDelta: -1934.07,
+  currentPeriodEndDate: '2026-08-01',
   currentPeriodIsOnTrack: false,
-  progress: 0.8887,
-  remaining: 13800,
-  daysLeft: 199,
-  requiredDaily: 69.35,
-  requiredMonthly: 2110.84,
-  avgDailyNetChange: 66.23,
+  progress: 0.545,
+  remaining: 91000,
+  daysLeft: 183,
+  requiredDaily: 497.27,
+  requiredMonthly: 15136.61,
+  avgDailyNetChange: 100,
   avgDailyNetChangeMethod: 'monthly-close',
-  avgDailyNetChangeSampleDays: 165,
-  avgDailyNetChangeSnapshotCount: 6,
+  avgDailyNetChangeSampleDays: 91,
+  avgDailyNetChangeSnapshotCount: 4,
   projectedDate: '2027-01-10',
-  projectedNetAtTargetDate: 123380,
-  targetValueAtLatest: 110900,
-  targetDeltaAtLatest: -700,
-  paceDailyDelta: -3.12,
+  projectedNetAtTargetDate: 127000,
+  targetValueAtLatest: 109000,
+  targetDeltaAtLatest: 0,
+  paceDailyDelta: -397.27,
   isComplete: false,
   isDueToday: false,
   isPastDue: false,
@@ -45,69 +54,294 @@ function summary(overrides: Partial<SavingsGoalSummary> = {}): SavingsGoalSummar
   return { ...baseSummary, ...overrides }
 }
 
-describe('monthlyDisposable', () => {
-  it('coerces monthly estimated income to positive normalized money', () => {
+let opSeq = 0
+function adjust(at: string, accountType: AccountTypeId, delta: number): AccountOp {
+  opSeq += 1
+  return { id: `adj-${opSeq}`, kind: 'adjust', at, accountType, accountId: 'a1', delta, before: 0, after: delta }
+}
+function setBalance(at: string, accountType: AccountTypeId, before: number, after: number): AccountOp {
+  opSeq += 1
+  return { id: `set-${opSeq}`, kind: 'set_balance', at, accountType, accountId: 'a1', before, after }
+}
+function transfer(at: string, amount: number): AccountOp {
+  opSeq += 1
+  return {
+    id: `tr-${opSeq}`,
+    kind: 'transfer',
+    at,
+    accountType: 'bank_card',
+    fromId: 'a1',
+    toId: 'a2',
+    amount,
+    fromBefore: amount,
+    fromAfter: 0,
+    toBefore: 0,
+    toAfter: amount,
+  }
+}
+
+// Monthly snapshots used by the ops-driven cases; +3000 net/month, ~¥100/day.
+const monthlySnapshots: Snapshot[] = [
+  snap('2026-04-01', 100000),
+  snap('2026-05-01', 103000),
+  snap('2026-06-01', 106000),
+  snap('2026-07-01', 109000, 50000),
+]
+
+function build(input: Partial<DisposableEstimateInput>): ReturnType<typeof buildDisposableEstimate> {
+  return buildDisposableEstimate({
+    snapshots: input.snapshots ?? [],
+    accountOps: input.accountOps ?? [],
+    summary: input.summary ?? null,
+    monthStartDay: input.monthStartDay ?? 1,
+    paceAlgorithm: input.paceAlgorithm,
+    manualIncome: input.manualIncome ?? 0,
+    latestSnapshot: input.latestSnapshot,
+  })
+}
+
+describe('coerceMonthlyEstimatedIncome', () => {
+  it('coerces to positive normalized money', () => {
     expect(coerceMonthlyEstimatedIncome(12345.678)).toBe(12345.68)
     expect(coerceMonthlyEstimatedIncome(12000)).toBe(12000)
     expect(coerceMonthlyEstimatedIncome(-1)).toBe(0)
     expect(coerceMonthlyEstimatedIncome(Number.NaN)).toBe(0)
     expect(coerceMonthlyEstimatedIncome('12000')).toBe(0)
   })
+})
 
-  it('subtracts the current period target from estimated monthly income', () => {
-    const plan = buildMonthlyDisposablePlan(12000, summary())
+describe('buildDisposableEstimate', () => {
+  it('uses a manual income override and reserves the current-period savings target', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: summary(),
+      manualIncome: 12000,
+    })
 
-    expect(plan.targetSavings).toBe(1934.07)
-    expect(plan.targetDisposable).toBe(10065.93)
-    expect(plan.currentPeriodRemaining).toBe(1734.07)
-    expect(plan.isIncomeShort).toBe(false)
-    expect(plan.incomeGap).toBe(0)
-    expect(plan.targetSource).toBe('current-period')
+    expect(result.incomeSource).toBe('manual')
+    expect(result.estimatedIncome).toBe(12000)
+    expect(result.requiredSavings).toBe(1934.07)
+    expect(result.targetSource).toBe('current-period')
+    expect(result.disposable).toBe(10065.93)
+    expect(result.isIncomeShort).toBe(false)
+    expect(result.incomeGap).toBe(0)
+    expect(result.headlineMode).toBe('disposable')
+    expect(result.liquidBuffer).toBe(109000)
   })
 
-  it('marks the income gap when target savings exceed estimated income', () => {
-    const plan = buildMonthlyDisposablePlan(1000, summary())
+  it('flags an income shortfall when reservation exceeds income', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: summary(),
+      manualIncome: 1000,
+    })
 
-    expect(plan.targetDisposable).toBe(-934.07)
-    expect(plan.isIncomeShort).toBe(true)
-    expect(plan.incomeGap).toBe(934.07)
+    expect(result.disposable).toBe(-934.07)
+    expect(result.isIncomeShort).toBe(true)
+    expect(result.incomeGap).toBe(934.07)
   })
 
-  it('sets target savings to zero when the savings goal is complete', () => {
-    const plan = buildMonthlyDisposablePlan(
-      12000,
-      summary({
-        currentPeriodTarget: 1934.07,
-        currentPeriodRemaining: 1734.07,
-        isComplete: true,
-        remaining: 0,
-      }),
-    )
+  it('estimates income and expense from liquid account operations (median, spike-robust)', () => {
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: summary(),
+      accountOps: [
+        adjust('2026-04-15T12:00:00.000Z', 'bank_card', 7000),
+        adjust('2026-04-20T12:00:00.000Z', 'bank_card', -3000),
+        adjust('2026-05-15T12:00:00.000Z', 'bank_card', 8000),
+        adjust('2026-05-20T12:00:00.000Z', 'bank_card', -5000),
+        adjust('2026-06-15T12:00:00.000Z', 'bank_card', 9000),
+        adjust('2026-06-20T12:00:00.000Z', 'bank_card', -4000),
+        // Current (partial) month — must be excluded from the medians.
+        adjust('2026-07-01T00:00:00.000Z', 'bank_card', 50000),
+        // Noise that must be ignored.
+        transfer('2026-05-10T12:00:00.000Z', 6000),
+        setBalance('2026-05-12T12:00:00.000Z', 'fund', 10000, 30000),
+      ],
+    })
 
-    expect(plan.targetSavings).toBe(0)
-    expect(plan.targetDisposable).toBe(12000)
-    expect(plan.currentPeriodRemaining).toBe(0)
-    expect(plan.targetSource).toBe('complete')
+    expect(result.incomeSource).toBe('ops')
+    expect(result.estimatedIncome).toBe(8000)
+    expect(result.estimatedExpense).toBe(4000)
+    expect(result.monthsSampled).toBe(3)
+    expect(result.disposable).toBe(6065.93)
+    expect(result.confidence).toBe('high')
   })
 
-  it('falls back to the overdue remaining gap when there is no current period target', () => {
-    const plan = buildMonthlyDisposablePlan(
-      6000,
-      summary({
-        currentPeriodTarget: null,
-        currentPeriodRemaining: null,
-        currentPeriodTargetNetWorth: null,
-        currentPeriodDelta: null,
-        currentPeriodEndDate: null,
-        currentPeriodIsOnTrack: null,
-        isPastDue: true,
-        remaining: 4500,
-      }),
-    )
+  it('reconstructs income from surplus + expense when only outflows are recorded', () => {
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: null,
+      accountOps: [
+        adjust('2026-04-15T12:00:00.000Z', 'bank_card', -3000),
+        adjust('2026-05-15T12:00:00.000Z', 'bank_card', -5000),
+        adjust('2026-06-15T12:00:00.000Z', 'bank_card', -4000),
+      ],
+    })
 
-    expect(plan.targetSavings).toBe(4500)
-    expect(plan.targetDisposable).toBe(1500)
-    expect(plan.currentPeriodRemaining).toBe(4500)
-    expect(plan.targetSource).toBe('past-due')
+    expect(result.estimatedExpense).toBe(4000)
+    expect(result.incomeSource).toBe('surplus')
+    expect(result.monthlySurplus).not.toBeNull()
+    expect(result.estimatedIncome).toBeCloseTo((result.monthlySurplus ?? 0) + 4000, 2)
+    expect(result.confidence).toBe('medium')
+  })
+
+  it('excludes transfers and invest revaluations from flow inference', () => {
+    const result = build({
+      snapshots: monthlySnapshots,
+      accountOps: [
+        transfer('2026-04-15T12:00:00.000Z', 6000),
+        transfer('2026-05-15T12:00:00.000Z', 4000),
+        setBalance('2026-04-16T12:00:00.000Z', 'fund', 10000, 25000),
+        setBalance('2026-05-16T12:00:00.000Z', 'stock', 5000, 1000),
+      ],
+    })
+
+    expect(result.flowOpsUsed).toBe(0)
+    expect(result.estimatedExpense).toBeNull()
+    expect(result.incomeSource).not.toBe('ops')
+  })
+
+  it('treats reconciled liquid balances as flow but ignores opening (before=0) balances', () => {
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: summary(),
+      accountOps: [
+        // Opening balances from account creation — pre-existing money, not income.
+        setBalance('2026-04-10T12:00:00.000Z', 'bank_card', 0, 40000),
+        setBalance('2026-05-10T12:00:00.000Z', 'cash', 0, 12000),
+        // Real reconciled inflows on existing liquid accounts.
+        setBalance('2026-04-15T12:00:00.000Z', 'bank_card', 2000, 8000),
+        setBalance('2026-05-15T12:00:00.000Z', 'bank_card', 3000, 10000),
+        setBalance('2026-06-15T12:00:00.000Z', 'bank_card', 1000, 8000),
+      ],
+    })
+
+    expect(result.incomeSource).toBe('ops')
+    expect(result.estimatedIncome).toBe(7000) // median of +6000, +7000, +7000
+    expect(result.flowOpsUsed).toBe(3)
+  })
+
+  it('does not let unrecorded directions drag income/expense medians to zero', () => {
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: summary(),
+      accountOps: [
+        // April: only an inflow recorded (no outflow ops this month)
+        adjust('2026-04-15T12:00:00.000Z', 'bank_card', 8000),
+        // May: only an outflow recorded (no inflow ops this month)
+        adjust('2026-05-15T12:00:00.000Z', 'bank_card', -5000),
+        // June: only an inflow recorded
+        adjust('2026-06-15T12:00:00.000Z', 'bank_card', 9000),
+        // Current (partial) month — excluded from medians.
+        adjust('2026-07-01T12:00:00.000Z', 'bank_card', 50000),
+      ],
+    })
+
+    // Inflow median over months that recorded income: median([8000, 9000]) = 8500
+    expect(result.incomeSource).toBe('ops')
+    expect(result.estimatedIncome).toBe(8500)
+    // Outflow median over the single outflow month: 5000 — not 0 from the two inflow-only months.
+    expect(result.estimatedExpense).toBe(5000)
+    expect(result.monthsSampled).toBe(3)
+  })
+
+  it('reserves nothing when there is no goal', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: null,
+      manualIncome: 5000,
+    })
+
+    expect(result.hasGoal).toBe(false)
+    expect(result.requiredSavings).toBeNull()
+    expect(result.targetSource).toBe('none')
+    expect(result.disposable).toBe(5000)
+    expect(result.savingsCovered).toBeNull()
+  })
+
+  it('reserves nothing when the goal is complete', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: summary({ isComplete: true, remaining: 0 }),
+      manualIncome: 8000,
+    })
+
+    expect(result.requiredSavings).toBe(0)
+    expect(result.targetSource).toBe('complete')
+    expect(result.disposable).toBe(8000)
+  })
+
+  it('falls back to the overdue remaining gap when there is no current-period target', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: summary({ currentPeriodTarget: null, isPastDue: true, remaining: 4500 }),
+      manualIncome: 6000,
+    })
+
+    expect(result.requiredSavings).toBe(4500)
+    expect(result.targetSource).toBe('past-due')
+    expect(result.disposable).toBe(1500)
+  })
+
+  it('leads with the realized surplus when income cannot be estimated', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: null,
+    })
+
+    expect(result.estimatedIncome).toBeNull()
+    expect(result.incomeSource).toBe('none')
+    expect(result.disposable).toBeNull()
+    expect(result.monthlySurplus).not.toBeNull()
+    expect(result.surplusSlack).toBe(result.monthlySurplus)
+    expect(result.headlineMode).toBe('surplus')
+    expect(result.confidence).toBe('low')
+  })
+
+  it('returns an empty estimate when there are no snapshots', () => {
+    const result = build({ snapshots: [], summary: null })
+
+    expect(result.headlineMode).toBe('empty')
+    expect(result.monthlySurplus).toBeNull()
+    expect(result.disposable).toBeNull()
+    expect(result.confidence).toBe('none')
+    expect(result.liquidBuffer).toBe(0)
+  })
+
+  it('reports the liquid buffer runway and caps spending by available cash', () => {
+    const result = build({
+      snapshots: [snap('2026-04-01', 50000), snap('2026-07-01', 60000, 2000)],
+      summary: null,
+      manualIncome: 10000,
+      accountOps: [
+        adjust('2026-04-15T12:00:00.000Z', 'bank_card', -3000),
+        adjust('2026-05-15T12:00:00.000Z', 'bank_card', -5000),
+        adjust('2026-06-15T12:00:00.000Z', 'bank_card', -4000),
+      ],
+    })
+
+    expect(result.liquidBuffer).toBe(2000)
+    expect(result.estimatedExpense).toBe(4000)
+    expect(result.monthsOfExpenseCovered).toBe(0.5)
+    expect(result.limitedByLiquidity).toBe(true)
+  })
+
+  it('keeps disposable = income − reservation across a grid of inputs (invariant)', () => {
+    const snapshots = [snap('2026-04-01', 100000), snap('2026-07-01', 109000)]
+    for (const income of [0, 1000, 5000, 18000.55, 99999.99]) {
+      for (const target of [0, 250.5, 1934.07, 25000]) {
+        const result = build({ snapshots, summary: summary({ currentPeriodTarget: target }), manualIncome: income })
+        const reserve = Math.max(0, normalizeMoney(target))
+        const expected = income > 0 ? normalizeMoney(income - reserve) : null
+        expect(result.disposable).toBe(expected)
+        if (result.disposable != null) {
+          expect(result.incomeGap).toBe(result.disposable < 0 ? normalizeMoney(-result.disposable) : 0)
+          expect(result.isIncomeShort).toBe(result.disposable < 0)
+        }
+        expect(result.liquidBuffer).toBeGreaterThanOrEqual(0)
+        expect(result.monthsOfExpenseCovered).toBeNull()
+      }
+    }
   })
 })
