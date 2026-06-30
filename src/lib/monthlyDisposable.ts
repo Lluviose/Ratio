@@ -4,6 +4,7 @@ import { addMoney, normalizeMoney, subtractMoney } from './money'
 import { clampMonthStartDay, monthKeyForDateKey } from './monthStart'
 import {
   dateKeyToUtcDays,
+  diffDateDays,
   getNetChangePace,
   type NetChangePaceMethod,
   type SavingsGoalSummary,
@@ -36,7 +37,13 @@ export type DisposableHeadlineMode = 'disposable' | 'surplus' | 'empty'
 export type DisposableEstimate = {
   // headline
   headlineMode: DisposableHeadlineMode
-  /** estimatedIncome − requiredSavings; null when income can't be estimated. */
+  /**
+   * Reconciled headline: (income still expected this period) + (net worth vs the
+   * period's path-end target). At period start this is ≈ estimatedIncome − target;
+   * at period end it converges on the savings-status gap. null when income can't
+   * be estimated. Falls back to estimatedIncome − requiredSavings when no
+   * current-period path exists to reconcile against.
+   */
   disposable: number | null
   /** monthlySurplus − requiredSavings; the snapshot-only fallback headline. */
   surplusSlack: number | null
@@ -55,6 +62,22 @@ export type DisposableEstimate = {
   targetSource: DisposableTargetSource
   /** Is the realized surplus already covering what the goal needs this month? */
   savingsCovered: boolean | null
+
+  // period reconciliation (blends the income forecast with the realized net-worth
+  // position so the headline tracks the savings status toward month-end instead of
+  // staying pinned to a period-start forecast)
+  /** Income still expected this period = estimatedIncome × (1 − elapsed fraction). */
+  remainingExpectedIncome: number | null
+  /** currentNetWorth − path target at period end; null when not reconciling. */
+  currentPeriodDelta: number | null
+  /** Realized net-worth growth since the period start. */
+  currentPeriodActual: number | null
+  /** The period's required increment (path target − period start net worth; 0 when ahead). */
+  currentPeriodTarget: number | null
+  /** How far the realized net worth still is below the period target (≥ 0). */
+  currentPeriodRemaining: number | null
+  /** Fraction of the current period elapsed (0 at start, 1 at end). */
+  periodElapsedFraction: number
 
   // liquidity ("other factors")
   liquidBuffer: number
@@ -278,8 +301,44 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
   const reserve = requiredSavings ?? 0
   const savingsCovered = monthlySurplus == null || requiredSavings == null ? null : monthlySurplus >= requiredSavings
 
-  // 6. Headline disposable = income − reservation.
-  const disposable = estimatedIncome == null ? null : normalizeMoney(estimatedIncome - reserve)
+  // 5b. Reconcile the income forecast with the goal's actual this-period performance.
+  // disposable = (income still expected this period) + (net worth vs path-end target).
+  // - Period start (no income received, actual ≈ 0): ≈ estimatedIncome − target (pure forecast).
+  // - Period end (income received and reflected in net worth): ≈ currentPeriodDelta, matching
+  //   the savings-status gap so the two cards never disagree at month-end.
+  // "Now" is the latest snapshot date (data-driven, not the wall clock) so the estimate
+  // stays stable across reloads and tests don't become date-sensitive.
+  const periodStart = summary?.currentPeriodStartDate ?? null
+  const periodEnd = summary?.currentPeriodEndDate ?? null
+  const periodNow = summary?.latestDate ?? referenceDateKey
+  let periodElapsedFraction = 0
+  if (periodStart && periodEnd && periodNow) {
+    const totalDays = diffDateDays(periodStart, periodEnd)
+    const elapsedDays = diffDateDays(periodStart, periodNow)
+    if (totalDays != null && totalDays > 0 && elapsedDays != null && elapsedDays >= 0) {
+      periodElapsedFraction = Math.min(1, elapsedDays / totalDays)
+    }
+  }
+  const canReconcile = !!(summary && !summary.isComplete && summary.currentPeriodTarget != null)
+  const currentPeriodDelta = canReconcile && summary ? summary.currentPeriodDelta : null
+  const currentPeriodActual = summary ? summary.currentPeriodActual : null
+  const currentPeriodTarget = canReconcile && summary ? summary.currentPeriodTarget : null
+  const currentPeriodRemaining = canReconcile && summary ? summary.currentPeriodRemaining : null
+  const remainingExpectedIncome = estimatedIncome != null
+    ? normalizeMoney(estimatedIncome * (1 - periodElapsedFraction))
+    : null
+
+  // 6. Headline disposable.
+  let disposable: number | null
+  if (estimatedIncome == null) {
+    disposable = null
+  } else if (currentPeriodDelta != null && remainingExpectedIncome != null) {
+    // Reconciled: blend the remaining income forecast with the realized net-worth position.
+    disposable = normalizeMoney(remainingExpectedIncome + currentPeriodDelta)
+  } else {
+    // No current-period path to reconcile against — fall back to the pure forecast.
+    disposable = normalizeMoney(estimatedIncome - reserve)
+  }
   const isIncomeShort = disposable != null && disposable < 0
   const incomeGap = disposable != null && disposable < 0 ? normalizeMoney(-disposable) : 0
   const surplusSlack = monthlySurplus == null ? null : normalizeMoney(monthlySurplus - reserve)
@@ -322,6 +381,12 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
     requiredSavings,
     targetSource,
     savingsCovered,
+    remainingExpectedIncome,
+    currentPeriodDelta,
+    currentPeriodActual,
+    currentPeriodTarget,
+    currentPeriodRemaining,
+    periodElapsedFraction,
     liquidBuffer,
     monthsOfExpenseCovered,
     limitedByLiquidity,

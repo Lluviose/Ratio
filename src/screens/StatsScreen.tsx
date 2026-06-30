@@ -423,6 +423,13 @@ function disposableHeroSub(estimate: DisposableEstimate) {
     }
     return '你最近实际存下的钱'
   }
+  // Reconciled with the goal's actual this-period performance: the headline already
+  // blends remaining income with the realized net-worth position, so describe the
+  // outcome in the same language as the savings-status card.
+  if (estimate.currentPeriodDelta != null) {
+    if (estimate.isIncomeShort) return `距本期储蓄目标还差 ${formatCny(estimate.incomeGap)}`
+    return `覆盖本期储蓄目标后余 ${formatCny(estimate.disposable ?? 0)}`
+  }
   if (estimate.isIncomeShort) return `预估收入还差 ${formatCny(estimate.incomeGap)} 才够本期储蓄`
   if (estimate.requiredSavings && estimate.requiredSavings > 0) return `已预留本期目标 ${formatCny(estimate.requiredSavings)}`
   return '本月可自由支配的金额'
@@ -501,14 +508,23 @@ function DisposableFundsCard(props: {
       : disposableHeroTone(estimate.disposable, color)
 
   // Decomposition bar: where the base amount (income, or realized surplus) goes.
-  const baseAmount = isSurplus ? estimate.monthlySurplus ?? 0 : estimate.estimatedIncome ?? 0
-  const reserveNeed = estimate.requiredSavings ?? 0
+  // In reconciled mode the "pot" is the realized net-worth growth plus the income
+  // still expected this period, measured against the period's required increment;
+  // pot − reserveNeed then equals the reconciled disposable.
+  const reconciled = !isSurplus && !isEmpty && estimate.currentPeriodDelta != null
+  const baseAmount = isSurplus
+    ? estimate.monthlySurplus ?? 0
+    : reconciled
+      ? Math.max(0, (estimate.currentPeriodActual ?? 0) + (estimate.remainingExpectedIncome ?? 0))
+      : estimate.estimatedIncome ?? 0
+  const reserveNeed = reconciled ? estimate.currentPeriodTarget ?? 0 : estimate.requiredSavings ?? 0
   const showBar = !isEmpty && baseAmount > 0 && reserveNeed > 0
   const barTotal = Math.max(baseAmount, reserveNeed, 1)
   const coveredReserve = Math.min(baseAmount, reserveNeed)
   const freePart = Math.max(0, baseAmount - reserveNeed)
   const shortfallPart = Math.max(0, reserveNeed - baseAmount)
   const freeLabel = isSurplus ? '可多花' : '可支配'
+  const reserveLabel = reconciled ? '本期应存' : '预留目标'
   const accentOpacity = isEmpty ? 0.05 : (heroValueRaw ?? 0) >= 0 ? 0.1 : 0.06
 
   return (
@@ -625,10 +641,11 @@ function DisposableFundsCard(props: {
                 color: 'var(--muted-text)',
               }}
             >
-              <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>可支配</span> = 预估月收入 − 本期应存目标。</div>
+              <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>可支配</span> = 本期尚需收入 + 已实现净值对本期目标的差额。月初是“预估收入−目标”的预测；月末收入到账后与储蓄状态的本期缺口一致。</div>
               <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>预估月收入</span>：优先用你手动设置的金额；否则按流动账户的变动记录估算（已排除转账和投资估值波动）；记录不足时用净资产增长反推。</div>
               <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>预估月支出</span>：取近几个月流动账户净流出的中位数，抗单月波动。</div>
               <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>月度结余</span>：净资产的月均增长，代表你实际存下的钱。</div>
+              <div><span style={{ color: 'var(--text)', fontWeight: 800 }}>本期应存</span>：储蓄目标路径在本月要求增加的净值；月末用它和已实现净值对账，避免预算停在期初预测。</div>
               <div>收入/支出来自现金流量，结余来自净资产，口径不同、不一定相等；记录越多越准。</div>
             </motion.div>
           ) : null}
@@ -680,7 +697,7 @@ function DisposableFundsCard(props: {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 11, fontWeight: 650, flexWrap: 'wrap' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: 'rgba(245, 158, 11, 0.9)' }} />
-                <span className="muted">预留目标 {formatCny(reserveNeed)}</span>
+                <span className="muted">{reserveLabel} {formatCny(reserveNeed)}</span>
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: shortfallPart > 0 ? 'rgba(239,68,68,0.9)' : color }} />

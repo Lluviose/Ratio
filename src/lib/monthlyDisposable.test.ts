@@ -327,11 +327,22 @@ describe('buildDisposableEstimate', () => {
     expect(result.limitedByLiquidity).toBe(true)
   })
 
-  it('keeps disposable = income − reservation across a grid of inputs (invariant)', () => {
+  it('keeps disposable = income − reservation across a grid of inputs (period-start invariant)', () => {
     const snapshots = [snap('2026-04-01', 100000), snap('2026-07-01', 109000)]
     for (const income of [0, 1000, 5000, 18000.55, 99999.99]) {
       for (const target of [0, 250.5, 1934.07, 25000]) {
-        const result = build({ snapshots, summary: summary({ currentPeriodTarget: target }), manualIncome: income })
+        // Latest snapshot lands on the period start ⇒ elapsed = 0 ⇒ the reconciled
+        // formula reduces to estimatedIncome + currentPeriodDelta. With actual = 0
+        // and not ahead, currentPeriodDelta = −target, so disposable = income − target.
+        const result = build({
+          snapshots,
+          summary: summary({
+            currentPeriodTarget: target,
+            currentPeriodDelta: -target,
+            currentPeriodRemaining: target,
+          }),
+          manualIncome: income,
+        })
         const reserve = Math.max(0, normalizeMoney(target))
         const expected = income > 0 ? normalizeMoney(income - reserve) : null
         expect(result.disposable).toBe(expected)
@@ -343,5 +354,79 @@ describe('buildDisposableEstimate', () => {
         expect(result.monthsOfExpenseCovered).toBeNull()
       }
     }
+  })
+
+  it('reconciles disposable with the realized period gap once the period is over', () => {
+    // Latest snapshot lands on the period end ⇒ elapsed = 1 ⇒ no income is still
+    // expected, so the headline follows currentPeriodDelta (the realized gap)
+    // instead of the stale "income − full target" forecast.
+    const result = build({
+      snapshots: [snap('2026-07-01', 109000), snap('2026-08-01', 109800)],
+      summary: summary({
+        latestDate: '2026-08-01',
+        currentNetWorth: 109800,
+        currentPeriodStartDate: '2026-07-01',
+        currentPeriodEndDate: '2026-08-01',
+        currentPeriodStartNetWorth: 109000,
+        currentPeriodActual: 800,
+        currentPeriodTargetNetWorth: 111734.07,
+        currentPeriodTarget: 2734.07,
+        currentPeriodRemaining: 1934.07,
+        currentPeriodDelta: -1934.07,
+      }),
+      manualIncome: 12000,
+    })
+
+    expect(result.periodElapsedFraction).toBe(1)
+    expect(result.remainingExpectedIncome).toBe(0)
+    expect(result.currentPeriodDelta).toBe(-1934.07)
+    // Old forecast would have been 12000 − 2734.07 = +9265.93; reconciled it is the gap.
+    expect(result.disposable).toBe(-1934.07)
+    expect(result.isIncomeShort).toBe(true)
+    expect(result.incomeGap).toBe(1934.07)
+  })
+
+  it('blends the remaining income forecast with the realized gap mid-period', () => {
+    // Halfway through July: part of the income is still expected, part of the gap
+    // is already baked in. disposable = remainingExpectedIncome + currentPeriodDelta,
+    // smoothly between the period-start forecast and the month-end gap.
+    const result = build({
+      snapshots: [snap('2026-07-01', 109000), snap('2026-07-17', 109400)],
+      summary: summary({
+        latestDate: '2026-07-17',
+        currentNetWorth: 109400,
+        currentPeriodStartDate: '2026-07-01',
+        currentPeriodEndDate: '2026-08-01',
+        currentPeriodStartNetWorth: 109000,
+        currentPeriodActual: 400,
+        currentPeriodTargetNetWorth: 110934.07,
+        currentPeriodTarget: 1934.07,
+        currentPeriodRemaining: 1534.07,
+        currentPeriodDelta: -1534.07,
+      }),
+      manualIncome: 12000,
+    })
+
+    // July has 31 days; the 17th ⇒ 16 elapsed days.
+    const elapsed = 16 / 31
+    const expectedRemaining = normalizeMoney(12000 * (1 - elapsed))
+    expect(result.periodElapsedFraction).toBeCloseTo(elapsed, 5)
+    expect(result.remainingExpectedIncome).toBeCloseTo(expectedRemaining, 2)
+    expect(result.disposable).toBeCloseTo(normalizeMoney(expectedRemaining + -1534.07), 2)
+    // Still a forecast, so it stays above the raw month-end gap (−1534.07).
+    expect(result.disposable).toBeGreaterThan(-1534.07)
+  })
+
+  it('falls back to the pure forecast when there is no current-period path', () => {
+    // currentPeriodTarget null (past-due) ⇒ no reconciliation; disposable = income − reserve.
+    const result = build({
+      snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],
+      summary: summary({ currentPeriodTarget: null, currentPeriodDelta: null, isPastDue: true, remaining: 4500 }),
+      manualIncome: 6000,
+    })
+
+    expect(result.currentPeriodDelta).toBeNull()
+    expect(result.remainingExpectedIncome).toBe(6000)
+    expect(result.disposable).toBe(1500)
   })
 })
