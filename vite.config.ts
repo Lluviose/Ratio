@@ -29,7 +29,7 @@ export default defineConfig(() => {
 
             if (normalized.includes('/src/components/AiAssistant.tsx')) return 'ai-assistant'
             if (normalized.includes('/src/screens/TrendScreen.tsx')) return 'screen-trend'
-            if (normalized.includes('/src/screens/StatsScreen.tsx')) return 'screen-stats'
+            if (normalized.includes('/src/screens/StatsScreen.tsx') || normalized.includes('/src/screens/stats/')) return 'screen-stats'
             if (normalized.includes('/src/screens/SettingsScreen.tsx')) return 'screen-settings'
 
             if (normalized.includes('/node_modules/recharts/')) return 'vendor-charts'

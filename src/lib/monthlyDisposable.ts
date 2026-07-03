@@ -2,10 +2,13 @@ import { getGroupIdByAccountType } from './accounts'
 import type { AccountOp } from './accountOps'
 import { addMoney, normalizeMoney, subtractMoney } from './money'
 import { clampMonthStartDay, monthKeyForDateKey } from './monthStart'
+import { median } from './robustStats'
 import {
+  DAYS_PER_MONTH,
   dateKeyToUtcDays,
   diffDateDays,
   getNetChangePace,
+  type NetChangePace,
   type NetChangePaceMethod,
   type SavingsGoalSummary,
   type SavingsPaceAlgorithm,
@@ -14,7 +17,6 @@ import type { Snapshot } from './snapshots'
 
 export const MONTHLY_ESTIMATED_INCOME_KEY = 'ratio.monthlyEstimatedIncome'
 
-const DAYS_PER_MONTH = 30.4375
 /** Trailing window for flow inference; ~6 months of account operations. */
 const FLOW_WINDOW_DAYS = 183
 /** Complete months of flow signal needed before medians are treated as solid. */
@@ -101,19 +103,18 @@ export type DisposableEstimateInput = {
   /** Optional manual override stored at MONTHLY_ESTIMATED_INCOME_KEY; 0 = unset. */
   manualIncome?: number
   latestSnapshot?: Snapshot | null
+  /**
+   * Precomputed net-change pace to reuse (shared with the goal summary when
+   * both are built from the same snapshots/options). `undefined` = compute
+   * here; `null` = "computed elsewhere and absent".
+   */
+  pace?: NetChangePace | null
 }
 
 export function coerceMonthlyEstimatedIncome(value: unknown) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0
   const normalized = normalizeMoney(value)
   return normalized > 0 ? normalized : 0
-}
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
 function findLatestSnapshot(snapshots: readonly Snapshot[]): Snapshot | null {
@@ -254,7 +255,11 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
   const manual = coerceMonthlyEstimatedIncome(input.manualIncome ?? 0)
 
   // 1. Realized monthly surplus (net-worth velocity) via the shared pace engine.
-  const pace = getNetChangePace([...snapshots], { monthStartDay, algorithm: paceAlgorithm })
+  // A pace precomputed by the caller (and shared with the goal summary) is
+  // reused as-is instead of re-deriving it from the same snapshots.
+  const pace = input.pace !== undefined
+    ? input.pace
+    : getNetChangePace(snapshots, { monthStartDay, algorithm: paceAlgorithm })
   const avgDaily = pace?.avgDaily ?? summary?.avgDailyNetChange ?? null
   const monthlySurplus = avgDaily == null ? null : normalizeMoney(avgDaily * DAYS_PER_MONTH)
   const paceMethod = pace?.method ?? summary?.avgDailyNetChangeMethod ?? null

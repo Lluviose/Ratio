@@ -1,12 +1,11 @@
 import {
+  DAYS_PER_MONTH,
   addDaysToDateKey,
   diffDateDays,
   getSavingsProjectionStartDate,
   type SavingsGoalSummary,
 } from './savingsGoal'
 import { normalizeMoney } from './money'
-
-const DAYS_PER_MONTH = 30.4375
 
 export type SavingsSimulationPlan = {
   baseDate: string

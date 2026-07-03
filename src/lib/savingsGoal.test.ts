@@ -34,6 +34,22 @@ function snapshot(date: string, net: number): Snapshot {
   }
 }
 
+/**
+ * Current-period assertions depend on "today" (getActiveSavingsGoalDate falls
+ * back to the wall clock when the latest snapshot is in the past), so tests
+ * with fixed June-2026 fixtures must pin the clock or they break as the real
+ * calendar moves on.
+ */
+function withFakeNow<T>(iso: string, run: () => T): T {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(iso))
+  try {
+    return run()
+  } finally {
+    vi.useRealTimers()
+  }
+}
+
 describe('savingsGoal', () => {
   it('coerces valid saved goals and rejects invalid goals', () => {
     expect(coerceSavingsGoal({ ...goal, targetAmount: 12345.678 })?.targetAmount).toBe(12345.68)
@@ -77,7 +93,7 @@ describe('savingsGoal', () => {
   })
 
   it('compares current period savings against the fixed goal path increment', () => {
-    const summary = getSavingsGoalSummary(
+    const summary = withFakeNow('2026-06-15T12:00:00.000Z', () => getSavingsGoalSummary(
       {
         ...goal,
         targetAmount: 124000,
@@ -91,7 +107,7 @@ describe('savingsGoal', () => {
         snapshot('2026-06-15', 110200),
       ],
       { monthStartDay: 1 },
-    )
+    ))
 
     expect(summary?.currentPeriodStartDate).toBe('2026-06-01')
     expect(summary?.currentPeriodEndDate).toBe('2026-07-01')
@@ -133,7 +149,7 @@ describe('savingsGoal', () => {
   })
 
   it('starts a new savings period on the configured month start day', () => {
-    const summary = getSavingsGoalSummary(
+    const summary = withFakeNow('2026-06-10T12:00:00.000Z', () => getSavingsGoalSummary(
       {
         ...goal,
         targetAmount: 124000,
@@ -147,7 +163,7 @@ describe('savingsGoal', () => {
         snapshot('2026-06-08', 110500),
       ],
       { monthStartDay: 8 },
-    )
+    ))
 
     expect(summary?.currentPeriodStartDate).toBe('2026-06-08')
     expect(summary?.currentPeriodEndDate).toBe('2026-07-08')
@@ -165,16 +181,16 @@ describe('savingsGoal', () => {
       startNetWorth: 100000,
       targetDate: '2026-12-31',
     }
-    const low = getSavingsGoalSummary(summaryGoal, [
+    const low = withFakeNow('2026-06-15T12:00:00.000Z', () => getSavingsGoalSummary(summaryGoal, [
       snapshot('2026-01-01', 100000),
       snapshot('2026-06-01', 110000),
       snapshot('2026-06-15', 110200),
-    ], { monthStartDay: 1 })
-    const high = getSavingsGoalSummary(summaryGoal, [
+    ], { monthStartDay: 1 }))
+    const high = withFakeNow('2026-06-15T12:00:00.000Z', () => getSavingsGoalSummary(summaryGoal, [
       snapshot('2026-01-01', 100000),
       snapshot('2026-06-01', 110000),
       snapshot('2026-06-15', 112000),
-    ], { monthStartDay: 1 })
+    ], { monthStartDay: 1 }))
 
     expect(low?.currentPeriodTarget).toBe(high?.currentPeriodTarget)
     expect(high?.currentPeriodRemaining).toBeCloseTo(0)
@@ -183,7 +199,7 @@ describe('savingsGoal', () => {
   })
 
   it('uses the saved goal start net worth when the first period has older snapshots', () => {
-    const summary = getSavingsGoalSummary(
+    const summary = withFakeNow('2026-06-20T12:00:00.000Z', () => getSavingsGoalSummary(
       {
         ...goal,
         targetAmount: 124000,
@@ -196,7 +212,7 @@ describe('savingsGoal', () => {
         snapshot('2026-06-20', 110200),
       ],
       { monthStartDay: 1 },
-    )
+    ))
 
     expect(summary?.currentPeriodStartDate).toBe('2026-06-15')
     expect(summary?.currentPeriodStartNetWorth).toBe(110000)
@@ -207,7 +223,7 @@ describe('savingsGoal', () => {
   })
 
   it('keeps an ahead-of-path period on track even if net worth dips slightly', () => {
-    const summary = getSavingsGoalSummary(
+    const summary = withFakeNow('2026-06-15T12:00:00.000Z', () => getSavingsGoalSummary(
       {
         ...goal,
         targetAmount: 124000,
@@ -221,7 +237,7 @@ describe('savingsGoal', () => {
         snapshot('2026-06-15', 119000),
       ],
       { monthStartDay: 1 },
-    )
+    ))
 
     expect(summary?.currentPeriodActual).toBe(-1000)
     expect(summary?.currentPeriodTarget).toBe(0)
@@ -382,6 +398,42 @@ describe('savingsGoal', () => {
     expect(pace?.endDate).toBe('2026-03-10')
     expect(pace?.sampleDays).toBe(66)
     expect(pace?.avgDaily).toBeCloseTo(727.27)
+  })
+
+  it('reuses an injected precomputed pace instead of recomputing', () => {
+    const today = todayDateKey()
+    const startDate = addDaysToDateKey(today, -30)!
+    const targetDate = addDaysToDateKey(today, 365)!
+    const summaryGoal = { ...goal, startDate, targetDate }
+    const snapshots = [snapshot(startDate, 100000), snapshot(today, 130000)]
+
+    const pace = getNetChangePace(snapshots)
+    expect(pace).not.toBeNull()
+
+    const summary = getSavingsGoalSummary(summaryGoal, snapshots, { pace })
+    expect(summary?.avgDailyNetChange).toBe(pace?.avgDaily)
+    expect(summary?.avgDailyNetChangeMethod).toBe(pace?.method)
+    expect(summary?.avgDailyNetChangeSampleDays).toBe(pace?.sampleDays)
+
+    // Same inputs, computed internally, must agree with the injected result.
+    const recomputed = getSavingsGoalSummary(summaryGoal, snapshots, {})
+    expect(recomputed?.projectedDate).toBe(summary?.projectedDate)
+
+    // pace: null means "computed elsewhere and absent" — no re-estimation.
+    const withoutPace = getSavingsGoalSummary(summaryGoal, snapshots, { pace: null })
+    expect(withoutPace?.avgDailyNetChange).toBeNull()
+    expect(withoutPace?.projectedDate).toBeNull()
+  })
+
+  it('keeps pace results identical for pre-sorted and shuffled snapshot input', () => {
+    const snapshots = [
+      snapshot('2026-01-31', 100000),
+      snapshot('2026-02-28', 130000),
+      snapshot('2026-03-31', 150000),
+    ]
+    const shuffled = [snapshots[2], snapshots[0], snapshots[1]]
+
+    expect(getNetChangePace(shuffled)).toEqual(getNetChangePace(snapshots))
   })
 
   it('marks unfinished goals due today or past due', () => {

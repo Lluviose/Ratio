@@ -68,7 +68,10 @@ test('returns from stats and trend to assets without blanking the home screen', 
 test('returns to assets when backing out of stats before it finishes loading', async ({ page }) => {
   await expectAssetsHomeVisible(page)
 
-  await page.route(/\/assets\/StatsScreen-.*\.js$/, async (route) => {
+  // The stats screen loads via a StatsScreen-* facade that pulls in the
+  // screen-stats chunk (vite.config.ts manualChunks); delay either file so
+  // backing out mid-load is actually exercised.
+  await page.route(/\/assets\/(?:StatsScreen|screen-stats)-.*\.js$/, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 900))
     await route.continue()
   })

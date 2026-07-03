@@ -17,6 +17,8 @@ export type SnapshotDelta = {
 export type StatsRangeView = {
   start: Snapshot
   end: Snapshot
+  /** Snapshots inside the range (post-fallback), sorted by date — chart-ready. */
+  series: Snapshot[]
   selectedCount: number
   rangeFallback: boolean
   assetsStart: number
@@ -77,13 +79,29 @@ export function safeGrowth(delta: number, base: number): number | null {
   return delta / base
 }
 
+function addCalendarMonthsClamped(date: Date, months: number): Date {
+  // Plain setMonth overflows on month-end days (e.g. Aug 31 − 6 months →
+  // "Feb 31" → Mar 3), silently shifting the cutoff; clamp to the target
+  // month's last day instead.
+  const result = new Date(date)
+  const day = result.getDate()
+  result.setDate(1)
+  result.setMonth(result.getMonth() + months)
+  const daysInMonth = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate()
+  result.setDate(Math.min(day, daysInMonth))
+  return result
+}
+
 function getStatsRangeCutoffDate(range: StatsRangeId): Date {
-  const cutoff = new Date()
-  if (range === '5w') cutoff.setDate(cutoff.getDate() - 35)
-  if (range === '6m') cutoff.setMonth(cutoff.getMonth() - 6)
-  if (range === '1y') cutoff.setFullYear(cutoff.getFullYear() - 1)
-  if (range === '4y') cutoff.setFullYear(cutoff.getFullYear() - 4)
-  return cutoff
+  const now = new Date()
+  if (range === '5w') {
+    const cutoff = new Date(now)
+    cutoff.setDate(cutoff.getDate() - 35)
+    return cutoff
+  }
+  if (range === '6m') return addCalendarMonthsClamped(now, -6)
+  if (range === '1y') return addCalendarMonthsClamped(now, -12)
+  return addCalendarMonthsClamped(now, -48)
 }
 
 export function buildStatsRangeView(
@@ -121,6 +139,7 @@ export function buildStatsRangeView(
   return {
     start,
     end,
+    series: selected,
     selectedCount: selected.length,
     rangeFallback,
     assetsStart,

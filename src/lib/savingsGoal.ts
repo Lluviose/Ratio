@@ -1,9 +1,13 @@
 import { normalizeMoney } from './money'
 import { DEFAULT_MONTH_START_DAY, clampMonthStartDay, monthKeyForDateKey } from './monthStart'
+import { median } from './robustStats'
 import type { Snapshot } from './snapshots'
 
 export const SAVINGS_GOAL_KEY = 'ratio.savingsGoal'
 export const SAVINGS_PACE_ALGORITHM_KEY = 'ratio.savingsPaceAlgorithm'
+
+/** Average Gregorian month length; shared by every monthly<->daily conversion. */
+export const DAYS_PER_MONTH = 30.4375
 
 export const SAVINGS_PACE_ALGORITHMS = ['smart', 'recent-window', 'monthly-close', 'monthly-smoothed', 'long-window'] as const
 
@@ -68,6 +72,14 @@ export type NetChangePace = {
 type PaceOptions = {
   monthStartDay?: number
   algorithm?: SavingsPaceAlgorithm
+}
+
+export type SavingsGoalSummaryOptions = PaceOptions & {
+  /**
+   * Precomputed pace to reuse (e.g. shared with the disposable estimator).
+   * `undefined` = compute here; `null` = "computed elsewhere and absent".
+   */
+  pace?: NetChangePace | null
 }
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -184,11 +196,19 @@ export function getSavingsProjectionStartDate(latestDate: string | null) {
   return latestDate ?? getActiveSavingsGoalDate(latestDate)
 }
 
-function sortValidSnapshots(snapshots: Snapshot[]) {
-  return snapshots
-    .filter((s) => dateKeyToUtcDays(s.date) != null)
-    .slice()
-    .sort((a, b) => a.date.localeCompare(b.date))
+function sortValidSnapshots(snapshots: readonly Snapshot[]) {
+  // Single pass: keep date-valid snapshots and detect whether they are already
+  // in ascending order (the common case — persisted snapshots and every
+  // internal caller pass sorted arrays), so the O(n log n) sort can be skipped.
+  const valid: Snapshot[] = []
+  let sorted = true
+  for (const snapshot of snapshots) {
+    if (dateKeyToUtcDays(snapshot.date) == null) continue
+    if (sorted && valid.length > 0 && valid[valid.length - 1].date > snapshot.date) sorted = false
+    valid.push(snapshot)
+  }
+  if (!sorted) valid.sort((a, b) => a.date.localeCompare(b.date))
+  return valid
 }
 
 function getPeriodStartDate(dateKey: string, monthStartDay: number) {
@@ -239,8 +259,7 @@ function getPeriodStartNetWorth(goal: SavingsGoal, snapshots: Snapshot[], period
   return normalizeMoney(snapshot.net)
 }
 
-function pickGrowthWindow(snapshots: Snapshot[], latestDate: string) {
-  const sorted = sortValidSnapshots(snapshots)
+function pickGrowthWindow(sorted: Snapshot[], latestDate: string) {
   if (sorted.length < 2) return []
 
   const latestDays = dateKeyToUtcDays(latestDate)
@@ -253,14 +272,6 @@ function pickGrowthWindow(snapshots: Snapshot[], latestDate: string) {
   })
 
   return recent.length >= 2 ? recent : sorted
-}
-
-function median(values: number[]) {
-  if (values.length === 0) return null
-  const sorted = values.slice().sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  if (sorted.length % 2 === 1) return sorted[mid]
-  return (sorted[mid - 1] + sorted[mid]) / 2
 }
 
 function getGapStats(snapshots: Snapshot[]) {
@@ -276,19 +287,52 @@ function getGapStats(snapshots: Snapshot[]) {
 }
 
 function pickMonthlyClosingSnapshots(snapshots: Snapshot[], monthStartDay: number) {
+  // Input is sorted by date, so month keys arrive in ascending order; the Map
+  // keeps each month's latest snapshot while preserving month order, and the
+  // former key-sort pass is unnecessary.
   const byMonth = new Map<string, Snapshot>()
   for (const snapshot of snapshots) {
     byMonth.set(monthKeyForDateKey(snapshot.date, monthStartDay), snapshot)
   }
-  return Array.from(byMonth.keys())
-    .sort((a, b) => a.localeCompare(b))
-    .map((monthKey) => byMonth.get(monthKey)!)
+  return Array.from(byMonth.values())
 }
 
-function pickMonthlyPaceWindow(sorted: Snapshot[], selected: Snapshot[], monthStartDay: number) {
-  const recentMonthly = pickMonthlyClosingSnapshots(selected, monthStartDay)
-  const allMonthly = recentMonthly.length >= 2 ? recentMonthly : pickMonthlyClosingSnapshots(sorted, monthStartDay)
-  return allMonthly.slice(Math.max(0, allMonthly.length - MONTHLY_PACE_WINDOW_COUNT))
+/**
+ * Shared per-call state for the pace estimators. The monthly closing window
+ * and its interval rates are needed by up to three strategies in one smart
+ * evaluation (volatility probe, smoothed, close); computing them lazily and
+ * exactly once turns the former repeated Map/sort passes into cache reads.
+ */
+type PaceContext = {
+  sorted: Snapshot[]
+  selected: Snapshot[]
+  monthStartDay: number
+  monthlyWindow?: Snapshot[]
+  monthlyRates?: number[]
+}
+
+function getMonthlyPaceWindow(ctx: PaceContext) {
+  if (!ctx.monthlyWindow) {
+    const recentMonthly = pickMonthlyClosingSnapshots(ctx.selected, ctx.monthStartDay)
+    const allMonthly = recentMonthly.length >= 2 ? recentMonthly : pickMonthlyClosingSnapshots(ctx.sorted, ctx.monthStartDay)
+    ctx.monthlyWindow = allMonthly.slice(Math.max(0, allMonthly.length - MONTHLY_PACE_WINDOW_COUNT))
+  }
+  return ctx.monthlyWindow
+}
+
+function getMonthlyIntervalRates(ctx: PaceContext) {
+  if (!ctx.monthlyRates) {
+    const monthlyWindow = getMonthlyPaceWindow(ctx)
+    const rates: number[] = []
+    for (let i = 1; i < monthlyWindow.length; i += 1) {
+      const previous = monthlyWindow[i - 1]
+      const current = monthlyWindow[i]
+      const days = diffDateDays(previous.date, current.date)
+      if (days != null && days > 0) rates.push((current.net - previous.net) / days)
+    }
+    ctx.monthlyRates = rates
+  }
+  return ctx.monthlyRates
 }
 
 function buildNetChangePace(first: Snapshot, last: Snapshot, method: NetChangePaceMethod, snapshotCount: number): NetChangePace | null {
@@ -304,7 +348,8 @@ function buildNetChangePace(first: Snapshot, last: Snapshot, method: NetChangePa
   }
 }
 
-function getRecentWindowPace(selected: Snapshot[]): NetChangePace | null {
+function getRecentWindowPace(ctx: PaceContext): NetChangePace | null {
+  const { selected } = ctx
   const first = selected[0]
   const last = selected[selected.length - 1]
   if (!first || !last) return null
@@ -314,7 +359,8 @@ function getRecentWindowPace(selected: Snapshot[]): NetChangePace | null {
   return buildNetChangePace(first, last, 'recent-window', selected.length)
 }
 
-function getLongWindowPace(sorted: Snapshot[]): NetChangePace | null {
+function getLongWindowPace(ctx: PaceContext): NetChangePace | null {
+  const { sorted } = ctx
   const first = sorted[0]
   const last = sorted[sorted.length - 1]
   if (!first || !last) return null
@@ -324,27 +370,16 @@ function getLongWindowPace(sorted: Snapshot[]): NetChangePace | null {
   return buildNetChangePace(first, last, 'long-window', sorted.length)
 }
 
-function getMonthlyClosePace(sorted: Snapshot[], selected: Snapshot[], monthStartDay: number): NetChangePace | null {
-  const monthlyWindow = pickMonthlyPaceWindow(sorted, selected, monthStartDay)
+function getMonthlyClosePace(ctx: PaceContext): NetChangePace | null {
+  const monthlyWindow = getMonthlyPaceWindow(ctx)
   if (monthlyWindow.length < 2) return null
 
   const monthlyPace = buildNetChangePace(monthlyWindow[0], monthlyWindow[monthlyWindow.length - 1], 'monthly-close', monthlyWindow.length)
   return monthlyPace && monthlyPace.sampleDays >= MIN_SPARSE_PACE_DAYS ? monthlyPace : null
 }
 
-function getMonthlyIntervalRates(monthlyWindow: Snapshot[]) {
-  const rates: number[] = []
-  for (let i = 1; i < monthlyWindow.length; i += 1) {
-    const previous = monthlyWindow[i - 1]
-    const current = monthlyWindow[i]
-    const days = diffDateDays(previous.date, current.date)
-    if (days != null && days > 0) rates.push((current.net - previous.net) / days)
-  }
-  return rates
-}
-
-function getMonthlySmoothedPace(sorted: Snapshot[], selected: Snapshot[], monthStartDay: number): NetChangePace | null {
-  const monthlyWindow = pickMonthlyPaceWindow(sorted, selected, monthStartDay)
+function getMonthlySmoothedPace(ctx: PaceContext): NetChangePace | null {
+  const monthlyWindow = getMonthlyPaceWindow(ctx)
   if (monthlyWindow.length < 3) return null
 
   const first = monthlyWindow[0]
@@ -352,7 +387,7 @@ function getMonthlySmoothedPace(sorted: Snapshot[], selected: Snapshot[], monthS
   const sampleDays = diffDateDays(first.date, last.date)
   if (sampleDays == null || sampleDays < MIN_SPARSE_PACE_DAYS) return null
 
-  const rates = getMonthlyIntervalRates(monthlyWindow)
+  const rates = getMonthlyIntervalRates(ctx)
   if (rates.length < MIN_SMOOTHED_MONTHLY_INTERVALS) return null
 
   const smoothedDaily = median(rates)
@@ -368,9 +403,8 @@ function getMonthlySmoothedPace(sorted: Snapshot[], selected: Snapshot[], monthS
   }
 }
 
-function hasHighMonthlyVolatility(sorted: Snapshot[], selected: Snapshot[], monthStartDay: number) {
-  const monthlyWindow = pickMonthlyPaceWindow(sorted, selected, monthStartDay)
-  const rates = getMonthlyIntervalRates(monthlyWindow)
+function hasHighMonthlyVolatility(ctx: PaceContext) {
+  const rates = getMonthlyIntervalRates(ctx)
   if (rates.length < MIN_SMART_SMOOTHED_MONTHLY_INTERVALS) return false
 
   const center = median(rates)
@@ -387,19 +421,15 @@ function hasHighMonthlyVolatility(sorted: Snapshot[], selected: Snapshot[], mont
   return maxDeviation / typicalAbsRate >= HIGH_VOLATILITY_RATIO
 }
 
-function getManualNetChangePace(
-  algorithm: NetChangePaceMethod,
-  sorted: Snapshot[],
-  selected: Snapshot[],
-  monthStartDay: number,
-): NetChangePace | null {
-  if (algorithm === 'recent-window') return getRecentWindowPace(selected)
-  if (algorithm === 'monthly-close') return getMonthlyClosePace(sorted, selected, monthStartDay)
-  if (algorithm === 'monthly-smoothed') return getMonthlySmoothedPace(sorted, selected, monthStartDay)
-  return getLongWindowPace(sorted)
+function getManualNetChangePace(algorithm: NetChangePaceMethod, ctx: PaceContext): NetChangePace | null {
+  if (algorithm === 'recent-window') return getRecentWindowPace(ctx)
+  if (algorithm === 'monthly-close') return getMonthlyClosePace(ctx)
+  if (algorithm === 'monthly-smoothed') return getMonthlySmoothedPace(ctx)
+  return getLongWindowPace(ctx)
 }
 
-function getSmartNetChangePace(sorted: Snapshot[], selected: Snapshot[], monthStartDay: number): NetChangePace | null {
+function getSmartNetChangePace(ctx: PaceContext): NetChangePace | null {
+  const { selected } = ctx
   const first = selected[0]
   const last = selected[selected.length - 1]
   if (!first || !last) return null
@@ -413,24 +443,24 @@ function getSmartNetChangePace(sorted: Snapshot[], selected: Snapshot[], monthSt
     && gapStats.max / Math.max(1, gapStats.typical) >= IRREGULAR_GAP_RATIO
   const prefersMonthlyPace = selected.length <= 2 || gapStats.typical == null || gapStats.typical >= SPARSE_TYPICAL_GAP_DAYS || hasIrregularGaps
 
-  if (hasHighMonthlyVolatility(sorted, selected, monthStartDay)) {
-    const smoothedPace = getMonthlySmoothedPace(sorted, selected, monthStartDay)
+  if (hasHighMonthlyVolatility(ctx)) {
+    const smoothedPace = getMonthlySmoothedPace(ctx)
     if (smoothedPace) return smoothedPace
   }
 
   if (prefersMonthlyPace) {
-    const monthlyPace = getMonthlyClosePace(sorted, selected, monthStartDay)
+    const monthlyPace = getMonthlyClosePace(ctx)
     if (monthlyPace) return monthlyPace
     if (selectedDays < MIN_SPARSE_PACE_DAYS) return null
   }
 
-  const recentPace = getRecentWindowPace(selected)
+  const recentPace = getRecentWindowPace(ctx)
   if (recentPace) return recentPace
 
-  return getMonthlyClosePace(sorted, selected, monthStartDay) ?? getLongWindowPace(sorted)
+  return getMonthlyClosePace(ctx) ?? getLongWindowPace(ctx)
 }
 
-export function getNetChangePace(snapshots: Snapshot[], options: PaceOptions = {}): NetChangePace | null {
+export function getNetChangePace(snapshots: readonly Snapshot[], options: PaceOptions = {}): NetChangePace | null {
   const sorted = sortValidSnapshots(snapshots)
   const latest = sorted[sorted.length - 1]
   if (!latest) return null
@@ -440,13 +470,14 @@ export function getNetChangePace(snapshots: Snapshot[], options: PaceOptions = {
 
   const monthStartDay = clampMonthStartDay(options.monthStartDay ?? DEFAULT_MONTH_START_DAY)
   const algorithm = coerceSavingsPaceAlgorithm(options.algorithm ?? 'smart')
+  const ctx: PaceContext = { sorted, selected, monthStartDay }
 
   return algorithm === 'smart'
-    ? getSmartNetChangePace(sorted, selected, monthStartDay)
-    : getManualNetChangePace(algorithm, sorted, selected, monthStartDay)
+    ? getSmartNetChangePace(ctx)
+    : getManualNetChangePace(algorithm, ctx)
 }
 
-export function getAverageDailyNetChange(snapshots: Snapshot[], options: PaceOptions = {}): number | null {
+export function getAverageDailyNetChange(snapshots: readonly Snapshot[], options: PaceOptions = {}): number | null {
   return getNetChangePace(snapshots, options)?.avgDaily ?? null
 }
 
@@ -471,7 +502,7 @@ export function getGoalComparisonValue(goal: SavingsGoal, dateKey: string): numb
   return null
 }
 
-export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snapshot[], options: PaceOptions = {}): SavingsGoalSummary | null {
+export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: readonly Snapshot[], options: SavingsGoalSummaryOptions = {}): SavingsGoalSummary | null {
   if (!goal) return null
 
   const sortedSnapshots = sortValidSnapshots(snapshots)
@@ -500,7 +531,7 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
   const isDueToday = !isComplete && daysLeftRaw === 0
   const isPastDue = !isComplete && daysLeftRaw != null && daysLeftRaw < 0
   const requiredDaily = !isComplete && daysLeft && daysLeft > 0 ? remaining / daysLeft : null
-  const requiredMonthly = requiredDaily == null ? null : requiredDaily * 30.4375
+  const requiredMonthly = requiredDaily == null ? null : requiredDaily * DAYS_PER_MONTH
   const currentPeriodTargetValue = currentPeriodEndDate ? getGoalComparisonValue(goal, currentPeriodEndDate) : null
   const currentPeriodTargetNetWorth = currentPeriodTargetValue == null ? null : normalizeMoney(currentPeriodTargetValue)
   const currentPeriodTarget = !isComplete && currentPeriodTargetValue != null
@@ -514,7 +545,9 @@ export function getSavingsGoalSummary(goal: SavingsGoal | null, snapshots: Snaps
     : null
   const currentPeriodIsOnTrack = isComplete ? true : currentPeriodDelta == null ? null : currentPeriodDelta >= 0
 
-  const netChangePace = getNetChangePace(snapshots, options)
+  // Reuse an injected pace (shared with other estimators on the same inputs)
+  // or compute it from the snapshots already sorted above.
+  const netChangePace = options.pace !== undefined ? options.pace : getNetChangePace(sortedSnapshots, options)
   const avgDailyNetChange = netChangePace?.avgDaily ?? null
   const paceDailyDelta = avgDailyNetChange != null && requiredDaily != null ? avgDailyNetChange - requiredDaily : null
   const isOnTrack = isComplete ? true : paceDailyDelta == null ? null : paceDailyDelta >= 0

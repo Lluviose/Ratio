@@ -97,6 +97,7 @@ function build(input: Partial<DisposableEstimateInput>): ReturnType<typeof build
     paceAlgorithm: input.paceAlgorithm,
     manualIncome: input.manualIncome ?? 0,
     latestSnapshot: input.latestSnapshot,
+    pace: input.pace,
   })
 }
 
@@ -415,6 +416,35 @@ describe('buildDisposableEstimate', () => {
     expect(result.disposable).toBeCloseTo(normalizeMoney(expectedRemaining + -1534.07), 2)
     // Still a forecast, so it stays above the raw month-end gap (−1534.07).
     expect(result.disposable).toBeGreaterThan(-1534.07)
+  })
+
+  it('reuses an injected precomputed pace for the surplus estimate', () => {
+    const injected = {
+      avgDaily: 200,
+      method: 'monthly-close' as const,
+      sampleDays: 91,
+      snapshotCount: 4,
+      startDate: '2026-04-01',
+      endDate: '2026-07-01',
+    }
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: null,
+      pace: injected,
+    })
+
+    // 200/day × 30.4375 = 6087.5 — from the injected pace, not a recompute
+    // (the snapshots themselves average ~100/day).
+    expect(result.monthlySurplus).toBe(6087.5)
+    expect(result.paceMethod).toBe('monthly-close')
+
+    // pace: null falls back to the summary's stored pace fields.
+    const fromSummary = build({
+      snapshots: monthlySnapshots,
+      summary: summary(),
+      pace: null,
+    })
+    expect(fromSummary.monthlySurplus).toBe(normalizeMoney(100 * 30.4375))
   })
 
   it('falls back to the pure forecast when there is no current-period path', () => {
