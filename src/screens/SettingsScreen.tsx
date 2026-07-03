@@ -31,7 +31,7 @@ import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
-import { quickFade, standardEase } from '../lib/motionPresets'
+import { standardEase } from '../lib/motionPresets'
 import { Toggle } from '../components/Toggle'
 import { trackTelemetry } from '../lib/telemetry'
 
@@ -607,8 +607,14 @@ export function SettingsScreen(props: {
                             key={`${t.id}-${idx}`}
                             className="swatch"
                             style={{ background: color }}
-                            animate={{ y: active ? -1 : 0, scale: active ? 1.04 : 1 }}
-                            transition={{ ...quickFade, delay: active ? idx * 0.025 : 0 }}
+                            animate={{ y: active ? -2 : 0, scale: active ? 1.08 : 1 }}
+                            transition={{
+                              type: 'spring',
+                              stiffness: 540,
+                              damping: 22,
+                              mass: 0.7,
+                              delay: active ? idx * 0.045 : 0,
+                            }}
                           />
                         ),
                       )}
@@ -620,17 +626,17 @@ export function SettingsScreen(props: {
                     className={active ? 'check checkOn' : 'check'}
                     aria-label={active ? 'selected' : 'unselected'}
                     style={active ? { background: activeAccent, borderColor: activeAccent } : undefined}
-                    animate={{ scale: active ? 1.06 : 1 }}
-                    transition={quickFade}
+                    animate={{ scale: active ? 1.1 : 1 }}
+                    transition={{ type: 'spring', stiffness: 600, damping: 24, mass: 0.6 }}
                   >
                     <AnimatePresence initial={false}>
                       {active ? (
                         <motion.span
                           key="check"
-                          initial={{ opacity: 0, scale: 0.62, rotate: -18 }}
+                          initial={{ opacity: 0, scale: 0.4, rotate: -30 }}
                           animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                          exit={{ opacity: 0, scale: 0.72 }}
-                          transition={quickFade}
+                          exit={{ opacity: 0, scale: 0.6, transition: { duration: 0.1 } }}
+                          transition={{ type: 'spring', stiffness: 560, damping: 22, mass: 0.65 }}
                         >
                           <Check size={12} color="#fff" strokeWidth={4} />
                         </motion.span>
@@ -741,7 +747,7 @@ export function SettingsScreen(props: {
                   {cloudReady ? `${cloudSync.username.trim()} · ${cloudSync.serverUrl.trim()}` : '未完成'}
                 </div>
               </div>
-              <motion.span animate={{ rotate: cloudConfigExpanded ? 180 : 0 }} transition={quickFade}>
+              <motion.span animate={{ rotate: cloudConfigExpanded ? 180 : 0 }} transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.7 }}>
                 <ChevronDown size={18} />
               </motion.span>
             </button>
@@ -753,8 +759,8 @@ export function SettingsScreen(props: {
                   className="stack"
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.22, ease: standardEase }}
+                  exit={{ height: 0, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } }}
+                  transition={{ height: { duration: 0.3, ease: [0.05, 0.7, 0.1, 1] }, opacity: { duration: 0.24, ease: standardEase } }}
                   style={{ overflow: 'hidden' }}
                 >
                   <label className="field">

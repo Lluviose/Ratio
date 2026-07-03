@@ -278,6 +278,12 @@ function PhoneFrame(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent
 export function TourScreen(props: { onClose: () => void }) {
   const { onClose } = props
   const [index, setIndex] = useState(0)
+  const [navDir, setNavDir] = useState(1)
+
+  const goTo = (next: number) => {
+    setNavDir(next >= index ? 1 : -1)
+    setIndex(next)
+  }
 
   const slides: Slide[] = useMemo(
     () => [
@@ -334,9 +340,9 @@ export function TourScreen(props: { onClose: () => void }) {
       transition={{ duration: 0.7 }}
       onPanEnd={(_, { offset }) => {
         if (offset.x < -50 && index < slides.length - 1) {
-          setIndex(index + 1)
+          goTo(index + 1)
         } else if (offset.x > 50 && index > 0) {
-          setIndex(index - 1)
+          goTo(index - 1)
         }
       }}
     >
@@ -365,22 +371,22 @@ export function TourScreen(props: { onClose: () => void }) {
 
       {/* Text Content */}
       <div className="relative z-30 px-6 mt-2 mb-8 min-h-[140px]">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" custom={navDir}>
           <motion.div
             key={slide.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, y: -10, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
             transition={{ duration: 0.3 }}
             className="flex flex-col gap-1"
           >
              {slide.titleLines.map((line, i) => (
-               <motion.div 
+               <motion.div
                  key={i}
                  className="text-3xl font-extrabold tracking-tight leading-[1.1] text-slate-900"
-                 initial={{ opacity: 0, x: -10 }}
+                 initial={{ opacity: 0, x: navDir * 26 }}
                  animate={{ opacity: 1, x: 0 }}
-                 transition={{ delay: 0.1 + i * 0.1 }}
+                 transition={{ type: 'spring', stiffness: 380, damping: 30, mass: 0.85, delay: 0.06 + i * 0.07 }}
                >
                  {line}
                </motion.div>
@@ -400,27 +406,39 @@ export function TourScreen(props: { onClose: () => void }) {
            {/* Dots */}
            <div className="flex gap-2">
              {slides.map((s, i) => (
-               <div 
+               <motion.div
                  key={s.id}
-                 className={clsx(
-                   "h-2 rounded-full transition-all duration-300",
-                   i === index ? "w-6 bg-slate-900" : "w-2 bg-slate-200"
-                 )}
+                 className={clsx('h-2 rounded-full', i === index ? 'bg-slate-900' : 'bg-slate-200')}
+                 animate={{ width: i === index ? 24 : 8, scale: i === index ? 1 : 0.9 }}
+                 transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.7 }}
+                 initial={false}
                />
              ))}
            </div>
-           
+
            {/* Next Button */}
            <motion.button
              whileHover={{ scale: 1.05 }}
-             whileTap={{ scale: 0.95 }}
+             whileTap={{ scale: 0.94 }}
+             transition={{ type: 'spring', stiffness: 560, damping: 28, mass: 0.7 }}
              onClick={() => {
                if (index === slides.length - 1) onClose()
-               else setIndex(v => Math.min(slides.length - 1, v + 1))
+               else goTo(Math.min(slides.length - 1, index + 1))
              }}
              className="h-14 px-8 rounded-full bg-slate-900 text-white font-bold text-lg shadow-xl shadow-slate-900/20 flex items-center gap-2"
            >
-             {index === slides.length - 1 ? '开始使用' : '继续'}
+             <AnimatePresence mode="wait" initial={false}>
+               <motion.span
+                 key={index === slides.length - 1 ? 'start' : 'next'}
+                 initial={{ opacity: 0, y: 10 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, y: -10, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
+                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                 className="inline-block"
+               >
+                 {index === slides.length - 1 ? '开始使用' : '继续'}
+               </motion.span>
+             </AnimatePresence>
              <ArrowRight size={20} strokeWidth={2.5} />
            </motion.button>
         </div>

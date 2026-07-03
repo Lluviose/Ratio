@@ -226,7 +226,7 @@ function AssetsListPageComponent(props: {
                             <motion.div
                               className="text-slate-400"
                               animate={{ rotate: isExpanded ? 180 : 0 }}
-                              transition={{ duration: 0.2, ease: standardEase }}
+                              transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.7 }}
                             >
                               <ChevronDown size={14} strokeWidth={2.5} />
                             </motion.div>
@@ -258,8 +258,8 @@ function AssetsListPageComponent(props: {
                       key="types"
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.24, ease: standardEase }}
+                      exit={{ height: 0, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } }}
+                      transition={{ height: { duration: 0.3, ease: [0.05, 0.7, 0.1, 1] }, opacity: { duration: 0.24, ease: standardEase } }}
                       className="overflow-hidden"
                     >
                       <div className="px-3 pt-2 pb-3">
@@ -281,10 +281,11 @@ function AssetsListPageComponent(props: {
                               <AnimatePresence>
                                 {typeMenuOpenGroup === id ? (
                                   <motion.div
-                                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                                    initial={{ opacity: 0, y: -8, scale: 0.92 }}
                                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                                    transition={{ duration: 0.15 }}
+                                    exit={{ opacity: 0, y: -6, scale: 0.96, transition: { duration: 0.13, ease: [0.4, 0, 1, 1] } }}
+                                    transition={{ type: 'spring', stiffness: 560, damping: 38, mass: 0.7 }}
+                                    style={{ transformOrigin: 'top right' }}
                                     onClick={(e) => e.stopPropagation()}
                                     className="absolute right-0 top-full mt-2 min-w-[160px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
                                   >
@@ -320,11 +321,11 @@ function AssetsListPageComponent(props: {
                                   'transition-colors duration-200',
                                 )}
                                 onClick={() => onPickType(t.type)}
-                                initial={{ opacity: 0, y: 6 }}
-                                animate={{ opacity: 1, y: 0 }}
+                                initial={{ opacity: 0, y: 10, scale: 0.985 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
                                 exit={{ opacity: 0, y: 4 }}
-                                transition={{ duration: 0.18, delay: typeIndex * 0.02, ease: expressiveEase }}
-                                whileTap={{ scale: 0.99 }}
+                                transition={{ duration: 0.26, delay: 0.04 + typeIndex * 0.035, ease: expressiveEase }}
+                                whileTap={{ scale: 0.975 }}
                                 whileHover={{
                                   backgroundColor: 'rgba(255,255,255,0.92)',
                                 }}
@@ -398,9 +399,13 @@ function AssetsListPageComponent(props: {
                     key={item.type}
                     value={item.type}
                     as="div"
-                    whileDrag={{ scale: 1.02 }}
+                    whileDrag={{
+                      scale: 1.035,
+                      boxShadow: '0 16px 32px -12px rgba(15, 23, 42, 0.28)',
+                      cursor: 'grabbing',
+                    }}
                     className="assetItem"
-                    style={{ cursor: 'grab', userSelect: 'none' }}
+                    style={{ cursor: 'grab', userSelect: 'none', position: 'relative' }}
                   >
                     <div className="assetLeft">
                       <div

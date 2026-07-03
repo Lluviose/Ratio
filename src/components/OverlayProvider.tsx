@@ -190,10 +190,23 @@ export function OverlayProvider(props: { children: ReactNode }) {
             <motion.div
               key={t.id}
               className="toast"
-              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+              layout
+              initial={{ opacity: 0, y: -18, scale: 0.94 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -10, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, y: -14, scale: 0.95, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
+              transition={{
+                layout: { type: 'spring', stiffness: 520, damping: 40, mass: 0.8 },
+                type: 'spring',
+                stiffness: 480,
+                damping: 34,
+                mass: 0.85,
+              }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0.55, bottom: 0.06 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y < -28 || info.velocity.y < -420) dismissToast(t.id)
+              }}
             >
               <span
                 aria-hidden="true"

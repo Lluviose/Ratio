@@ -216,18 +216,37 @@ export function BottomSheet(props: {
           exit={overlayExit}
         >
           <motion.div
-            className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}    
+            className={sheetClassName ? `sheet ${sheetClassName}` : 'sheet'}
             onClick={(e) => e.stopPropagation()}
             layoutId={resolvedSheetMotion === 'morph' ? sheetLayoutId : undefined}
             initial={resolvedSheetMotion === 'slide' ? { y: '100%', opacity: 0.98 } : false}
-            animate={resolvedSheetMotion === 'slide' ? { y: 0, opacity: 1 } : { opacity: 1 }}
-            exit={resolvedSheetMotion === 'slide' ? { y: '100%', opacity: 0.98 } : { opacity: 1 }}
-            transition={
+            animate={
               resolvedSheetMotion === 'slide'
                 ? {
-                    y: { type: 'tween', duration: 0.26, ease: [0.16, 1, 0.3, 1] },
-                    opacity: { type: 'tween', duration: 0.18, ease: [0.16, 1, 0.3, 1] },
+                    y: 0,
+                    opacity: 1,
+                    transition: {
+                      y: { type: 'spring', stiffness: 480, damping: 46, mass: 1 },
+                      opacity: { type: 'tween', duration: 0.18, ease: [0.16, 1, 0.3, 1] },
+                    },
                   }
+                : { opacity: 1 }
+            }
+            exit={
+              resolvedSheetMotion === 'slide'
+                ? {
+                    y: '100%',
+                    opacity: 0.98,
+                    transition: {
+                      y: { type: 'tween', duration: 0.24, ease: [0.4, 0, 1, 1] },
+                      opacity: { type: 'tween', duration: 0.2, ease: [0.4, 0, 1, 1] },
+                    },
+                  }
+                : { opacity: 1 }
+            }
+            transition={
+              resolvedSheetMotion === 'slide'
+                ? undefined
                 : {
                     layout: { type: 'spring', stiffness: 360, damping: 42, mass: 0.95 },
                   }

@@ -49,7 +49,8 @@ const trendPageInitial = {
 }
 
 const trendPageTransition = {
-  duration: 0.38,
+  duration: 0.42,
+  ease: [0.05, 0.7, 0.1, 1] as const,
 }
 
 const chartEntranceTransition = {
@@ -605,10 +606,10 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           {selectedPoint ? (
             <motion.div
               key={`${mode}-${selectedPoint.dateKey}`}
-              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              initial={{ opacity: 0, y: -8, scale: 0.97 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={detailExit}
-              transition={screenTransition}
+              transition={{ type: 'spring', stiffness: 460, damping: 36, mass: 0.85 }}
               style={{ display: 'flex', justifyContent: 'center', marginTop: 10, position: 'relative', zIndex: 3 }}
             >
               {renderTrendDetail(selectedPoint, () => setSelectedPointKey(null))}

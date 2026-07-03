@@ -22,7 +22,7 @@ import {
   type StatsRangeId,
 } from '../lib/snapshotDerived'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
-import { fadeUpAnimate } from '../lib/motionPresets'
+import { emphasizedEase } from '../lib/motionPresets'
 import { SavingsOverviewCard } from './stats/SavingsOverviewCard'
 import { DisposableCard } from './stats/DisposableCard'
 import { ForecastCard } from './stats/ForecastCard'
@@ -32,8 +32,25 @@ import { SavingsGoalSheet } from './stats/SavingsGoalSheet'
 import { MilestoneCelebration } from './stats/MilestoneCelebration'
 import { useMilestoneCelebration } from './stats/useMilestoneCelebration'
 
-const statsPageInitial = { opacity: 0, y: 20 }
-const statsPageTransition = { duration: 0.4 }
+// 页面与卡片编排：容器先上浮，卡片按序跟进
+const statsStackVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.4,
+      ease: emphasizedEase,
+      staggerChildren: 0.06,
+      delayChildren: 0.05,
+    },
+  },
+}
+
+const statsCardVariants = {
+  hidden: { opacity: 0, y: 18, scale: 0.99 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.38, ease: emphasizedEase } },
+}
 
 export function StatsScreen(props: { snapshots: Snapshot[]; accountOps: AccountOp[]; colors: ThemeColors }) {
   const { snapshots, accountOps, colors } = props
@@ -69,16 +86,18 @@ export function StatsScreen(props: { snapshots: Snapshot[]; accountOps: AccountO
 
   return (
     <div className="stack iosInsightsPage iosStatsPage" style={{ padding: '0 16px calc(92px + var(--safe-bottom))' }}>
-      <motion.div initial={statsPageInitial} animate={fadeUpAnimate} transition={statsPageTransition}>
+      <motion.div initial="hidden" animate="show" variants={statsStackVariants}>
         <div className="stack iosStatsStack">
-          <SavingsOverviewCard
-            goal={goal}
-            summary={goalSummary}
-            latestNetWorth={latestNetWorth}
-            snapshotCount={snapshots.length}
-            color={colors.invest}
-            onEdit={() => setGoalSheetOpen(true)}
-          />
+          <motion.div variants={statsCardVariants}>
+            <SavingsOverviewCard
+              goal={goal}
+              summary={goalSummary}
+              latestNetWorth={latestNetWorth}
+              snapshotCount={snapshots.length}
+              color={colors.invest}
+              onEdit={() => setGoalSheetOpen(true)}
+            />
+          </motion.div>
 
           <AnimatePresence>
             {celebrationMilestone != null ? (
@@ -86,29 +105,39 @@ export function StatsScreen(props: { snapshots: Snapshot[]; accountOps: AccountO
             ) : null}
           </AnimatePresence>
 
-          <DisposableCard
-            snapshots={snapshots}
-            accountOps={accountOps}
-            summary={goalSummary}
-            latestSnapshot={latestSnapshot}
-            monthStartDay={monthStartDay}
-            paceAlgorithm={paceAlgorithm}
-            manualIncome={monthlyEstimatedIncome}
-            pace={pace}
-            color={colors.invest}
-            onChangeIncome={setMonthlyEstimatedIncome}
-          />
+          <motion.div variants={statsCardVariants}>
+            <DisposableCard
+              snapshots={snapshots}
+              accountOps={accountOps}
+              summary={goalSummary}
+              latestSnapshot={latestSnapshot}
+              monthStartDay={monthStartDay}
+              paceAlgorithm={paceAlgorithm}
+              manualIncome={monthlyEstimatedIncome}
+              pace={pace}
+              color={colors.invest}
+              onChangeIncome={setMonthlyEstimatedIncome}
+            />
+          </motion.div>
 
-          <ForecastCard
-            algorithm={paceAlgorithm}
-            summary={goalSummary}
-            color={colors.invest}
-            onChangeAlgorithm={setPaceAlgorithm}
-          />
+          <motion.div variants={statsCardVariants}>
+            <ForecastCard
+              algorithm={paceAlgorithm}
+              summary={goalSummary}
+              color={colors.invest}
+              onChangeAlgorithm={setPaceAlgorithm}
+            />
+          </motion.div>
 
-          {currentStats ? <SnapshotInsightCard stats={currentStats} colors={colors} /> : null}
+          {currentStats ? (
+            <motion.div variants={statsCardVariants}>
+              <SnapshotInsightCard stats={currentStats} colors={colors} />
+            </motion.div>
+          ) : null}
 
-          <RangeTrendSection view={view} range={range} onRangeChange={setRange} colors={colors} />
+          <motion.div variants={statsCardVariants}>
+            <RangeTrendSection view={view} range={range} onRangeChange={setRange} colors={colors} />
+          </motion.div>
         </div>
       </motion.div>
 

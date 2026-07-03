@@ -101,7 +101,7 @@ export function MetricTile(props: {
     <motion.div
       style={compact ? compactMetricTileStyle : metricTileStyle}
       whileHover={subtleLift}
-      transition={quickFade}
+      transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.7 }}
     >
       <div style={compact ? compactMetricLabelStyle : metricLabelStyle}>{label}</div>
       <div style={valueStyle}>{value}</div>
@@ -154,10 +154,10 @@ export function ExplainPanel(props: { id: string; open: boolean; children: React
         <motion.div
           id={id}
           role="note"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={quickFade}
+          initial={{ opacity: 0, height: 0, y: -4 }}
+          animate={{ opacity: 1, height: 'auto', y: 0 }}
+          exit={{ opacity: 0, height: 0, y: -4, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } }}
+          transition={{ height: { duration: 0.26, ease: [0.05, 0.7, 0.1, 1] }, ...quickFade }}
           style={{ overflow: 'hidden' }}
         >
           <div

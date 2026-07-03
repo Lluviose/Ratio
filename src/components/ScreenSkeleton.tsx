@@ -1,12 +1,23 @@
 import { motion } from 'framer-motion'
 import type { CSSProperties } from 'react'
-import { quickFade } from '../lib/motionPresets'
+import { quickFade, standardEase } from '../lib/motionPresets'
 
 type ScreenSkeletonKind = 'trend' | 'stats' | 'settings'
 
+const skeletonBlockVariants = {
+  hidden: { opacity: 0, scale: 0.97, y: 6 },
+  show: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.24, ease: standardEase } },
+}
+
 function SkeletonBlock(props: { className?: string; style?: CSSProperties }) {
   const { className, style } = props
-  return <div className={className ? `skeletonBlock ${className}` : 'skeletonBlock'} style={style} />
+  return (
+    <motion.div
+      className={className ? `skeletonBlock ${className}` : 'skeletonBlock'}
+      style={style}
+      variants={skeletonBlockVariants}
+    />
+  )
 }
 
 function TrendSkeleton() {
@@ -78,9 +89,16 @@ export function ScreenSkeleton(props: { screen: ScreenSkeletonKind }) {
     <motion.div
       className="screenSkeleton"
       aria-hidden="true"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={quickFade}
+      initial="hidden"
+      animate="show"
+      variants={{
+        hidden: { opacity: 0, y: 8 },
+        show: {
+          opacity: 1,
+          y: 0,
+          transition: { ...quickFade, staggerChildren: 0.035, delayChildren: 0.02 },
+        },
+      }}
     >
       {screen === 'trend' ? <TrendSkeleton /> : screen === 'stats' ? <StatsSkeleton /> : <SettingsSkeleton />}
     </motion.div>

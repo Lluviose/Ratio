@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
 import { pickForegroundColor, type ThemeColors } from '../lib/themes'
@@ -58,9 +58,9 @@ export function AddAccountScreen(props: {
     return (
       <motion.div
         key={groupId}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.1 }}
+        initial={{ opacity: 0, y: 24, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.9, delay: 0.05 + index * 0.06 }}
       >
         <div
           className="rounded-2xl shadow-sm border border-[var(--hairline)] overflow-hidden"
@@ -73,7 +73,12 @@ export function AddAccountScreen(props: {
             aria-expanded={isExpanded}
           >
             <div className="flex items-center gap-3 min-w-0">
-              <span className="w-3 h-3 rounded-full" style={{ background: tone }} />
+              <motion.span
+                className="w-3 h-3 rounded-full"
+                style={{ background: tone }}
+                animate={{ scale: isExpanded ? 1.25 : 1 }}
+                transition={{ type: 'spring', stiffness: 520, damping: 22, mass: 0.7 }}
+              />
               <div className="min-w-0">
                 <div className="text-[15px] font-bold text-[var(--text)] tracking-tight">
                   {group.name}
@@ -83,9 +88,13 @@ export function AddAccountScreen(props: {
                 </div>
               </div>
             </div>
-            <div className="w-9 h-9 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]">
-              {isExpanded ? <ChevronUp size={16} strokeWidth={3} /> : <ChevronDown size={16} strokeWidth={3} />}
-            </div>
+            <motion.div
+              className="w-9 h-9 rounded-full bg-[var(--bg)] flex items-center justify-center text-[var(--muted-text)]"
+              animate={{ rotate: isExpanded ? 180 : 0 }}
+              transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.7 }}
+            >
+              <ChevronDown size={16} strokeWidth={3} />
+            </motion.div>
           </button>
 
           <AnimatePresence initial={false}>
@@ -94,8 +103,8 @@ export function AddAccountScreen(props: {
                 key="types"
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                exit={{ height: 0, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } }}
+                transition={{ height: { duration: 0.3, ease: [0.05, 0.7, 0.1, 1] }, opacity: { duration: 0.24, ease: [0.16, 1, 0.3, 1] } }}
                 className="overflow-hidden"
               >
                 <div className="px-3 pt-2 pb-3 flex flex-col gap-2">
@@ -110,10 +119,10 @@ export function AddAccountScreen(props: {
                           setSelectedType(t.id)
                           setCustomName('')
                         }}
-                        whileTap={{ scale: 0.98 }}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.03 }}
+                        whileTap={{ scale: 0.97 }}
+                        initial={{ opacity: 0, x: -14, scale: 0.99 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 460, damping: 34, mass: 0.75, delay: Math.min(i * 0.035, 0.28) }}
                       >
                         <span
                           className="w-10 h-10 rounded-xl flex items-center justify-center shadow-sm"
@@ -179,22 +188,27 @@ export function AddAccountScreen(props: {
             }}
             onClick={() => setSelectedType(null)}
           >
-            <motion.div 
+            <motion.div
               className="w-full max-w-md mx-auto bg-[var(--card)] rounded-b-[28px] p-6 pb-8"
               onClick={(e) => e.stopPropagation()}
               initial={{ y: '-100%' }}
               animate={{ y: 0 }}
-              exit={{ y: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              exit={{ y: '-100%', transition: { type: 'tween', duration: 0.22, ease: [0.4, 0, 1, 1] } }}
+              transition={{ type: 'spring', stiffness: 420, damping: 40, mass: 0.95 }}
             >
-              <div className="text-center mb-6">
+              <motion.div
+                className="text-center mb-6"
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.26, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+              >
                 <div className="text-lg font-bold text-[var(--text)]">
                   为"{defaultAccountName(selectedType)}"命名
                 </div>
                 <div className="text-sm text-[var(--muted-text)] mt-1">
                   输入自定义名称，如：交通银行、支付宝等
                 </div>
-              </div>
+              </motion.div>
               
               <input
                 type="text"

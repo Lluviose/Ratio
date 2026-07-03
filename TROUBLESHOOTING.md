@@ -2,6 +2,23 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## E2E 不稳定：Windows 无头 WebKit 下 `toBeHidden` 偶发超时
+
+现象：
+
+- `ratio-breakdown.spec.ts` 在 `mobile-safari` 项目下偶发（负载相关，可到 3/3 复现）在“收起面板”断言超时；chromium / mobile-chrome 稳定通过。
+- 页面内日志证明应用状态机完全正确：`requestClose → 兜底定时器 → onClosed → setExpanded(null)` 全部按时执行，但 DOM 节点在断言窗口内迟迟不消失。
+- 任何从 Node 侧发起的 `page.evaluate` 都会“泵”事件循环，节点随即被移除——因此加了探针/trace 就必现通过（海森 bug）。
+
+原因：
+
+- Windows 无头 WebKit 在页面空闲时会节流渲染管线，`expect(locator).toBeHidden()` 的页内轮询依赖 rAF，被一起饿死；应用代码本身没有问题。
+
+处理：
+
+- 对“面板已卸载”类断言改用 `expect.poll(() => locator.count()).toBe(0)`：每次轮询都是 Node 侧发起的新求值，不受页面节流影响（本 spec 的 `gotoRatioPage` 早已用同样手法等待滚动位置）。
+- 不要为此改动应用侧交互代码；真实 iOS Safari 不受影响。
+
 ## 构建失败：使用 `motion` 但未导入
 
 现象：

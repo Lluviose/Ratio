@@ -15,8 +15,17 @@ export function Toggle(props: { checked: boolean; onChange: (checked: boolean) =
       <span className="toggleText toggleTextOff">关</span>
       <motion.span
         className="toggleKnob"
-        animate={{ x: checked ? 28 : 0 }}
-        transition={{ type: 'spring', stiffness: 650, damping: 34, mass: 0.7 }}
+        initial={false}
+        animate={{
+          x: checked ? 28 : 0,
+          scaleX: [1, 1.18, 1],
+          scaleY: [1, 0.9, 1],
+        }}
+        transition={{
+          x: { type: 'spring', stiffness: 640, damping: 33, mass: 0.66 },
+          scaleX: { duration: 0.32, times: [0, 0.4, 1], ease: [0.33, 1, 0.68, 1] },
+          scaleY: { duration: 0.32, times: [0, 0.4, 1], ease: [0.33, 1, 0.68, 1] },
+        }}
       />
     </button>
   )

@@ -1,6 +1,6 @@
 import { BarChart3, ChevronLeft, Settings as SettingsIcon, TrendingUp, Wallet } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen'
 import { TourScreen } from './screens/TourScreen'
 import { AccountDetailSheet } from './components/AccountDetailSheet'
@@ -25,7 +25,7 @@ import {
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
-import { navSpring, screenTransition } from './lib/motionPresets'
+import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
 import { useReducedMotion } from './lib/useReducedMotion'
 import { initCloudAutoSync } from './lib/cloudSync'
 import { initTelemetry, trackTelemetry } from './lib/telemetry'
@@ -53,15 +53,18 @@ const tabOrder: Record<TabId, number> = {
 const screenVariants = {
   initial: (direction: number) => ({
     opacity: 0,
-    x: direction >= 0 ? 22 : -22,
+    x: direction >= 0 ? 26 : -26,
+    scale: 0.988,
   }),
   animate: {
     opacity: 1,
     x: 0,
+    scale: 1,
   },
   exit: (direction: number) => ({
     opacity: 0,
-    x: direction >= 0 ? -22 : 22,
+    x: direction >= 0 ? -26 : 26,
+    scale: 0.988,
   }),
 }
 
@@ -129,10 +132,26 @@ function BottomTabNav(props: { tab: TabId; onNavigate: (tab: TabId) => void }) {
               aria-current={active ? 'page' : undefined}
             >
               {active ? <motion.div className="navActiveIndicator" layoutId="bottomNavActive" transition={navSpring} /> : null}
-              <motion.span className="navIcon" animate={{ y: active ? -1 : 0, opacity: active ? 1 : 0.72 }} transition={screenTransition}>
+              <motion.span
+                className="navIcon"
+                animate={
+                  active
+                    ? { y: -1, scale: [1, 1.22, 1], opacity: 1, rotate: [0, -4, 0] }
+                    : { y: 0, scale: 1, opacity: 0.72, rotate: 0 }
+                }
+                transition={
+                  active
+                    ? { duration: 0.42, times: [0, 0.42, 1], ease: [0.34, 1.56, 0.64, 1] }
+                    : microTransition
+                }
+              >
                 <Icon size={20} strokeWidth={2.5} />
               </motion.span>
-              <motion.span className="navLabel" animate={{ opacity: active ? 1 : 0.68 }} transition={screenTransition}>
+              <motion.span
+                className="navLabel"
+                animate={{ opacity: active ? 1 : 0.68, scale: active ? 1.04 : 1 }}
+                transition={active ? snappySpring : microTransition}
+              >
                 {item.label}
               </motion.span>
             </button>
@@ -249,6 +268,22 @@ function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
         }}
       />
       <motion.div
+        className="themeTransitionPulse"
+        initial={{ scale: 0.3, opacity: 0 }}
+        animate={{ scale: 3.6, opacity: [0, 0.34, 0] }}
+        transition={{
+          scale: { duration: 0.62, delay: 0.08, ease: [0.16, 1, 0.3, 1] },
+          opacity: { duration: 0.62, delay: 0.08, times: [0, 0.3, 1], ease: [0.16, 1, 0.3, 1] },
+        }}
+        style={{
+          left: origin.x - pulseSize / 2,
+          top: origin.y - pulseSize / 2,
+          width: pulseSize,
+          height: pulseSize,
+          borderColor: color,
+        }}
+      />
+      <motion.div
         className="themeTransitionCore"
         initial={{ scale: 0.18, opacity: 0.5 }}
         animate={{ scale: 1.35, opacity: 0 }}
@@ -264,9 +299,9 @@ function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
       <motion.div
         className="themeTransitionBloom"
         initial={{ scale: 0.035, opacity: 0.72 }}
-        animate={{ scale: 1, opacity: [0.72, 0.54, 0.2, 0.02] }}
+        animate={{ scale: [0.035, 1.015, 1], opacity: [0.72, 0.54, 0.2, 0.02] }}
         transition={{
-          scale: { duration: 0.68, ease: [0.16, 1, 0.3, 1] },
+          scale: { duration: 0.72, times: [0, 0.82, 1], ease: [0.16, 1, 0.3, 1] },
           opacity: { duration: 0.86, times: [0, 0.38, 0.72, 1], ease: [0.16, 1, 0.3, 1] },
         }}
         style={{
@@ -444,17 +479,18 @@ export default function App() {
   }
 
   return (
-    <div className="appViewport">
-      <div className="appFrame">
-        <OverlayProvider>
+    <MotionConfig reducedMotion="user">
+      <div className="appViewport">
+        <div className="appFrame">
+          <OverlayProvider>
           <AnimatePresence mode="wait">
           {!tourSeen ? (
             <motion.div
               key="tour"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 1.05 }}
-              transition={{ duration: 0.3 }}
+              initial={{ opacity: 0, scale: 0.96, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 1.04, filter: 'blur(6px)' }}
+              transition={{ duration: 0.38, ease: [0.05, 0.7, 0.1, 1] }}
               style={{ height: '100%' }}
             >
               <TourScreen onClose={() => setTourSeen(true)} />
@@ -465,7 +501,7 @@ export default function App() {
               initial={{ x: '100%' }}
               animate={{ x: 0 }}
               exit={{ x: '100%', zIndex: 10 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 38, mass: 0.95 }}
               style={{ height: '100%', position: 'absolute', inset: 0, background: 'var(--bg)', zIndex: 10 }}
             >
               <AddAccountScreen
@@ -644,8 +680,9 @@ export default function App() {
           <AnimatePresence initial={false}>
             {themeTransition ? <ThemeTransitionOverlay key={themeTransition.key} transition={themeTransition} /> : null}
           </AnimatePresence>
-        </OverlayProvider>
+          </OverlayProvider>
+        </div>
       </div>
-    </div>
+    </MotionConfig>
   )
 }

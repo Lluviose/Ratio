@@ -96,7 +96,9 @@ test('expands a category block into its breakdown chart and collapses back', asy
   await expect(panel.getByText('20%').first()).toBeVisible()
 
   await panel.getByRole('button', { name: '收起占比详情' }).click()
-  await expect(panel).toBeHidden()
+  // toBeHidden 的页内轮询依赖 rAF，Windows 无头 WebKit 空闲节流时会饿死；
+  // expect.poll 每次从 Node 侧发起新求值，不受页面节流影响
+  await expect.poll(() => panel.count(), { timeout: 10_000 }).toBe(0)
 
   // 收起后可再次展开
   await hit.click()
@@ -114,7 +116,7 @@ test('closes the breakdown when tapping the scrim or leaving the ratio page', as
 
   // 点击顶部遮罩区域（面板之外）收起
   await page.getByTestId('ratio-breakdown-scrim').click({ position: { x: 60, y: 24 } })
-  await expect(panel).toBeHidden()
+  await expect.poll(() => panel.count(), { timeout: 10_000 }).toBe(0)
 
   // 再次展开后，滑回列表页应自动收起
   await hit.click()
@@ -123,5 +125,5 @@ test('closes the breakdown when tapping the scrim or leaving the ratio page', as
     el.scrollLeft = el.clientWidth * 2
     el.dispatchEvent(new Event('scroll', { bubbles: true }))
   })
-  await expect(panel).toBeHidden()
+  await expect.poll(() => panel.count(), { timeout: 10_000 }).toBe(0)
 })

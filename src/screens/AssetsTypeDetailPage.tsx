@@ -136,10 +136,11 @@ export function AssetsTypeDetailPage(props: {
               <AnimatePresence>
                 {moreOpen ? (
                   <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    initial={{ opacity: 0, y: -8, scale: 0.92 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                    transition={{ duration: 0.15 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.96, transition: { duration: 0.13, ease: [0.4, 0, 1, 1] } }}
+                    transition={{ type: 'spring', stiffness: 560, damping: 38, mass: 0.7 }}
+                    style={{ transformOrigin: 'top right' }}
                     onClick={(e) => e.stopPropagation()}
                     className="absolute right-0 top-full mt-2 min-w-[160px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
                   >
@@ -205,10 +206,16 @@ export function AssetsTypeDetailPage(props: {
                     e.preventDefault()
                     onEditAccount(account)
                   }}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.1 + i * 0.03 }}
-                  whileTap={{ scale: 0.985 }}
+                  initial={{ opacity: 0, x: -14, scale: 0.985 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  transition={{
+                    type: 'spring',
+                    stiffness: 420,
+                    damping: 34,
+                    mass: 0.8,
+                    delay: Math.min(0.1 + i * 0.035, 0.42),
+                  }}
+                  whileTap={{ scale: 0.975 }}
                   style={{ borderRadius: 22, pointerEvents: isActive ? 'none' : 'auto' }}
                 >
                   <motion.div
@@ -263,9 +270,13 @@ export function AssetsTypeDetailPage(props: {
                   key={account.id}
                   value={account.id}
                   as="div"
-                  whileDrag={{ scale: 1.02 }}
+                  whileDrag={{
+                    scale: 1.035,
+                    boxShadow: '0 16px 32px -12px rgba(15, 23, 42, 0.28)',
+                    cursor: 'grabbing',
+                  }}
                   className="assetItem"
-                  style={{ cursor: 'grab', userSelect: 'none' }}
+                  style={{ cursor: 'grab', userSelect: 'none', position: 'relative' }}
                 >
                   <div className="assetLeft">
                     <div className="w-9 h-9 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200/50">

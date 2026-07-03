@@ -464,19 +464,46 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                 <div className="mt-3 grid gap-2">
                   {messages.map((m, idx) => (
                     m.role === 'user' ? (
-                      <div
+                      <motion.div
                         key={idx}
                         className="ml-auto max-w-[85%] rounded-[18px] bg-[var(--primary)] text-[var(--primary-contrast)] px-3 py-2 text-[13px] font-semibold leading-relaxed shadow-sm whitespace-pre-wrap break-words"
+                        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.75 }}
+                        style={{ transformOrigin: 'bottom right' }}
                       >
                         {m.content}
-                      </div>
+                      </motion.div>
                     ) : (
-                      <div key={idx} className="mr-auto max-w-[88%]">
+                      <motion.div
+                        key={idx}
+                        className="mr-auto max-w-[88%]"
+                        initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 520, damping: 34, mass: 0.75 }}
+                        style={{ transformOrigin: 'bottom left' }}
+                      >
                         <div
                           ref={idx === messages.length - 1 ? lastAssistantMessageRef : null}
                           className="rounded-[18px] bg-white/80 text-slate-800 px-3 py-2 text-[13px] font-semibold leading-relaxed border border-white/70 shadow-sm break-words"
                         >
-                          {m.content ? <ChatMarkdown>{m.content}</ChatMarkdown> : '正在思考...'}
+                          {m.content ? (
+                            <ChatMarkdown>{m.content}</ChatMarkdown>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>正在思考</span>
+                              <span className="inline-flex items-center gap-[3px]" aria-hidden="true">
+                                {[0, 1, 2].map((dot) => (
+                                  <motion.span
+                                    key={dot}
+                                    className="inline-block w-[4px] h-[4px] rounded-full bg-slate-400"
+                                    animate={{ opacity: [0.25, 1, 0.25] }}
+                                    transition={{ duration: 1.1, repeat: Infinity, delay: dot * 0.18, ease: 'easeInOut' }}
+                                  />
+                                ))}
+                              </span>
+                            </span>
+                          )}
                         </div>
                         {m.content ? (
                           <div className="mt-1 flex gap-1">
@@ -502,7 +529,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                             ) : null}
                           </div>
                         ) : null}
-                      </div>
+                      </motion.div>
                     )
                   ))}
                 </div>

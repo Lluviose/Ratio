@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as Matter from 'matter-js'
 import { animate, motionValue, type MotionValue } from 'framer-motion'
+import { useReducedMotion } from '../lib/useReducedMotion'
 
 export type BubbleNode = {
   id: string
@@ -59,6 +60,12 @@ export function useBubblePhysics(
   const [bursts] = useState(() => new Map<string, BubbleBurst>())
   const [burstProgress] = useState(() => new Map<string, MotionValue<number>>())
   const [runtimeRevision, bump] = useState(0)
+  const prefersReducedMotion = useReducedMotion()
+  const reduceMotionRef = useRef(prefersReducedMotion)
+
+  useEffect(() => {
+    reduceMotionRef.current = prefersReducedMotion
+  }, [prefersReducedMotion])
 
   nodes.forEach((node) => {
     if (!positions.has(node.id)) {
@@ -90,7 +97,8 @@ export function useBubblePhysics(
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
 
-    const engine = Matter.Engine.create()
+    // 提高迭代次数让圆形碰撞解算更平滑（气泡数量小，成本可忽略）
+    const engine = Matter.Engine.create({ positionIterations: 8, velocityIterations: 6 })
     const world = engine.world
     engine.gravity.x = 0
     engine.gravity.y = 0
@@ -102,6 +110,11 @@ export function useBubblePhysics(
     clusterBoostRef.current = null
     burstProgress.forEach((p) => p.set(0))
     bump((v) => v + 1)
+
+    // 新气泡按黄金角环绕中心生成，向外轻推后被中心引力收拢，形成有机的绽放入场
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5))
+    let freshIndex = 0
+    const freshVelocities = new Map<string, { x: number; y: number }>()
 
     const bodies = nodes.map((node) => {
       const isKnown = knownIdsRef.current.has(node.id)
@@ -117,8 +130,20 @@ export function useBubblePhysics(
 
       const radius = Number.isFinite(node.radius) && node.radius > 0 ? node.radius : 1
 
-      const x0 = hasPrev ? (prevX as number) : Math.random() * (width - 100) + 50
-      const y0 = hasPrev ? (prevY as number) : Math.random() * (height - 100) + 50
+      let x0: number
+      let y0: number
+      if (hasPrev) {
+        x0 = prevX as number
+        y0 = prevY as number
+      } else {
+        const angle = freshIndex * goldenAngle + Math.random() * 0.5
+        const ringR = Math.min(width, height) * 0.16 + freshIndex * 12
+        x0 = width / 2 + Math.cos(angle) * ringR
+        y0 = height / 2 + Math.sin(angle) * ringR
+        const bloomSpeed = reduceMotionRef.current ? 0 : 2.4 + Math.random() * 1.4
+        freshVelocities.set(node.id, { x: Math.cos(angle) * bloomSpeed, y: Math.sin(angle) * bloomSpeed })
+        freshIndex += 1
+      }
 
       const minX = radius
       const maxX = width - radius
@@ -136,6 +161,11 @@ export function useBubblePhysics(
         render: { fillStyle: node.color },
       })
     })
+
+    for (const body of bodies) {
+      const v = freshVelocities.get(body.label)
+      if (v) Matter.Body.setVelocity(body, v)
+    }
 
     const wallOptions = { isStatic: true, render: { visible: false } }
     const walls = [
@@ -181,13 +211,16 @@ export function useBubblePhysics(
     const onBeforeUpdate = () => {
       const t = (performance.now() - t0) / 1000
 
-      const wander = Math.min(width, height) * 0.06
+      // 减少动态偏好下停用环境漂移，仅保留聚拢力维持布局
+      const ambientScale = reduceMotionRef.current ? 0 : 1
+
+      const wander = Math.min(width, height) * 0.06 * ambientScale
       const cx = width / 2 + Math.sin(t * 0.17) * wander
       const cy = height / 2 + Math.cos(t * 0.13) * wander
 
-      const pulse = Math.sin(t * 0.35)
+      const pulse = Math.sin(t * 0.35) * ambientScale
       const baseCenterK = 0.000015 + 0.000005 * pulse
-      const swirlK = 0.000001 * Math.cos(t * 0.25)
+      const swirlK = 0.000001 * Math.cos(t * 0.25) * ambientScale
 
       let centerBoostMul = 1
       const boost = clusterBoostRef.current
@@ -215,7 +248,8 @@ export function useBubblePhysics(
         const seed = driftSeedsRef.current.get(body.label)
         if (!seed) return
 
-        const drift = 0.00012
+        const drift = 0.00012 * ambientScale
+        if (drift === 0) return
         Matter.Body.applyForce(body, body.position, {
           x: Math.sin(t * 0.9 + seed.a) * drift,
           y: Math.cos(t * 1.1 + seed.b) * drift,
@@ -266,11 +300,19 @@ export function useBubblePhysics(
 
     Matter.Events.on(engine, 'beforeUpdate', onBeforeUpdate)
 
-    const runner = Matter.Runner.create()
+    // 固定步长 + 限制单帧追帧时间：高刷屏与后台切换后表现一致，避免追帧导致的跳动
+    const runner = Matter.Runner.create({ delta: 1000 / 60, maxFrameTime: 1000 / 30 })
     runnerRef.current = runner
 
     const onAfterUpdate = () => {
       bodiesRef.current.forEach((body) => {
+        // NaN/越界兜底：任何异常位置直接归位画面中心，防止气泡永久消失
+        if (!Number.isFinite(body.position.x) || !Number.isFinite(body.position.y)) {
+          Matter.Body.setPosition(body, { x: width / 2, y: height / 2 })
+          Matter.Body.setVelocity(body, { x: 0, y: 0 })
+          Matter.Body.setAngularVelocity(body, 0)
+        }
+
         const m = positions.get(body.label)
         if (m) {
           m.x.set(body.position.x)

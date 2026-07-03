@@ -10,7 +10,7 @@ import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSe
 import { CLOUD_SYNC_DIRTY_KEY, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEvents'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
-import { quickFade } from '../lib/motionPresets'
+import { overshootEase, quickFade } from '../lib/motionPresets'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage, RATIO_CHART_TOP, type RatioPageBlock } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
@@ -1827,9 +1827,9 @@ export function AssetsScreen(props: {
               {cloudConnected ? (
                 <motion.span
                   className="w-5 h-5 -m-0.5 flex items-center justify-center text-emerald-500 drop-shadow-[0_2px_4px_rgba(16,185,129,0.28)]"
-                  initial={{ opacity: 0, scale: 0.72, y: -2 }}
+                  initial={{ opacity: 0, scale: 0.45, y: -3 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
-                  transition={quickFade}
+                  transition={{ duration: 0.36, ease: overshootEase }}
                   aria-label="cloud connected"
                   title="云端已连接"
                 >
@@ -1838,7 +1838,18 @@ export function AssetsScreen(props: {
               ) : null}
             </div>
             <div className="mt-1 text-[34px] font-semibold tracking-tight text-slate-900">
-              {hideAmounts ? <span className={maskedClass}>{maskedText}</span> : formatCny(grouped.netWorth)}
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.span
+                  key={hideAmounts ? 'masked' : 'visible'}
+                  className={hideAmounts ? `inline-block ${maskedClass}` : 'inline-block'}
+                  initial={{ opacity: 0, y: 9, scale: 0.985 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -9, scale: 0.985, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
+                  transition={quickFade}
+                >
+                  {hideAmounts ? maskedText : formatCny(grouped.netWorth)}
+                </motion.span>
+              </AnimatePresence>
             </div>
           </motion.div>
 
@@ -1896,10 +1907,11 @@ export function AssetsScreen(props: {
               {moreOpen ? (
                 <motion.div
                   key="menu"
-                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  initial={{ opacity: 0, y: 10, scale: 0.92 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                  transition={{ duration: 0.15 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96, transition: { duration: 0.13, ease: [0.4, 0, 1, 1] } }}
+                  transition={{ type: 'spring', stiffness: 560, damping: 38, mass: 0.7 }}
+                  style={{ transformOrigin: 'bottom left' }}
                   className="absolute left-0 bottom-full mb-2 min-w-[160px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden"
                 >
                   <button

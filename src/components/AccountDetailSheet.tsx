@@ -535,18 +535,21 @@ export function AccountDetailSheet(props: {
 
   const OP_DELETE_REVEAL_PX = 72
 
-  const pageTransition = { duration: 0.2, ease: [0.16, 1, 0.3, 1] as const }
+  const pageTransition = { duration: 0.26, ease: [0.05, 0.7, 0.1, 1] as const }
   const pageVariants = {
     initial: (dir: number) => ({
       opacity: 0,
-      x: dir === 0 ? 0 : dir * 18,
+      x: dir === 0 ? 0 : dir * 22,
       y: 10,
+      scale: 0.99,
     }),
-    animate: { opacity: 1, x: 0, y: 0 },
+    animate: { opacity: 1, x: 0, y: 0, scale: 1 },
     exit: (dir: number) => ({
       opacity: 0,
-      x: dir === 0 ? 0 : -dir * 18,
+      x: dir === 0 ? 0 : -dir * 22,
       y: -10,
+      scale: 0.99,
+      transition: { duration: 0.15, ease: [0.4, 0, 1, 1] as const },
     }),
   }
 
@@ -966,10 +969,11 @@ export function AccountDetailSheet(props: {
                   <AnimatePresence>
                     {moreOpen ? (
                       <motion.div
-                        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                        initial={{ opacity: 0, y: -8, scale: 0.92 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 8, scale: 0.98 }}
-                        transition={{ duration: 0.15 }}
+                        exit={{ opacity: 0, y: -6, scale: 0.96, transition: { duration: 0.13, ease: [0.4, 0, 1, 1] } }}
+                        transition={{ type: 'spring', stiffness: 560, damping: 38, mass: 0.7 }}
+                        style={{ transformOrigin: 'top right' }}
                         onClick={(e) => e.stopPropagation()}
                         className="absolute right-0 top-full mt-2 min-w-[180px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
                       >
@@ -1072,9 +1076,15 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
-                <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
+                <motion.div
+                  key={`balance-${account.balance}`}
+                  className="mt-4 text-[34px] font-black tracking-tight text-slate-900"
+                  initial={{ opacity: 0, y: 8, scale: 0.99 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.8 }}
+                >
                   {formatCny(account.balance)}
-                </div>
+                </motion.div>
 
                 <div className="mt-5 flex gap-3">
                   <motion.button
@@ -1082,7 +1092,8 @@ export function AccountDetailSheet(props: {
                     aria-label="adjust balance action"
                     onPointerDown={(e) => handleActionPointerDown(e, openAdjustAction)}
                     onClick={() => handleActionClick(openAdjustAction)}
-                    whileTap={{ scale: 0.99 }}
+                    whileTap={{ scale: 0.965, y: 1 }}
+                    transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
                     className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
                   >
                     期间增减
@@ -1092,7 +1103,8 @@ export function AccountDetailSheet(props: {
                     aria-label="set balance action"
                     onPointerDown={(e) => handleActionPointerDown(e, openSetBalanceAction)}
                     onClick={() => handleActionClick(openSetBalanceAction)}
-                    whileTap={{ scale: 0.99 }}
+                    whileTap={{ scale: 0.965, y: 1 }}
+                    transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
                     className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
                   >
                     修改余额
