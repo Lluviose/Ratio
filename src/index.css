@@ -9,9 +9,9 @@
   --muted-text: #6b7280;
   --hairline: rgba(15, 23, 42, 0.08);
 
-  --primary: #4f46e5;
+  --primary: #5a5fd8;
   --primary-contrast: #ffffff;
-  --primary-rgb: 79 70 229;
+  --primary-rgb: 90 95 216;
 
   --radius-xl: 24px;
   --radius-lg: 20px;
@@ -101,27 +101,27 @@
 }
 
 :root[data-theme="matisse"] {
-  --primary: #4f46e5; /* Indigo 600 */
+  --primary: #17976d; /* Matisse viridian */
 }
 
 :root[data-theme="matisse2"] {
-  --primary: #6366f1; /* Indigo 500 */
+  --primary: #5a5fd8; /* Jazz indigo */
 }
 
 :root[data-theme="macke"] {
-  --primary: #f43f5e; /* Rose 500 */
+  --primary: #ff6b57; /* Macke coral */
 }
 
 :root[data-theme="mondrian"] {
-  --primary: #2563eb; /* Blue 600 */
+  --primary: #c53225; /* Mondrian carmine */
 }
 
 :root[data-theme="kandinsky"] {
-  --primary: #9333ea; /* Purple 600 */
+  --primary: #a827cf; /* Kandinsky violet */
 }
 
 :root[data-theme="miro"] {
-  --primary: #0ea5e9; /* Sky 500 */
+  --primary: #17a3cf; /* Miró azure */
 }
 
 * {

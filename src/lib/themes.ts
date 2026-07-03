@@ -50,23 +50,25 @@ export const realThemeOptions: ThemeOption[] = [
   {
     id: 'matisse',
     name: 'Matisse',
+    // 野兽派剪纸：柠檬黄 / 韦罗内塞绿 / 钴蓝 / 灰玫瑰 / 纸灰
     colors: {
-      liquid: '#f59e0b',
-      invest: '#ff8b73',
-      fixed: '#26c6da',
-      receivable: '#c7b5ff',
-      debt: '#d6d3d1',
+      liquid: '#f7cd57',
+      invest: '#17976d',
+      fixed: '#2f63d3',
+      receivable: '#e57f88',
+      debt: '#d7d2c6',
     },
   },
   {
     id: 'matisse2',
     name: 'Matisse 2',
+    // 《爵士》夜色：祖母绿 / 靛蓝 / 深海军 / 青瓷蓝 / 雾靛灰
     colors: {
-      liquid: '#10b981',
-      invest: '#6366f1',
-      fixed: '#a5b4fc',
-      receivable: '#67e8f9',
-      debt: '#e0e7ff',
+      liquid: '#17a673',
+      invest: '#5a5fd8',
+      fixed: '#2c3e8f',
+      receivable: '#3fc3dd',
+      debt: '#d5daf0',
     },
   },
   {
@@ -83,34 +85,37 @@ export const realThemeOptions: ThemeOption[] = [
   {
     id: 'mondrian',
     name: 'Mondrian',
+    // 新造型主义：镉黄 / 深胭脂红 / 群青 / 画廊灰 / 格线黑
     colors: {
-      liquid: '#eab308',
-      invest: '#ef4444',
-      fixed: '#2563eb',
-      receivable: '#e2e8f0',
-      debt: '#111827',
+      liquid: '#f7cf52',
+      invest: '#c53225',
+      fixed: '#2a56c5',
+      receivable: '#d8d5cb',
+      debt: '#17181c',
     },
   },
   {
     id: 'kandinsky',
     name: 'Kandinsky',
+    // 《构成八号》：橙 / 紫红 / 石油蓝 / 玫瑰粉 / 淡丁香灰
     colors: {
-      liquid: '#f97316',
-      invest: '#ef4444',
-      fixed: '#8b5cf6',
-      receivable: '#c4b5fd',
-      debt: '#ede9fe',
+      liquid: '#f0982e',
+      invest: '#a827cf',
+      fixed: '#1a7fa8',
+      receivable: '#e88bb1',
+      debt: '#ddd6e8',
     },
   },
   {
     id: 'miro',
     name: 'Miro',
+    // 米罗星群：明黄 / 天青 / 朱红 / 草绿 / 墨黑
     colors: {
-      liquid: '#ffb703',
-      invest: '#f43f5e',
-      fixed: '#0ea5e9',
-      receivable: '#14b8a6',
-      debt: '#1f2937',
+      liquid: '#f8d05e',
+      invest: '#17a3cf',
+      fixed: '#e0432f',
+      receivable: '#3aa864',
+      debt: '#22242a',
     },
   },
 ]
@@ -134,11 +139,11 @@ export const themeOptions: ThemeOption[] = [
     id: 'random',
     name: 'Random',
     colors: realThemeOptions[0]?.colors ?? {
-      liquid: '#f59e0b',
-      invest: '#ff8b73',
-      fixed: '#26c6da',
-      receivable: '#c7b5ff',
-      debt: '#d6d3d1',
+      liquid: '#f7cd57',
+      invest: '#17976d',
+      fixed: '#2f63d3',
+      receivable: '#e57f88',
+      debt: '#d7d2c6',
     },
   },
   ...realThemeOptions,

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-04 - 重设计主题配色（Macke 除外）
+
+- 五套主题按画家视觉语汇重新设计调色板：Matisse（柠檬黄/韦罗内塞绿/钴蓝/灰玫瑰/纸灰）、Matisse 2（祖母绿/靛蓝/深海军/青瓷蓝/雾靛灰）、Mondrian（镉黄/深胭脂红/群青/画廊灰/格线黑）、Kandinsky（橙/紫红/石油蓝/玫瑰粉/淡丁香灰）、Miro（明黄/天青/朱红/草绿/墨黑）；Macke 保持不变。
+- 修复原配色的三处结构问题：Mondrian 与 Kandinsky 共用同一强调色（#ef4444）、Matisse 强调色与 Macke 珊瑚色近乎重复、部分 receivable 色过浅在气泡/图表中发虚。
+- 六套主题强调色（invest，即 `--primary`）现分属六个色相族：viridian 绿 / 靛蓝 / 珊瑚 / 胭脂红 / 紫红 / 天青，主题间辨识度显著提升。
+- 全部配色经脚本校验：按应用自身亮度阈值（0.62）确认每个色块的前景文字色，主题内与主题间强调色两两距离达标（仅保留 Macke 原有的一处既有近似对）。
+- 同步 `index.css` 六个 `[data-theme]` 的 `--primary` 首屏回退值（此前全部与实际主题色脱节），`:root` 基础值对齐默认主题 Matisse 2。
+- 已通过 `npm run lint`、`npm test`、`npm run build` 和 `npm run test:e2e`（18 项）验证。
+
 ## 2026-07-04 - 全局动效精细化与流畅度优化
 
 - 动效词汇表（`src/lib/motionPresets.ts`）全面扩充：新增 emphasized/silk/exit/overshoot 缓动、snappy/gentle/bouncy/sheet 弹簧、tap 触感预设与 stagger 编排工具（`staggerDelay`、`cardEntranceAt` 等），所有旧导出保持兼容。
