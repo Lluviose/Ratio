@@ -12,7 +12,7 @@ import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEven
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { quickFade } from '../lib/motionPresets'
 import { AssetsListPage } from './AssetsListPage'
-import { AssetsRatioPage } from './AssetsRatioPage'
+import { AssetsRatioPage, RATIO_CHART_TOP, type RatioPageBlock } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
@@ -570,6 +570,7 @@ export function AssetsScreen(props: {
   const [showOverlayLabels, setShowOverlayLabels] = useState(true)
 
   const didInitRef = useRef(false)
+  const anchoredScrollerWidthRef = useRef<number | null>(null)
   const detailCloseFallbackTimerRef = useRef<number | null>(null)
   const detailClosePendingRef = useRef(false)
   const detailPageReachedRef = useRef(false)
@@ -653,6 +654,7 @@ export function AssetsScreen(props: {
     if (Math.abs(actual - target) > 1) return false
 
     if (scrollLeft.get() !== actual) scrollLeft.set(actual)
+    anchoredScrollerWidthRef.current = w
     reportHomePageActive(INITIAL_HOME_PAGE_INDEX)
     return true
   }, [reportHomePageActive, scrollLeft])
@@ -676,7 +678,7 @@ export function AssetsScreen(props: {
   
   const [bubbleRuntime, setBubbleRuntime] = useState<BubbleRuntimeState>(() => getBubbleRuntimeState(INITIAL_HOME_PAGE_INDEX))
   const bubbleRuntimeRef = useRef(bubbleRuntime)
-  
+
   useEffect(() => {
     return scrollIdx.on('change', (v) => {
       const current = bubbleRuntimeRef.current
@@ -686,6 +688,22 @@ export function AssetsScreen(props: {
       bubbleRuntimeRef.current = next
       setBubbleRuntime(next)
     })
+  }, [scrollIdx])
+
+  // 占比页是否处于（接近）当前页，用于启用色块点击展开、离开时自动收起
+  const [ratioPageActive, setRatioPageActive] = useState(false)
+  const ratioPageActiveRef = useRef(false)
+
+  useEffect(() => {
+    const update = (v: number) => {
+      const next = v > 0.55 && v < 1.45
+      if (ratioPageActiveRef.current === next) return
+      ratioPageActiveRef.current = next
+      setRatioPageActive(next)
+    }
+
+    update(scrollIdx.get())
+    return scrollIdx.on('change', update)
   }, [scrollIdx])
 
   const listHeaderY = useTransform(ratioProgress, [0, 1], [-120, 0])
@@ -907,7 +925,7 @@ export function AssetsScreen(props: {
   }, [detailPageMounted, scrollerWidth, scrollToPage, selectedType])
 
   const ratioLayout = useMemo(() => {
-    const top = 64
+    const top = RATIO_CHART_TOP
     const chartH = Math.max(0, viewport.h - top)
     const chartW = viewport.w
 
@@ -1085,6 +1103,28 @@ export function AssetsScreen(props: {
       ratioLayout.rects,
     ],
   )
+
+  // 占比页点击展开所需的色块几何与分组账户数据
+  const ratioPageBlocks = useMemo<RatioPageBlock[]>(
+    () =>
+      homeBlockGeometries.map((g) => ({
+        id: g.block.id,
+        name: g.block.name,
+        tone: g.block.tone,
+        amount: g.block.amount,
+        percent: g.block.percent,
+        rect: g.ratioRect,
+        displayHeight: g.displayHeight,
+        corner: g.ratioCorner,
+      })),
+    [homeBlockGeometries],
+  )
+
+  const accountsByGroup = useMemo(() => {
+    const byGroup: Partial<Record<GroupId, Account[]>> = {}
+    for (const g of grouped.groupCards) byGroup[g.group.id as GroupId] = g.accounts
+    return byGroup
+  }, [grouped.groupCards])
 
   const measureListRects = useCallback(() => {
     const root = viewportRef.current
@@ -1269,7 +1309,13 @@ export function AssetsScreen(props: {
   useLayoutEffect(() => {
     if (!initialized) return
     if (detailPageMounted) return
-    if (!scrollHomeScrollerToListPage()) return
+    // 只在滚动器宽度较上次锚定发生实际变化时才把页面拽回列表页。
+    // 初始化经 rAF 重试成功后，initialized 翻转会让本 effect 在稍晚的提交中再次执行；
+    // 若此时用户已滑到其他页（如占比页展开详情），无条件锚定会把用户拽回去。
+    const width = scrollerRef.current?.clientWidth ?? 0
+    if (anchoredScrollerWidthRef.current !== width) {
+      if (!scrollHomeScrollerToListPage()) return
+    }
     scheduleMeasure()
   }, [detailPageMounted, initialized, scheduleMeasure, scrollerWidth, scrollHomeScrollerToListPage])
 
@@ -1458,8 +1504,8 @@ export function AssetsScreen(props: {
     if (!blocks.debt || ratioLayout.debtExceeds) return null
     const debtRect = ratioLayout.rects.debt
     if (!debtRect) return null
-    
-    const top = 64
+
+    const top = RATIO_CHART_TOP
     const fillerH = debtRect.y - top
     if (fillerH <= 0) return null
     
@@ -1469,8 +1515,8 @@ export function AssetsScreen(props: {
   // 计算资产底部的白色填充块（负债比例超过100%时）
   const assetFillerRect = useMemo(() => {
     if (!blocks.debt || !ratioLayout.debtExceeds) return null
-    
-    const top = 64
+
+    const top = RATIO_CHART_TOP
     const chartH = Math.max(0, viewport.h - top)
     const debtW = Math.round(viewport.w * 0.24)
     const assetX = debtW
@@ -1876,6 +1922,7 @@ export function AssetsScreen(props: {
       <div
         ref={scrollerRef}
         aria-hidden={!initialized}
+        data-testid="home-scroller"
         className="relative z-10 w-full h-full overflow-x-auto snap-x snap-mandatory flex scrollbar-hide overscroll-x-contain"
         style={homeScrollerStyle}
       >
@@ -1890,7 +1937,16 @@ export function AssetsScreen(props: {
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={horizontalPageStyle}>
-          <AssetsRatioPage onBack={goToListPage} />
+          <AssetsRatioPage
+            onBack={goToListPage}
+            blocks={ratioPageBlocks}
+            accountsByGroup={accountsByGroup}
+            getIcon={getIcon}
+            hideAmounts={hideAmounts}
+            viewport={viewport}
+            active={ratioPageActive}
+            chartRadius={chartRadius}
+          />
         </div>
 
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={containedPageStyle}>
