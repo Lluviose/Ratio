@@ -140,6 +140,16 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。
 - **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 recharts/react-markdown，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
 
+### React Compiler（作用域限定）
+
+`babel-plugin-react-compiler` 已启用，但**只编译懒加载屏幕树**（TrendScreen / StatsScreen / SettingsScreen / `screens/stats/` / AiAssistant）：
+
+- 范围与理由集中在根目录 `react-compiler.shared.ts`：首包热路径是 MotionValue 驱动且已手工记忆化，整包编译会让首包 gzip +≈20KB（违反首包纪律）而收益甚微；懒屏幕（尤其统计卡片群，切区间/拖滑杆整树重渲染）收益真实，体积增长由 SW 缓存吸收。
+- `vite.config.ts` 与 `vitest.config.ts` **必须共用** `reactCompilerBabelConfig`——单测跑的转换结果要与产物一致；调整范围只改 `react-compiler.shared.ts`。
+- 逐文件编译/跳过审计：`node scripts/compiler-report.mjs`。已知跳过（安全，保持原样运行）：含 `try/finally` 的组件（编译器 v1 限制）与带内联 eslint-disable 的 `useBubblePhysics`（渲染期惰性初始化 Map，本就不该编译）。
+- 逃生舱：文件内 `'use no memo'` 指令可让单个组件退出编译；产物验证可 grep `react.memo_cache_sentinel`（注意 React 运行时自身也含该符号，以体积增量为准）。
+- 手写的 `useMemo`/`useCallback` 一律保留：被跳过的函数依赖它们，编译器也能理解它们。
+
 ## 领域模型
 
 ### 账户（src/lib/accounts.ts）

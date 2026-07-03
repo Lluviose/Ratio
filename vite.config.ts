@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { reactCompilerBabelConfig } from './react-compiler.shared'
 
 // https://vite.dev/config/
 export default defineConfig(() => {
@@ -51,7 +52,10 @@ export default defineConfig(() => {
       },
     },
     plugins: [
-      react(),
+      react({
+        // React Compiler：仅编译懒加载屏幕树，范围与理由见 react-compiler.shared.ts
+        babel: reactCompilerBabelConfig,
+      }),
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: false,

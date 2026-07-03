@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-04 - 启用 React Compiler（作用域限定于懒加载屏幕）
+
+- 引入 `babel-plugin-react-compiler` 1.0，经 `react-compiler.shared.ts` 统一配置，vite 构建与 vitest 单测共用同一转换。
+- 范围策略：只编译懒加载屏幕树（TrendScreen / StatsScreen / SettingsScreen / `screens/stats/` / AiAssistant）。整包编译实测会使首包 gzip +≈20KB 而热路径（MotionValue 驱动 + 手工记忆化）几乎无收益，故首包保持不编译；懒屏幕的自动记忆化让统计卡片群在切区间/改算法/拖滑杆时跳过未变子树的重渲染。
+- 实测体积：首包 128.72KB gzip（基线 128.58，+0.1%），screen-stats +13.0KB gzip（SW 缓存吸收），trend/AI/settings 基本不变。
+- 新增 `scripts/compiler-report.mjs` 逐文件审计编译/跳过：当前 65 编译 / 11 跳过；跳过均为安全回退（`try/finally` 的编译器 v1 限制、`useBubblePhysics` 因内联 eslint-disable 被有意排除）。
+- 手写 `useMemo`/`useCallback` 全部保留；文档补充范围调整方式与 `'use no memo'` 逃生舱（PROJECT.md / AGENTS.md）。
+- 已通过 `npm run lint`、`npm test`（187 项，跑编译后代码）、`npm run build` 和 `npm run test:e2e`（18 项，含编译后的 stats/trend 实机路径）验证。
+
 ## 2026-07-04 - 重设计主题配色（Macke 除外）
 
 - 五套主题按画家视觉语汇重新设计调色板：Matisse（柠檬黄/韦罗内塞绿/钴蓝/灰玫瑰/纸灰）、Matisse 2（祖母绿/靛蓝/深海军/青瓷蓝/雾靛灰）、Mondrian（镉黄/深胭脂红/群青/画廊灰/格线黑）、Kandinsky（橙/紫红/石油蓝/玫瑰粉/淡丁香灰）、Miro（明黄/天青/朱红/草绿/墨黑）；Macke 保持不变。
