@@ -83,21 +83,67 @@ function preloadTab(tab: TabId) {
   return Promise.resolve()
 }
 
-function scheduleIdleWork(work: () => void) {
+function scheduleIdleWork(
+  work: () => void,
+  options: { minDelay?: number; timeout?: number; fallbackDelay?: number } = {},
+) {
   if (typeof window === 'undefined') return () => {}
+  const { minDelay = 0, timeout = 3500, fallbackDelay = 1400 } = options
 
   const idleWindow = window as Window & {
     requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
     cancelIdleCallback?: (handle: number) => void
   }
 
-  if (typeof idleWindow.requestIdleCallback === 'function') {
-    const id = idleWindow.requestIdleCallback(work, { timeout: 3500 })
-    return () => idleWindow.cancelIdleCallback?.(id)
+  let idleId: number | null = null
+  let fallbackTimer: number | null = null
+  const start = () => {
+    if (typeof idleWindow.requestIdleCallback === 'function') {
+      idleId = idleWindow.requestIdleCallback(work, { timeout })
+      return
+    }
+
+    fallbackTimer = window.setTimeout(work, fallbackDelay)
   }
 
-  const timer = window.setTimeout(work, 1400)
-  return () => window.clearTimeout(timer)
+  const minDelayTimer = window.setTimeout(start, minDelay)
+  return () => {
+    window.clearTimeout(minDelayTimer)
+    if (idleId !== null) idleWindow.cancelIdleCallback?.(idleId)
+    if (fallbackTimer !== null) window.clearTimeout(fallbackTimer)
+  }
+}
+
+function scheduleBackgroundTabPreloads() {
+  const tabs: TabId[] = ['settings', 'stats', 'trend']
+  let cancelled = false
+  let cancelPending = () => {}
+  let index = 0
+
+  const scheduleNext = (minDelay: number) => {
+    cancelPending = scheduleIdleWork(
+      () => {
+        if (cancelled) return
+        const tab = tabs[index]
+        index += 1
+        if (!tab) return
+
+        void preloadTab(tab)
+          .catch(() => undefined)
+          .finally(() => {
+            if (!cancelled) scheduleNext(1200)
+          })
+      },
+      { minDelay, timeout: 8000, fallbackDelay: 1800 },
+    )
+  }
+
+  scheduleNext(3200)
+
+  return () => {
+    cancelled = true
+    cancelPending()
+  }
 }
 
 function ScreenLoadError() {
@@ -405,13 +451,10 @@ export default function App() {
 
   useEffect(() => {
     if (!tourSeen) return
+    if (tab !== 'assets' || view !== 'main' || !assetsHomePageActive || selectedAccountId != null) return
 
-    return scheduleIdleWork(() => {
-      void loadTrendScreen().catch(() => undefined)
-      void loadStatsScreen().catch(() => undefined)
-      void loadSettingsScreen().catch(() => undefined)
-    })
-  }, [tourSeen])
+    return scheduleBackgroundTabPreloads()
+  }, [assetsHomePageActive, selectedAccountId, tab, tourSeen, view])
 
   useEffect(() => {
     initCloudAutoSync()
