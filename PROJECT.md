@@ -1,144 +1,189 @@
 # Ratio 项目地图
 
-这份文档给 AI 代理和新维护者快速建立项目上下文。面向用户的安装、部署说明仍以 `README.md` 为准。
+这份文档给 AI 代理和新维护者建立完整项目上下文：不止「文件在哪」，还包括「为什么这样设计」和「改动时会踩到什么」。面向用户的安装、部署说明以 `README.md` 为准；最短规则清单见 `AGENTS.md`；已知坑见 `TROUBLESHOOTING.md`。
+
+## 如何使用本文档
+
+- 改数据/金额/备份/云同步 → 读「领域模型」「本地存储键」「备份」「云同步与后端」。
+- 改页面交互/动画 → 读「前端架构」全部小节，尤其「资产首页」「动效系统」。
+- 改构建/PWA → 读「懒加载与分包」。
+- 不确定从哪下手 → 直接查「变更导航」表。
 
 ## 一句话定位
 
 Ratio 是一个本地优先的个人资产/负债管理 PWA。核心数据保存在浏览器 `localStorage`，可选配一个 Node 后端用于云备份、AI 代理、遥测和管理控制台。
 
+三个贯穿全局的设计决策：
+
+1. **本地优先**：无后端时功能完整；后端只做备份/代理/遥测，永远不是数据的唯一权威。
+2. **快照优先于流水**：趋势和统计基于每日 `snapshots`（净资产/分组余额的时间序列），而不是逐笔交易。`accountOps` 是操作历史，`ledger` 是可选补充明细，两者都不承诺完整覆盖收支。
+3. **移动端手感**：UI 按 420px 手机框架设计，动效密度高但遵守统一词汇表；系统「减弱动态」偏好被三层机制尊重（见「动效系统」）。
+
 ## 技术栈
 
-- 前端：React 19、TypeScript、Vite/Rolldown、Tailwind CSS、Framer Motion、lucide-react。
-- 图表/可视化：Recharts、Matter.js。
+- 前端：React 19、TypeScript、Vite/Rolldown、Tailwind CSS 4、Framer Motion 12、lucide-react。
+- 图表/可视化：Recharts（趋势/统计）、Matter.js 0.20（气泡物理）。
 - AI 聊天渲染：react-markdown、remark-gfm。
-- 测试：Vitest + jsdom + Testing Library，Playwright 端到端冒烟测试。
-- 后端：Node.js 20 原生 `http` 服务，无 Express/Koa。
-- PWA：`vite-plugin-pwa`，manifest 和图标位于 `public/`。
-- 部署：GitHub Pages 部署前端；Docker Compose 部署可选后端。
+- 测试：Vitest + jsdom + Testing Library；Playwright 端到端（chromium / mobile-chrome / mobile-safari 三项目）。
+- 后端：Node.js 20 原生 `http` 服务，无框架依赖。
+- PWA：`vite-plugin-pwa`（generateSW），manifest 和图标在 `public/`。
+- 部署：GitHub Pages 发布前端；Docker Compose 部署可选后端。
 
 ## 常用命令
 
 ```bash
 npm ci
-npm run dev
-npm run build
-npm test
-npm run lint
-npm run test:e2e
+npm run dev        # http://localhost:5173
+npm run build      # tsc -b && vite build
+npm test           # Vitest --run（25 文件 / 187 用例；数字随开发漂移，量级异常时警惕环境问题）
+npm run lint       # eslint .
+npm run test:e2e   # Playwright（会自行 build + preview 在 127.0.0.1:4173）
 ```
 
 后端本地/服务器启动：
 
 ```bash
 cp .env.example .env
-docker compose up -d --build
+docker compose up -d --build   # 后端地址 http://localhost:8787
 ```
-
-默认前端开发地址是 `http://localhost:5173`，后端地址是 `http://localhost:8787`。
 
 ## 顶层目录
 
 ```text
 .
 ├── src/                    # React 前端源码
-├── server/                 # 可选云端后台，Node 20 原生 http 服务
+│   ├── components/         # 共享组件（含物理引擎 hook、底部抽屉、AI 助手）
+│   ├── screens/            # 页面（stats/ 子目录为统计卡片群）
+│   ├── lib/                # 领域逻辑、存储、动效预设、hooks（测试与源码同目录）
+│   └── test/               # Vitest 全局 setup
+├── server/                 # 可选云端后台，Node 20 原生 http
 ├── public/                 # PWA manifest、图标和静态资源
 ├── e2e/                    # Playwright 端到端测试
 ├── .github/workflows/      # GitHub Pages 构建发布
-├── README.md               # 用户向说明：运行、部署、功能概览
-├── PROJECT.md              # 项目地图：给 AI 和维护者建立上下文
-├── AGENTS.md               # AI 代理入口：最短规则和高风险点
-├── TROUBLESHOOTING.md      # 已知问题和处理记录
 └── docker-compose.yml      # 后端 Docker Compose 配置
 ```
 
-## 前端入口与页面流
+## 前端架构
 
-- `src/main.tsx`：挂载 React、加载全局样式/PWA，并处理移动端手势缩放、长按菜单和文本选择保护。
-- `src/App.tsx`：应用主编排层。负责首屏引导、底部导航、页面懒加载、主题切换、每日快照同步、云同步初始化、遥测初始化和账户详情弹层。
-- `src/screens/AssetsScreen.tsx`：资产首页容器，管理资产视图内的页面切换。
-- `src/screens/AssetsRatioPage.tsx`：资产占比总览。
-- `src/screens/AssetsListPage.tsx`：账户列表。
-- `src/screens/BubbleChartPage.tsx`：资产气泡图。
-- `src/screens/AddAccountScreen.tsx`：新增账户。
-- `src/screens/TrendScreen.tsx`：资产趋势。
-- `src/screens/StatsScreen.tsx` 与 `src/screens/stats/`：统计、储蓄目标、预测、里程碑等。
-- `src/screens/SettingsScreen.tsx`：主题、备份恢复、云同步、AI、遥测等设置。
-- `src/screens/TourScreen.tsx`：首次进入引导页。
+### 应用编排（src/App.tsx）
 
-`App.tsx` 会懒加载趋势、统计、设置和 AI 助手，`vite.config.ts` 中也为这些模块设置了手动分包和 PWA 缓存策略。
+- 全局包裹 `<MotionConfig reducedMotion="user">`：系统减弱动态偏好下自动禁用位移/布局动画（透明度保留）。
+- 四个底部 Tab：`assets`（常驻首包）与 `trend` / `stats` / `settings`（React.lazy 懒加载，切换带方向感知的滑动过渡）。看过引导页后在空闲回调里预热三个懒加载模块。
+- 主题切换：`handleThemeChange` 创建全屏 bloom 过渡覆盖层（脉冲环 + 径向扩散 + 颜色 wash），用两个定时器编排「先播动画 → 中途应用 `data-theme` 与 CSS 变量 → 结束移除覆盖层」。`SettingsScreen` 通过 `onThemeChange(id, origin)` 上报点击坐标作为扩散原点——改主题流程时不要破坏这个坐标约定。
+- 账户详情 `AccountDetailSheet` 挂在 App 层：从资产列表行进入时走 `sheetMotion="morph"`（共享 `layoutId`，行卡片变形为抽屉），其他入口走 `slide`。
+- 每日快照同步（`useDailySnapshotSync`）、云自动同步、遥测都在这里初始化。
 
-## 共享组件
+### 资产首页：滚动驱动的形态变换（src/screens/AssetsScreen.tsx）
 
-- `src/components/AccountDetailSheet.tsx`：账户详情、改名、设余额、调整、转账和删除入口。
-- `src/components/AiAssistant.tsx`：前端 AI 助手 UI、会话状态、流式响应展示。
-- `src/components/LazyAiAssistant.tsx`：AI 助手懒加载包装。
-- `src/components/BubbleChartPhysics.tsx`：气泡图物理布局。
-- `src/components/BottomSheet.tsx`：通用底部抽屉。
-- `src/components/OverlayProvider.tsx` 与 `src/lib/overlay.ts`：全局 toast/覆盖层事件。
-- `src/components/SegmentedControl.tsx`、`Toggle.tsx`、`PillTabs.tsx`：基础控制组件。
-- `src/components/ScreenSkeleton.tsx`、`LazyLoadBoundary.tsx`：懒加载占位和错误边界。
+全项目最复杂的交互面。一个横向 snap 滚动器承载 4 个页面，同一组「分组色块」在页面间连续变形：
+
+```text
+Page 0        Page 1        Page 2        Page 3（按需挂载）
+气泡图    →    占比图    →    账户列表   →   类型详情
+(物理圆)      (堆叠矩形)     (卡片左侧色条)
+```
+
+关键机制：
+
+- `scrollLeft` 是 framer `MotionValue`，除以页宽得到 `scrollIdx`（0~3 连续值）。所有形变都是 `useTransform(scrollIdx, ...)` 的纯插值，不经过 React 渲染，滚动期间零重渲染。
+- `OverlayBlock`（每个分组一个）在三种几何间 lerp：气泡（圆心+半径来自物理引擎的 MotionValue）→ 占比矩形（`ratioLayout` 计算）→ 列表矩形（`measureListRects` 实测 DOM）。位置、尺寸、四角圆角、标签排版全部插值。
+- 列表矩形靠 `ResizeObserver` + rAF 节流的 `measureListRects` 持续校准；色块按 `LIST_GROUP_ORDER` 顺序渲染，后者盖住前者向下延伸的部分，从而填住下一张卡片圆角处的缝隙——**渲染顺序即层叠约定，不要重排**。
+- 气泡页运行态（物理开/关、碎片可见性）由 `scrollIdx` 阈值驱动且带迟滞（enable/disable 阈值不同），避免在页面边界抖动开关引擎。
+- Page 3 按需挂载：`handlePickType` 挂载后滚过去，返回走「滚回列表 → `finishDetailClose` 卸载」，配 900ms 兜底定时器防止滚动事件丢失导致卡死。
+- 初始化经 rAF 重试把滚动器锚定到列表页（Page 2），`skipInitialAnimation` 控制回访时不重播入场动画。
+
+改这块的原则：几何计算（`ratioLayout`、`measureListRects`、corner 系列函数）互相咬合，动 UI 前先理解插值链路；只动 transform/opacity；e2e `ratio-breakdown.spec.ts` 覆盖占比页展开面板。
+
+### 占比页展开面板（src/screens/AssetsRatioPage.tsx）
+
+点击色块 → `RatioExpandedPanel` 从色块矩形弹簧生长到整个图表区，内部是分类型分段占比。两个精密约定：
+
+- 面板收起后的首尾帧靠 `BlockLabelReplica` 与底层色块**逐像素对齐**（字号/布局分档逻辑复制自 `OverlayBlockLabels`），这是「几何敏感」的原因。
+- 单一资产占满图表时，收起动画没有数值变化，framer 不触发 `onAnimationComplete`，靠 650ms 兜底定时器卸载面板——不要移除这个定时器。
+
+### 动效系统
+
+词汇表集中在 `src/lib/motionPresets.ts`，全局共享，禁止在页面里散落新的 magic number：
+
+| 类别 | 导出 | 用途 |
+| --- | --- | --- |
+| 缓动 | `standardEase` / `expressiveEase` / `emphasizedEase` / `silkEase` / `exitEase` / `overshootEase` | 入场默认 / 大面积强调 / 屏幕级编排 / 微淡入 / 加速离场 / 回弹点缀 |
+| 时长过渡 | `microTransition`(0.14) / `quickFade`(0.18) / `screenTransition`(0.3) / `cardEntranceTransition`(0.38) / `smoothTransition`(0.34) / `progressFillTransition`(0.7) / `exitTransition`(0.16) | 按语义选，不按喜好选 |
+| 弹簧 | `softSpring` / `navSpring` / `snappySpring` / `gentleSpring` / `bouncySpring` / `sheetSpring` | 通用 / 底部导航 / 小控件 / 大表面 / 庆祝 / 抽屉（近临界阻尼） |
+| 原语 | `fadeUp*` / `cardEntrance*` / `scaleIn*` / `subtleLift` / `tooltipExit` / `fadeCollapseExit` | initial/animate 配对 |
+| 触感 | `tapPress` / `tapPressSoft` / `tapPressIcon` / `hoverLift` | whileTap / whileHover |
+| 编排 | `staggerContainer` + `staggerItem`、`staggerDelay(i)`、`cardEntranceAt(i)` | 错峰入场，延迟封顶防长列表拖尾 |
+
+硬性规范：
+
+1. 只动 transform/opacity（box-shadow/filter 仅限一次性短促点缀）；列表增删用 `layout` 属性而不是动 width/height/top/left。
+2. 离场必须快于入场（`exitTransition`/`exitEase`）。
+3. `layoutId` 按实例唯一：`SegmentedControl`/`PillTabs` 用 `useId()` 隔离；跨组件 morph 用 `src/lib/layoutIds.ts` 的工厂（如 `accountDetailSheetLayoutId(accountId)`，列表行 → 详情抽屉共享）。
+4. 反映持久化状态的控件加 `initial={false}`，避免挂载时误播动画。
+5. 无限/环境动画必须被减弱动态偏好关闭。三层机制：App 层 `MotionConfig reducedMotion="user"`（framer 位移动画）、`index.css` 的 `prefers-reduced-motion` 全局守卫（CSS 动画/过渡）、`src/lib/useReducedMotion.ts`（JS 驱动的逻辑，如物理漂移、面板兜底时长）。新增动画归类到对应层。
+6. CSS 侧缓动变量在 `index.css`（`--ease-out/-spring/-emphasized/-silk/-bounce-soft`）；骨架屏是流光扫过（`shimmerSweep`）+ 容器脉冲。
+
+### 气泡物理（src/components/BubbleChartPhysics.tsx）
+
+`useBubblePhysics(nodes, width, height, isActive, keepBurstsVisible)` 返回位置 MotionValue 映射与 `flick`/`burst` 交互：
+
+- 引擎生命周期以 `nodesConfigHash`（id+半径集合）为键：数据金额变化不重建引擎，只有气泡集合/半径变化才重建，且重建时保留旧位置。
+- Runner 固定 60Hz 步长 + `maxFrameTime` 封顶：高刷屏和后台切换回来表现一致；`positionIterations: 8, velocityIterations: 6` 换取更平滑的圆形碰撞。
+- 力场：漫游的中心吸引 + 微弱旋涡 + 每球随机相位漂移（减弱动态偏好下漂移归零，仅保留聚拢）。
+- 交互：`flick` 甩动（速度钳制 + 邻域冲击波 + 聚拢加成），三连击 `burst` 炸成碎片、延时后自动合并回原球。
+- 新气泡按黄金角环绕中心生成并向外轻推（绽放入场）；`afterUpdate` 里有 NaN/越界位置兜底，异常直接归位画面中心。
+- `isActive=false` 时 Runner 停转（滑离气泡页即省电），但碎片存在时可由 `keepBurstsVisible` 维持运行到合并完成。
+
+### 懒加载与分包（vite.config.ts）
+
+- manualChunks：`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-charts`（recharts）、`vendor-markdown`（react-markdown 全家桶）。
+- `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。
+- **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 recharts/react-markdown，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
 
 ## 领域模型
 
-### 账户
-
-核心类型在 `src/lib/accounts.ts`：
+### 账户（src/lib/accounts.ts）
 
 - `AccountGroupId`：`liquid` 流动资金、`invest` 投资、`fixed` 固定资产、`receivable` 应收款、`debt` 负债。
-- `AccountTypeId`：现金、银行卡、基金、股票、房产、信用卡、贷款等具体账户类型。
-- `Account`：`id`、`type`、`name`、`balance`、`updatedAt`。
+- `AccountTypeId`：现金、银行卡、基金、股票、房产、信用卡、贷款等具体类型，每个类型归属一个分组并带图标。
+- `Account`：`id`、`type`、`name`、`balance`、`updatedAt`。余额一律非负；负债账户的 `balance` 表示欠款额度本身。
 
-账户读写入口在 `src/lib/useAccounts.ts`。它负责：
+读写入口 `src/lib/useAccounts.ts`：从 `ratio.accounts` 读取并容错迁移旧数据；新增、改名、设余额、调余额、转账、删除；按分组汇总资产/负债/净资产。
 
-- 从 `ratio.accounts` 读取并容错迁移旧数据。
-- 新增、改名、设余额、调余额、转账、删除账户。
-- 按分组汇总资产总额、负债总额和净资产。
+金额规则集中在 `src/lib/money.ts`（规范化/加减）、`src/lib/moneyExpression.ts`（输入框内 `+`/`-` 表达式）、`src/lib/accountBalance.ts`（流向应用与负余额校验）、`src/lib/format.ts`（展示格式化）。不要在界面层新写金额算术。
 
-金额相关逻辑集中在 `src/lib/money.ts`、`src/lib/moneyExpression.ts`、`src/lib/accountBalance.ts`，不要在界面里散落新的金额规则。
+### 账户操作（src/lib/accountOps.ts）
 
-### 账户操作
+| kind | 语义 | 统计口径注意 |
+| --- | --- | --- |
+| `rename` | 改名 | 无金额影响 |
+| `set_balance` | 余额校准/覆盖（before → after） | 差额不是收支 |
+| `adjust` | **期间净变动汇总** | 不是单笔交易 |
+| `transfer` | 账户间内部转移 | 不改变净资产，绝不能算收入/支出 |
 
-账户操作类型在 `src/lib/accountOps.ts`：
+存储与规范化在 `src/lib/accountOpsStorage.ts`，Hook 在 `src/lib/useAccountOps.ts`。编辑/删除历史操作时有「回滚」语义：只有当该账户此后没有更晚的 `set_balance` 校准时才回滚余额（`canRollbackBalance` 模式，详见 `AccountDetailSheet`）。
 
-- `rename`：改名。
-- `set_balance`：余额校准/覆盖。
-- `adjust`：期间净变动汇总。
-- `transfer`：账户间内部转移。
+### 快照（src/lib/snapshots.ts）
 
-存储和容错规范化在 `src/lib/accountOpsStorage.ts`，Hook 在 `src/lib/useAccountOps.ts`。注意 `transfer` 不改变净资产，AI 或统计逻辑不应把它当收入/支出。
+- `Snapshot.date` 用 `YYYY-MM-DD`；每条含 `net`、`debt`、`cash`、`invest`、`fixed`、`receivable`，可附带当日账户列表（供「Top 变动账户」对比）。
+- `buildSnapshot()` 从账户汇总当日快照；`upsertSnapshot()` 按日期覆盖并排序；`withAccountSnapshot()` 用当前账户补齐今日实时快照。
+- `src/lib/useDailySnapshotSync.ts` 在存储可用时维护每日快照。**趋势/统计页面的数据源是快照**，不是操作流水。
 
-### 快照
+### Ledger 明细（src/lib/ledger.ts、ledgerStorage.ts）
 
-快照类型和构建逻辑在 `src/lib/snapshots.ts`：
+可选明细账：`Transaction.type` 为 `income`/`expense`，支出规范化为负数。可能不完整，只能作辅助证据——统计和 AI 分析不得假设它覆盖全部收支。
 
-- `Snapshot.date` 使用 `YYYY-MM-DD`。
-- 每条快照包含 `net`、`debt`、`cash`、`invest`、`fixed`、`receivable`，可附带当日账户列表。
-- `buildSnapshot()` 从账户余额汇总出当日快照。
-- `upsertSnapshot()` 按日期覆盖并排序。
-- `withAccountSnapshot()` 用当前账户补齐今日实时快照。
+### 储蓄目标与统计派生
 
-`src/lib/useDailySnapshotSync.ts` 会在存储可用时维护每日快照。趋势和统计页面优先使用快照，而不是直接把所有账户变动当作逐笔交易。
-
-### Ledger 明细
-
-`src/lib/ledger.ts` 和 `src/lib/ledgerStorage.ts` 是可选明细账：
-
-- `Transaction.type` 是 `income` 或 `expense`。
-- 支出金额会规范化为负数，收入为正数。
-- 这个 ledger 可能不完整，只能作为辅助证据。
-
-### 储蓄目标和统计
-
-- `src/lib/savingsGoal.ts`：储蓄目标、目标日期、进度、预测算法。
+- `src/lib/savingsGoal.ts`：目标、目标日期、进度、多算法速度估算（recent-window / monthly-close / monthly-smoothed / long-window，`smart` 自动选择）。
 - `src/lib/savingsGoalSimulation.ts`：目标模拟。
-- `src/lib/snapshotDerived.ts`：从快照派生统计区间、增长、覆盖率等。
-- `src/lib/monthStart.ts`：统计月起始日设置。
-- `src/lib/monthlyDisposable.ts`：月可支配估算设置。
+- `src/lib/snapshotDerived.ts`：从快照派生统计区间、增长、覆盖率。
+- `src/lib/monthStart.ts`：统计月起始日；`src/lib/monthlyDisposable.ts`：月可支配估算。
+- `src/lib/robustStats.ts`：稳健统计工具。
 
 ## 本地存储键
 
-主要键都以 `ratio.` 开头。备份会默认包含 `ratio.*`，但排除云同步账号配置和 AI 隐私确认键。
+主要键都以 `ratio.` 开头。备份默认包含 `ratio.*`，但**排除**云同步账号配置和 AI 隐私确认键。
 
 | 键 | 用途 |
 | --- | --- |
@@ -150,94 +195,107 @@ docker compose up -d --build
 | `ratio.savingsPaceAlgorithm` | 储蓄目标预测算法 |
 | `ratio.monthStartDay` | 统计月起始日 |
 | `ratio.monthlyEstimatedIncome` | 月收入估算 |
-| `ratio.theme` | 当前主题 |
+| `ratio.theme` | 当前主题（`matisse`/`matisse2`/`macke`/`mondrian`/`kandinsky`/`miro`/`random`） |
 | `ratio.tourSeen` | 是否看过引导 |
 | `ratio.hideAmounts` | 是否隐藏金额 |
-| `ratio.accountSort.*` | 账户排序偏好 |
-| `ratio.cloudSync` | 云同步设置，包含服务器、用户名、密码和开关 |
+| `ratio.accountSort.*` | 账户排序偏好（模式 + 各分组手动顺序） |
+| `ratio.cloudSync` | 云同步设置（服务器、用户名、密码、开关）——不进备份 |
 | `ratio.cloudSyncDirty` | 自动云同步脏标记 |
-| `ratio.aiPrivacyAcceptedServerUrl` | 用户已确认 AI 隐私提示的服务器地址 |
+| `ratio.aiPrivacyAcceptedServerUrl` | 已确认 AI 隐私提示的服务器地址——不进备份 |
 | `ratio.pendingToast.v1` | 页面刷新后待展示 toast |
 
-备份逻辑在 `src/lib/backup.ts`：
+读写统一走 `src/lib/useLocalStorageState.ts`（带 coerce 容错）；跨组件同步靠 `src/lib/storageEvents.ts` 的自定义写事件 + 原生 `storage` 事件。新增键必须提供 coerce/迁移，并检查是否应进备份与 AI 上下文。
 
-- schema 是 `ratio.backup.v1`。
-- `ratio.cloudSync` 和 `ratio.aiPrivacyAcceptedServerUrl` 不进入备份。
+## 备份（src/lib/backup.ts）
+
+- schema 为 `ratio.backup.v1`。
+- `ratio.cloudSync` 与 `ratio.aiPrivacyAcceptedServerUrl` 永不进入备份。
 - 恢复失败会尝试回滚原本地数据。
-- 比较备份时会规范化 `ratio.accountOps` 和 `ratio.ledger`，避免自动生成的 id 造成误判。
+- 比较备份时会规范化 `ratio.accountOps` 和 `ratio.ledger`，避免自动生成的 id 造成「内容相同却判不同」。
 
 ## 云同步与后端
 
-前端云端 API 封装在 `src/lib/cloud.ts`，自动同步编排在 `src/lib/cloudSync.ts`。
+前端云端 API 封装在 `src/lib/cloud.ts`，自动同步编排在 `src/lib/cloudSync.ts`（脏标记 + 最短间隔 30s + 冲突时暂停并提示）。
 
-后端位于 `server/src/server.js`，使用 Node 原生 `http`：
+后端 `server/src/server.js`（Node 原生 `http`）：
 
-- `GET /api/health`：健康检查。
-- `POST /api/users`：注册账号，可受邀请码限制。
-- `GET /api/me`：认证检查。
-- `GET /api/backup/meta`：读取云备份元信息。
-- `GET /api/backup`：下载云备份。
-- `PUT /api/backup`：上传云备份，带冲突检测。
-- `GET /api/ai/status`：AI 代理配置状态。
-- `POST /api/ai/chat`：AI 代理，支持非流式和流式转发。
-- `POST /api/telemetry`：提交遥测。
-- `GET /api/telemetry/recent`：读取当前用户近期遥测。
-- `/admin` 和 `/api/admin/*`：后端管理控制台，需 `RATIO_ADMIN_USERNAME`/`RATIO_ADMIN_PASSWORD`。
+| 端点 | 用途 |
+| --- | --- |
+| `GET /api/health` | 健康检查 |
+| `POST /api/users` | 注册账号，可受邀请码限制 |
+| `GET /api/me` | 认证检查 |
+| `GET /api/backup/meta` | 云备份元信息 |
+| `GET /api/backup` | 下载云备份 |
+| `PUT /api/backup` | 上传云备份，带 `expectedUpdatedAt` 冲突检测 |
+| `GET /api/ai/status` | AI 代理配置状态 |
+| `POST /api/ai/chat` | AI 代理，支持非流式与流式转发 |
+| `POST /api/telemetry` | 提交遥测 |
+| `GET /api/telemetry/recent` | 当前用户近期遥测 |
+| `/admin`、`/api/admin/*` | 管理控制台（`RATIO_ADMIN_USERNAME`/`RATIO_ADMIN_PASSWORD`） |
 
-后端数据默认写到 `RATIO_DATA_DIR`，Docker Compose 中映射到 `/data` 卷。用户密码使用 PBKDF2，备份按用户目录保存。
+数据写到 `RATIO_DATA_DIR`（Compose 映射 `/data` 卷）；密码 PBKDF2；备份按用户目录保存。管理台实现在 `server/src/adminConsole.js`。
 
 ## AI 助手数据口径
 
-AI 上下文构建在 `src/lib/ai.ts`：
+上下文构建在 `src/lib/ai.ts`：
 
 - 默认只发送派生财务摘要、最近快照、最近账户操作和最近 ledger 明细。
-- 不发送云同步账号密码。
-- 聊天历史保存在 `sessionStorage` 的 `ratio.ai.chat.session.v1`，关闭会话后自然清除，不进入云备份。
-- 系统提示明确要求 AI 只基于 JSON 证据回答，并区分“数据确认”和“推测”。
-- 前端只通过云端 AI 代理调用模型，不在浏览器保存 AI Base URL、API Key 或模型参数。
+- 永不发送云同步账号密码；前端不保存 AI Base URL、API Key 或模型参数（全部由后端统一配置）。
+- 聊天历史在 `sessionStorage` 的 `ratio.ai.chat.session.v1`，不进云备份。
+- 系统提示要求 AI 只基于 JSON 证据回答，并区分「数据确认」和「推测」。
 
-修改 AI 相关功能时，要同时检查：
-
-- `src/lib/ai.ts`：上下文、系统提示、响应解析、流式读取。
-- `src/components/AiAssistant.tsx`：对话 UI、隐私确认、会话存储。
-- `src/lib/cloud.ts`：AI 代理 API 封装。
-- `server/src/server.js`：上游 URL 安全检查、限流、请求体限制、流式透传。
+修改 AI 相关功能时同步检查：`src/lib/ai.ts`（上下文/流式解析）、`src/components/AiAssistant.tsx`（对话 UI/隐私确认）、`src/lib/cloud.ts`（API 封装）、`server/src/server.js`（上游 URL 安全检查、限流、流式透传）。
 
 ## 测试布局
 
-- 单元/组件测试和源码放在一起，命名为 `*.test.ts` 或 `*.test.tsx`。
-- `src/test/setup.ts`：Vitest/jsdom 全局测试设置。
-- `e2e/app-smoke.spec.ts`：Playwright 冒烟测试。
-- `vitest.config.ts`：jsdom 环境，排除 `e2e/`。
-- `playwright.config.ts`：端到端测试配置。
+单元/组件测试（Vitest + jsdom）：
 
-变更建议：
+- 与源码同目录，命名 `*.test.ts(x)`；全局 setup 在 `src/test/setup.ts`；`vitest.config.ts` 排除 `e2e/`。
+- 组件测试通过可见文本、role/aria 查询 DOM——改文案或语义属性会直接打破测试。
 
-- 改金额、账户、快照、备份、云同步、AI 上下文时，优先补或跑对应 `src/lib/*.test.ts`。
-- 改页面交互时，至少跑相关组件测试；影响主路径时跑 Playwright 冒烟。
-- 文档-only 变更通常不需要跑完整测试，但应检查 Markdown 链接和命令是否仍准确。
+端到端（Playwright）：
+
+- `e2e/app-smoke.spec.ts` 主路径冒烟；`e2e/ratio-breakdown.spec.ts` 占比页展开面板全流程。
+- 3 个项目（chromium / mobile-chrome / mobile-safari）× 全部用例；数据种子通过 `addInitScript` 直写 `localStorage`，并阻止 Service Worker 注册（其激活自刷新会打断动画断言）。
+- webServer：`npm run build && npm run preview`，端口 4173，`reuseExistingServer` 本地开启——**残留的 preview 进程会让新代码跑旧产物**，结果可疑先清端口。
+- Windows 无头 WebKit 会节流空闲页面，`toBeHidden()` 的页内 rAF 轮询会被饿死；等待卸载一律用 `expect.poll(() => locator.count()).toBe(0)`。完整分析见 `TROUBLESHOOTING.md`。
+
+变更时的测试策略：
+
+- 改金额、账户、快照、备份、云同步、AI 上下文 → 优先补/跑对应 `src/lib/*.test.ts`。
+- 改页面交互 → 跑相关组件测试；影响主路径或占比页 → 跑 Playwright。
+- 改动画 → 保证 lint + 单测 + e2e 全绿即可，动画本身无专项断言，但测试对文本/结构敏感。
 
 ## 变更导航
 
-按需求类型优先看这些文件：
+| 需求类型 | 优先查看 |
+| --- | --- |
+| 新增账户类型/分组 | `src/lib/accounts.ts`、图标/UI、统计与 AI 汇总是否同步 |
+| 金额计算 | `src/lib/money.ts`、`accountBalance.ts`、`format.ts`、`moneyExpression.ts` |
+| 资产页视图 | `src/screens/AssetsScreen.tsx`、`AssetsRatioPage.tsx`、`AssetsListPage.tsx`、`AssetsTypeDetailPage.tsx`、`BubbleChartPage.tsx` |
+| 账户详情/操作历史 | `src/components/AccountDetailSheet.tsx`（回滚语义在这里） |
+| 趋势/统计 | `src/screens/TrendScreen.tsx`、`StatsScreen.tsx`、`src/screens/stats/`、`src/lib/snapshotDerived.ts`、`savingsGoal.ts` |
+| 全局动效/手感 | `src/lib/motionPresets.ts`、`src/index.css`、`src/lib/useReducedMotion.ts`，规范见「动效系统」 |
+| 气泡物理 | `src/components/BubbleChartPhysics.tsx`、`src/screens/BubbleChartPage.tsx` |
+| 设置/备份 | `src/screens/SettingsScreen.tsx`、`src/lib/backup.ts`、`src/lib/cloud.ts` |
+| 云同步 | `src/lib/cloudSync.ts`、`cloud.ts`、`server/src/server.js` |
+| AI 助手 | `src/lib/ai.ts`、`src/components/AiAssistant.tsx`、`server/src/server.js` |
+| PWA/构建/分包 | `vite.config.ts`、`src/pwa.ts`、`public/manifest.webmanifest` |
+| 后端管理台 | `server/src/server.js`、`server/src/adminConsole.js` |
+| 引导页 | `src/screens/TourScreen.tsx` |
+| Toast/确认框 | `src/components/OverlayProvider.tsx`、`src/lib/overlay.ts` |
 
-- 新增账户类型或分组：`src/lib/accounts.ts`、相关图标/UI、统计/AI 汇总是否需要同步。
-- 改金额计算：`src/lib/money.ts`、`src/lib/accountBalance.ts`、`src/lib/format.ts`。
-- 改资产页：`src/screens/AssetsScreen.tsx`、`AssetsRatioPage.tsx`、`AssetsListPage.tsx`、`BubbleChartPage.tsx`。
-- 改趋势/统计：`src/screens/TrendScreen.tsx`、`src/screens/StatsScreen.tsx`、`src/screens/stats/`、`src/lib/snapshotDerived.ts`。
-- 改设置/备份：`src/screens/SettingsScreen.tsx`、`src/lib/backup.ts`、`src/lib/cloud.ts`。
-- 改云同步：`src/lib/cloudSync.ts`、`src/lib/cloud.ts`、`server/src/server.js`。
-- 改 AI 助手：`src/lib/ai.ts`、`src/components/AiAssistant.tsx`、`server/src/server.js`。
-- 改 PWA/构建：`vite.config.ts`、`src/pwa.ts`、`public/manifest.webmanifest`。
-- 改后端管理台：`server/src/server.js`、`server/src/adminConsole.js`。
+## 不变量与危险区
 
-## 维护原则
+改动前逐条对照：
 
-- 保持本地优先：核心资产数据必须在无后端时可用。
-- 不把云同步凭据、AI 密钥、模型配置放到前端备份或 AI 请求上下文。
-- 不把 `accountOps.adjust` 当单笔交易，不把 `transfer` 当收入/支出。
-- `localStorage` 读写要保留容错和旧数据迁移，优先使用已有 coerce/normalize 函数。
-- 金额写入前要规范化，避免浮点误差和非法负余额。
-- 修改共享数据结构时同步更新备份、AI 上下文、统计和测试。
-- 尊重懒加载分包：趋势、统计、设置、AI 助手体积较大，不要无意改回首包。
-- UI 面向移动端 PWA，注意安全区、底部导航、触摸手势和 reduced motion。
+1. 本地优先：核心资产数据必须在无后端时可用。
+2. 凭据与密钥（云同步账号密码、AI Key/Base URL/模型配置）不进前端备份、不进 AI 请求上下文。
+3. `adjust` ≠ 单笔交易；`transfer` ≠ 收入/支出；统计与 AI 口径以快照为准。
+4. 金额写入前经 `money.ts` 规范化；任何路径都不允许产生负余额（`accountBalance.ts` 校验）。
+5. `localStorage` 读写保留 coerce/迁移；修改共享数据结构时同步更新备份、AI 上下文、统计和测试。
+6. 懒加载分包纪律：不把 trend/stats/settings/AI/recharts/markdown 拉回首包。
+7. 动效规范：只动 transform/opacity、离场快于入场、`layoutId` 按实例唯一、无限动画受减弱动态约束（三层机制见「动效系统」）。
+8. 几何敏感：`AssetsScreen` 插值链与 `AssetsRatioPage` 标签复刻是逐像素咬合的，微调前先读「前端架构」对应小节；`RatioExpandedPanel` 的 650ms 兜底定时器不可移除。
+9. 测试兼容：可见文本、role/aria、`data-testid` 是测试 API 的一部分。
+10. UI 面向移动端 PWA：注意安全区（`--safe-*`）、底部导航高度（`--bottom-nav-height`）、触摸手势与 `touch-action` 声明。
