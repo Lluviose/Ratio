@@ -3,166 +3,27 @@ import { flushSync } from 'react-dom'
 import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
-import { SegmentedControl } from './SegmentedControl'
-import { EmptyState } from './EmptyState'
 import { useOverlay } from '../lib/overlay'
-import { formatCny as formatCnyBase } from '../lib/format'
 import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from '../lib/money'
 import {
   appendMoneyExpressionOperator,
   evaluateMoneyExpression,
-  sanitizeMoneyExpressionInput,
   type MoneyExpressionOperator,
-  type MoneyExpressionResult,
 } from '../lib/moneyExpression'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
 import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
+import { buildLatestSetBalanceAtMap, buildOpRollbackPlan, canRollbackBalance } from '../lib/opRollback'
 import { type ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
+import { formatCny, formatSigned, formatTime, normalizeNoteValue, toMoneyInputValue } from './accountDetail/format'
+import { pageTransition, pageVariants } from './accountDetail/pageMotion'
+import { OpsHistoryList } from './accountDetail/OpsHistoryList'
+import { AdjustPage, type AdjustDirection } from './accountDetail/AdjustPage'
+import { SetBalancePage } from './accountDetail/SetBalancePage'
+import { RenamePage } from './accountDetail/RenamePage'
+import { TransferPage, type TransferDirection } from './accountDetail/TransferPage'
 
 type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'
-
-type TransferDirection = 'out' | 'in'
-
-type AdjustDirection = 'plus' | 'minus'
-
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`
-}
-
-function formatCny(value: number) {
-  return formatCnyBase(value, { keepCents: true })
-}
-
-function formatSigned(amount: number) {
-  if (amount > 0) return `+${formatCny(amount)}`
-  if (amount < 0) return `-${formatCny(Math.abs(amount))}`
-  return formatCny(amount)
-}
-
-function toMoneyInputValue(value: number) {
-  const normalized = normalizeMoney(value)
-  if (Number.isInteger(normalized)) return String(normalized)
-  return normalized.toFixed(2).replace(/\.?0+$/, '')
-}
-
-function normalizeNoteValue(value: string) {
-  const note = value.trim()
-  return note ? note : undefined
-}
-
-function MoneyExpressionPreview(props: { show: boolean; result: MoneyExpressionResult }) {
-  const { show, result } = props
-  if (!show) return null
-  const resultKey = result.ok ? `ok-${result.value}` : `error-${result.reason}`
-
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -3, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-      className="mt-2 flex min-h-10 items-center justify-between rounded-[18px] border border-white/80 px-3.5 py-2 shadow-sm"
-      style={{
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,252,0.72))',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.86), 0 10px 26px -24px rgba(15,23,42,0.55)',
-      }}
-    >
-      <div className="text-[13px] font-black text-slate-400">=</div>
-      {result.ok ? (
-        <motion.div
-          key={resultKey}
-          initial={{ opacity: 0, y: 2 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-          className={`text-[13px] font-semibold ${result.value < 0 ? 'text-rose-500' : 'text-slate-700'}`}
-        >
-          {formatCny(result.value)}
-        </motion.div>
-      ) : (
-        <motion.div
-          key={resultKey}
-          initial={{ opacity: 0, y: 2 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-          className="text-[12px] font-semibold text-slate-400"
-        >
-          {result.reason === 'invalid' ? '无法计算' : '继续输入金额'}
-        </motion.div>
-      )}
-    </motion.div>
-  )
-}
-
-function MoneyExpressionKeypad(props: { onOperator: (operator: MoneyExpressionOperator) => void; onClear: () => void }) {
-  const { onOperator, onClear } = props
-  const keyClass =
-    'relative h-12 overflow-hidden rounded-[18px] border text-[18px] font-black outline-none transition-colors focus-visible:ring-4 focus-visible:ring-[rgb(var(--primary-rgb)/0.16)]'
-  const keyStyle = {
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))',
-    borderColor: 'rgba(255,255,255,0.9)',
-    boxShadow:
-      'inset 0 1px 0 rgba(255,255,255,0.98), inset 0 -1px 0 rgba(15,23,42,0.035), 0 10px 20px -16px rgba(15,23,42,0.7)',
-  } as const
-  const tapMotion = {
-    y: 1,
-    scale: 0.985,
-    boxShadow:
-      'inset 0 1px 1px rgba(15,23,42,0.06), inset 0 -1px 0 rgba(255,255,255,0.8), 0 4px 10px -14px rgba(15,23,42,0.6)',
-  }
-
-  return (
-    <div className="mt-2.5 grid grid-cols-3 gap-2.5">
-      <motion.button
-        type="button"
-        onPointerDown={(e) => e.preventDefault()}
-        onClick={() => onOperator('+')}
-        whileTap={tapMotion}
-        transition={{ type: 'spring', stiffness: 700, damping: 36, mass: 0.55 }}
-        className={keyClass}
-        style={{ ...keyStyle, color: 'var(--primary)' }}
-        aria-label="add"
-      >
-        <span className="pointer-events-none absolute inset-x-3 top-1 h-px rounded-full bg-white/90" />
-        +
-      </motion.button>
-      <motion.button
-        type="button"
-        onPointerDown={(e) => e.preventDefault()}
-        onClick={() => onOperator('-')}
-        whileTap={tapMotion}
-        transition={{ type: 'spring', stiffness: 700, damping: 36, mass: 0.55 }}
-        className={keyClass}
-        style={{ ...keyStyle, color: 'var(--primary)' }}
-        aria-label="subtract"
-      >
-        <span className="pointer-events-none absolute inset-x-3 top-1 h-px rounded-full bg-white/90" />
-        -
-      </motion.button>
-      <motion.button
-        type="button"
-        onPointerDown={(e) => e.preventDefault()}
-        onClick={onClear}
-        whileTap={tapMotion}
-        transition={{ type: 'spring', stiffness: 700, damping: 36, mass: 0.55 }}
-        className={`${keyClass} text-[14px]`}
-        style={{
-          ...keyStyle,
-          color: '#9f1239',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,241,242,0.9))',
-        }}
-        aria-label="clear"
-      >
-        <span className="pointer-events-none absolute inset-x-3 top-1 h-px rounded-full bg-white/90" />
-        AC
-      </motion.button>
-    </div>
-  )
-}
 
 export function AccountDetailSheet(props: {
   open: boolean
@@ -463,15 +324,7 @@ export function AccountDetailSheet(props: {
 
   const shouldStaggerOpsIntro = !suppressOpsIntro && relatedOps.length <= 12
 
-  const latestSetBalanceAtByAccountId = useMemo(() => {
-    const m = new Map<string, string>()
-    for (const op of ops) {
-      if (op.kind !== 'set_balance') continue
-      const prev = m.get(op.accountId)
-      if (!prev || op.at.localeCompare(prev) > 0) m.set(op.accountId, op.at)    
-    }
-    return m
-  }, [ops])
+  const latestSetBalanceAtByAccountId = useMemo(() => buildLatestSetBalanceAtMap(ops), [ops])
 
   const editingOp = useMemo(() => {
     if (!editingOpId) return null
@@ -482,11 +335,8 @@ export function AccountDetailSheet(props: {
     if (editingOpId && !editingOp) setEditingOpId(null)
   }, [editingOp, editingOpId])
 
-  const canRollbackBalance = (targetAccountId: string, at: string) => {
-    const latest = latestSetBalanceAtByAccountId.get(targetAccountId)
-    if (!latest) return true
-    return latest.localeCompare(at) <= 0
-  }
+  const canRollbackFor = (targetAccountId: string, at: string) =>
+    canRollbackBalance(latestSetBalanceAtByAccountId, targetAccountId, at)
 
   const setBalanceInputNode = useCallback((node: HTMLInputElement | null) => {
     balanceInputRef.current = node
@@ -509,81 +359,12 @@ export function AccountDetailSheet(props: {
       </BottomSheet>
     )
 
-  const setBalanceValueTrimmed = balanceValue.trim()
-  const setBalanceExpression = evaluateMoneyExpression(balanceValue)
-  const setBalanceParsed = setBalanceExpression.ok ? setBalanceExpression.value : 0
-  const hasValidSetBalanceAmount =
-    setBalanceValueTrimmed !== '' &&
-    setBalanceExpression.ok &&
-    !isNegativeAccountBalance(setBalanceParsed)
   const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
-  const nextNote = normalizeNoteValue(noteValue)
-  const setBalanceNoopValue = normalizeMoney(editingSetBalanceOp ? editingSetBalanceOp.after : account.balance)
-  const setBalanceEditDiff = editingSetBalanceOp ? subtractMoney(setBalanceParsed, editingSetBalanceOp.after) : 0
-  const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
-  const wouldSetBalanceGoNegative =
-    Boolean(editingSetBalanceOp) &&
-    hasValidSetBalanceAmount &&
-    canApplySetBalanceDiff &&
-    !canApplyBalanceDelta(account.balance, setBalanceEditDiff)
-  const canSubmitSetBalance = hasValidSetBalanceAmount && !wouldSetBalanceGoNegative
-  const isSetBalanceNoop = Boolean(
-    editingSetBalanceOp &&
-      canSubmitSetBalance &&
-      moneyEquals(setBalanceParsed, setBalanceNoopValue) &&
-      nextNote === editingSetBalanceOp.note,
-  )
-
-  const OP_DELETE_REVEAL_PX = 72
-
-  const pageTransition = { duration: 0.26, ease: [0.05, 0.7, 0.1, 1] as const }
-  const pageVariants = {
-    initial: (dir: number) => ({
-      opacity: 0,
-      x: dir === 0 ? 0 : dir * 22,
-      y: 10,
-      scale: 0.99,
-    }),
-    animate: { opacity: 1, x: 0, y: 0, scale: 1 },
-    exit: (dir: number) => ({
-      opacity: 0,
-      x: dir === 0 ? 0 : -dir * 22,
-      y: -10,
-      scale: 0.99,
-      transition: { duration: 0.15, ease: [0.4, 0, 1, 1] as const },
-    }),
-  }
-
-  const adjustAmountTrimmed = adjustAmount.trim()
-  const adjustParsedRaw = Number(adjustAmountTrimmed)
-  const adjustParsed = normalizeMoney(adjustParsedRaw)
-  const hasValidAdjustAmount =
-    adjustAmountTrimmed !== '' && Number.isFinite(adjustParsedRaw) && adjustParsed > 0
-  const newAdjustDelta = hasValidAdjustAmount
-    ? adjustDirection === 'plus'
-      ? adjustParsed
-      : -adjustParsed
-    : 0
   const editingAdjustOp = editingOp?.kind === 'adjust' ? editingOp : null
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
-  const transferAmountTrimmed = transferAmount.trim()
-  const transferExpression = evaluateMoneyExpression(transferAmount)
-  const transferParsed = transferExpression.ok ? transferExpression.value : 0
-  const hasValidTransferAmount = transferAmountTrimmed !== '' && transferExpression.ok && transferParsed > 0
-  const isTransferNoop = Boolean(editingTransferOp && hasValidTransferAmount && moneyEquals(transferParsed, editingTransferOp.amount))
-  const canSubmitTransfer = hasValidTransferAmount && (editingTransferOp ? !isTransferNoop : Boolean(transferPeerId))
-  const previewAdjustDiff = editingAdjustOp ? subtractMoney(newAdjustDelta, editingAdjustOp.delta) : newAdjustDelta
-  const canApplyAdjustDiff = editingAdjustOp ? canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at) : true
-  const wouldAdjustGoNegative =
-    hasValidAdjustAmount &&
-    canApplyAdjustDiff &&
-    !canApplyBalanceDelta(account.balance, previewAdjustDiff)
-  const canSubmitAdjust = hasValidAdjustAmount && !wouldAdjustGoNegative
-  const previewAdjustApplied = canApplyAdjustDiff ? previewAdjustDiff : 0
-  const previewAdjustAfter = addMoney(account.balance, previewAdjustApplied)
-  const isAdjustNoop = Boolean(
-    editingAdjustOp && canSubmitAdjust && moneyEquals(newAdjustDelta, editingAdjustOp.delta) && nextNote === editingAdjustOp.note,
-  )
+  const nextNote = normalizeNoteValue(noteValue)
+  const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackFor(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
+  const canApplyAdjustDiff = editingAdjustOp ? canRollbackFor(editingAdjustOp.accountId, editingAdjustOp.at) : true
 
   const refocusActiveInput = () => {
     const el =
@@ -690,7 +471,7 @@ export function AccountDetailSheet(props: {
         return
       }
 
-      const canApply = canRollbackBalance(editingSetBalanceOp.accountId, editingSetBalanceOp.at)
+      const canApply = canRollbackFor(editingSetBalanceOp.accountId, editingSetBalanceOp.at)
       const diff = subtractMoney(num, editingSetBalanceOp.after)
       if (canApply && !canApplyBalanceDelta(account.balance, diff)) {
         toast('保存后余额不能为负', { tone: 'danger' })
@@ -750,7 +531,7 @@ export function AccountDetailSheet(props: {
         return
       }
 
-      const canApply = canRollbackBalance(editingAdjustOp.accountId, editingAdjustOp.at)
+      const canApply = canRollbackFor(editingAdjustOp.accountId, editingAdjustOp.at)
       const diff = subtractMoney(delta, editingAdjustOp.delta)
       if (canApply && !canApplyBalanceDelta(account.balance, diff)) {
         toast('操作后余额不能为负', { tone: 'danger' })
@@ -830,8 +611,8 @@ export function AccountDetailSheet(props: {
       const diffFrom = subtractMoney(nextFromAfter, normalizeMoney(editingTransferOp.fromAfter))
       const diffTo = subtractMoney(nextToAfter, normalizeMoney(editingTransferOp.toAfter))
 
-      const canApplyFrom = canRollbackBalance(editingTransferOp.fromId, editingTransferOp.at)
-      const canApplyTo = canRollbackBalance(editingTransferOp.toId, editingTransferOp.at)
+      const canApplyFrom = canRollbackFor(editingTransferOp.fromId, editingTransferOp.at)
+      const canApplyTo = canRollbackFor(editingTransferOp.toId, editingTransferOp.at)
       if (
         (canApplyFrom && !canApplyBalanceDelta(from.balance, diffFrom)) ||
         (canApplyTo && !canApplyBalanceDelta(to.balance, diffTo))
@@ -903,6 +684,99 @@ export function AccountDetailSheet(props: {
     setTransferAmount('')
     setTransferPeerId('')
     transitionToAction('none')
+  }
+
+  const startEditOp = (op: AccountOp) => {
+    if (op.kind === 'set_balance') {
+      setEditingOpId(op.id)
+      setNoteValue(op.note ?? '')
+      setBalanceValue(toMoneyInputValue(op.after))
+      transitionToAction('set_balance')
+      return
+    }
+
+    if (op.kind === 'adjust') {
+      setEditingOpId(op.id)
+      setNoteValue(op.note ?? '')
+      setAdjustDirection(op.delta >= 0 ? 'plus' : 'minus')
+      setAdjustAmount(toMoneyInputValue(Math.abs(op.delta)))
+      transitionToAction('adjust')
+      return
+    }
+
+    if (op.kind === 'transfer') {
+      const direction = account.id === op.fromId ? 'out' : 'in'
+      const peerId = direction === 'out' ? op.toId : op.fromId
+      setEditingOpId(op.id)
+      setNoteValue('')
+      setTransferDirection(direction)
+      setTransferPeerId(peerId)
+      setTransferAmount(toMoneyInputValue(op.amount))
+      transitionToAction('transfer')
+    }
+  }
+
+  const confirmDeleteOp = async (op: AccountOp, title: string) => {
+    const getAccountName = (id: string) => byId.get(id)?.name ?? '账户'
+    const rollbackTargets = buildOpRollbackPlan(op, {
+      latestSetBalanceAtByAccountId,
+      getAccountBalance: (id) => byId.get(id)?.balance,
+    })
+
+    const affectedCount = rollbackTargets.length
+    const willRollback = rollbackTargets.filter((t) => t.canRollback && t.delta !== 0)
+    const willRollbackCount = willRollback.length
+
+    const noRollbackHint =
+      affectedCount > 1
+        ? '；其中部分账户余额不变（后续校准或余额不足）'
+        : '；余额不变（后续校准或余额不足）'
+
+    const rollbackSummary =
+      willRollbackCount > 0
+        ? `将回滚：${willRollback.map((t) => `${getAccountName(t.accountId)} ${formatSigned(t.delta)}`).join('；')}${
+            willRollbackCount < affectedCount ? noRollbackHint : ''
+          }`
+        : '余额不会变化（后续校准或余额不足）'
+
+    const confirmTitle =
+      op.kind === 'transfer'
+        ? '删除这条转账记录？'
+        : op.kind === 'set_balance'
+          ? '删除这条修改余额记录？'
+          : op.kind === 'adjust'
+            ? '删除这条期间变动记录？'
+            : '删除这条记录？'
+
+    const ok = await confirm({
+      title: confirmTitle,
+      message: `${title}（${formatTime(op.at)}）；${rollbackSummary}`,
+      confirmText: willRollbackCount > 0 ? '删除并回滚' : '仅删除记录',
+      cancelText: '取消',
+      tone: 'danger',
+    })
+    if (!ok) return
+
+    const rolledBackAccountIds: string[] = []
+    for (const t of rollbackTargets) {
+      if (!t.canRollback) continue
+      if (t.delta === 0) continue
+      onAdjust(t.accountId, t.delta)
+      rolledBackAccountIds.push(t.accountId)
+    }
+
+    onDeleteOp(op.id)
+    setSwipedOpId(null)
+
+    const rolledBackCount = rolledBackAccountIds.length
+    const toastMessage =
+      rolledBackCount === 0
+        ? '已删除记录（余额未变）'
+        : rolledBackCount === affectedCount
+          ? '已删除并回滚余额'
+          : '已删除，已回滚部分余额'
+    const tone = rolledBackCount === 0 ? 'neutral' : 'success'
+    toast(toastMessage, { tone })
   }
 
   const TypeIcon = accountTypeInfo?.opt.icon
@@ -1124,320 +998,19 @@ export function AccountDetailSheet(props: {
                   这里记录的是期间净流量/校准/转账（非逐笔流水）
                 </div>
 
-                <div className="mt-3 rounded-[22px] bg-white/70 border border-white/70 overflow-hidden">
-                  {relatedOps.length === 0 ? (
-                    <EmptyState
-                      variant="ops"
-                      title="暂无操作"
-                      hint="用上方「期间增减」或「修改余额」记一笔，这里会保留历史"
-                    />
-                  ) : (
-                    <AnimatePresence initial={false}>
-                      {(() => {
-                        let runningAfter = account.balance
-                        return relatedOps.map((op, i) => {
-                          let title = ''
-                          let delta: number | null = 0
-
-                          if (op.kind === 'rename') {
-                            title = `重命名：${op.beforeName} → ${op.afterName}`
-                            delta = null
-                          }
-
-                          if (op.kind === 'set_balance') {
-                            title = '修改余额'
-                            delta = subtractMoney(op.after, op.before)
-                          }
-
-                          if (op.kind === 'adjust') {
-                            title = op.delta >= 0 ? '期间净流入' : '期间净流出'
-                            delta = op.delta
-                          }
-
-                          if (op.kind === 'transfer') {
-                            const from = byId.get(op.fromId)
-                            const to = byId.get(op.toId)
-                            if (account.id === op.fromId) {
-                              title = `转出到 ${to?.name ?? '账户'}`
-                              delta = subtractMoney(op.fromAfter, op.fromBefore)
-                            } else {
-                              title = `从 ${from?.name ?? '账户'} 转入`
-                              delta = subtractMoney(op.toAfter, op.toBefore)
-                            }
-                          }
-
-                          const deltaColor =
-                            delta == null
-                              ? 'text-slate-400'
-                              : delta > 0
-                                ? 'text-slate-900'
-                                : delta < 0
-                                  ? 'text-rose-600'
-                                  : 'text-slate-400'
-
-                          const displayAfter = runningAfter
-                          const noteText = op.note?.trim()
-                          runningAfter = addMoney(runningAfter, -(delta ?? 0))
-
-                          const canDeleteOp = op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
-                          const canEditOp = canDeleteOp
-
-                          const handleEditOp = () => {
-                            if (op.kind === 'set_balance') {
-                              setEditingOpId(op.id)
-                              setNoteValue(op.note ?? '')
-                              setBalanceValue(toMoneyInputValue(op.after))
-                              transitionToAction('set_balance')
-                              return
-                            }
-
-                            if (op.kind === 'adjust') {
-                              setEditingOpId(op.id)
-                              setNoteValue(op.note ?? '')
-                              setAdjustDirection(op.delta >= 0 ? 'plus' : 'minus')
-                              setAdjustAmount(toMoneyInputValue(Math.abs(op.delta)))
-                              transitionToAction('adjust')
-                              return
-                            }
-
-                            if (op.kind === 'transfer') {
-                              const direction = account.id === op.fromId ? 'out' : 'in'
-                              const peerId = direction === 'out' ? op.toId : op.fromId
-                              setEditingOpId(op.id)
-                              setNoteValue('')
-                              setTransferDirection(direction)
-                              setTransferPeerId(peerId)
-                              setTransferAmount(toMoneyInputValue(op.amount))
-                              transitionToAction('transfer')
-                            }
-                          }
-
-                          const handleDeleteOp = async () => {
-                            const getAccountName = (id: string) => byId.get(id)?.name ?? '账户'
-                            const canRollbackTarget = (targetAccountId: string, at: string, delta: number) => {
-                              if (!canRollbackBalance(targetAccountId, at)) return false
-                              const target = byId.get(targetAccountId)
-                              if (!target) return false
-                              return canApplyBalanceDelta(target.balance, delta)
-                            }
-                            const rollbackTargets: Array<{ accountId: string; name: string; delta: number; canRollback: boolean }> = []
-
-                            if (op.kind === 'adjust') {
-                              const delta = subtractMoney(0, op.delta)
-                              rollbackTargets.push({
-                                accountId: op.accountId,
-                                name: getAccountName(op.accountId),
-                                delta,
-                                canRollback: canRollbackTarget(op.accountId, op.at, delta),
-                              })
-                            }
-
-                            if (op.kind === 'set_balance') {
-                              const delta = subtractMoney(op.before, op.after)
-                              rollbackTargets.push({
-                                accountId: op.accountId,
-                                name: getAccountName(op.accountId),
-                                delta,
-                                canRollback: canRollbackTarget(op.accountId, op.at, delta),
-                              })
-                            }
-
-                            if (op.kind === 'transfer') {
-                              const fromDelta = subtractMoney(op.fromBefore, op.fromAfter)
-                              const toDelta = subtractMoney(op.toBefore, op.toAfter)
-                              rollbackTargets.push({
-                                accountId: op.fromId,
-                                name: getAccountName(op.fromId),
-                                delta: fromDelta,
-                                canRollback: canRollbackTarget(op.fromId, op.at, fromDelta),
-                              })
-                              rollbackTargets.push({
-                                accountId: op.toId,
-                                name: getAccountName(op.toId),
-                                delta: toDelta,
-                                canRollback: canRollbackTarget(op.toId, op.at, toDelta),
-                              })
-                            }
-
-                            const affectedCount = rollbackTargets.length
-                            const willRollback = rollbackTargets.filter((t) => t.canRollback && t.delta !== 0)
-                            const willRollbackCount = willRollback.length
-
-                            const noRollbackHint =
-                              affectedCount > 1
-                                ? '；其中部分账户余额不变（后续校准或余额不足）'
-                                : '；余额不变（后续校准或余额不足）'
-
-                            const rollbackSummary =
-                              willRollbackCount > 0
-                                ? `将回滚：${willRollback.map((t) => `${t.name} ${formatSigned(t.delta)}`).join('；')}${
-                                    willRollbackCount < affectedCount ? noRollbackHint : ''
-                                  }`
-                                : '余额不会变化（后续校准或余额不足）'
-
-                            const confirmTitle =
-                              op.kind === 'transfer'
-                                ? '删除这条转账记录？'
-                                : op.kind === 'set_balance'
-                                  ? '删除这条修改余额记录？'
-                                  : op.kind === 'adjust'
-                                    ? '删除这条期间变动记录？'
-                                    : '删除这条记录？'
-
-                            const ok = await confirm({
-                              title: confirmTitle,
-                              message: `${title}（${formatTime(op.at)}）；${rollbackSummary}`,
-                              confirmText: willRollbackCount > 0 ? '删除并回滚' : '仅删除记录',
-                              cancelText: '取消',
-                              tone: 'danger',
-                            })
-                            if (!ok) return
-
-                            const rolledBackAccountIds: string[] = []
-                            for (const t of rollbackTargets) {
-                              if (!t.canRollback) continue
-                              if (t.delta === 0) continue
-                              onAdjust(t.accountId, t.delta)
-                              rolledBackAccountIds.push(t.accountId)
-                            }
-
-                            onDeleteOp(op.id)
-                            setSwipedOpId(null)
-
-                            const rolledBackCount = rolledBackAccountIds.length
-                            const toastMessage =
-                              rolledBackCount === 0
-                                ? '已删除记录（余额未变）'
-                                : rolledBackCount === affectedCount
-                                  ? '已删除并回滚余额'
-                                  : '已删除，已回滚部分余额'
-                            const tone = rolledBackCount === 0 ? 'neutral' : 'success'
-                            toast(toastMessage, { tone })
-                          }
-
-                          const isSwipedOpen = swipedOpId === op.id
-
-                          return (
-                            <motion.div
-                              key={op.id}
-                              layout
-                              initial={shouldStaggerOpsIntro ? { opacity: 0, y: 8 } : false}
-                              animate={{
-                                opacity: 1,
-                                y: 0,
-                                transition: {
-                                  duration: 0.18,
-                                  delay: shouldStaggerOpsIntro ? Math.min(0.25, i * 0.03) : 0,
-                                },
-                              }}
-                              exit={{ opacity: 0, height: 0, transition: { duration: 0.18 } }}
-                              className={i === 0 ? '' : 'border-t border-black/5'}
-                              style={{ overflow: 'hidden' }}
-                            >
-                              <div className="relative">
-                                {canDeleteOp ? (
-                                  <div
-                                    className="absolute inset-y-0 right-0 z-0 flex items-center justify-center bg-rose-50/90"
-                                    style={{ width: OP_DELETE_REVEAL_PX }}
-                                  >
-                                    <motion.button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        void handleDeleteOp()
-                                      }}
-                                      className="w-11 h-11 rounded-full bg-rose-600 text-white shadow-sm flex items-center justify-center active:scale-95 transition"
-                                      aria-label="删除记录"
-                                      title="删除"
-                                      initial={false}
-                                      animate={{
-                                        scale: canDeleteOp && isSwipedOpen ? 1 : 0.94,
-                                        opacity: canDeleteOp && isSwipedOpen ? 1 : 0.75,
-                                      }}
-                                      transition={{ type: 'spring', stiffness: 520, damping: 38 }}
-                                    >
-                                      <Trash2 size={16} strokeWidth={2.6} />
-                                    </motion.button>
-                                  </div>
-                                ) : null}
-
-                                <motion.div
-                                  drag={canDeleteOp ? 'x' : false}
-                                  dragConstraints={{ left: -OP_DELETE_REVEAL_PX - 16, right: 0 }}
-                                  dragElastic={0.08}
-                                  dragMomentum={false}
-                                  onDragStart={() => {
-                                    if (swipedOpId && swipedOpId !== op.id) setSwipedOpId(null)
-                                  }}
-                                  onDragEnd={(_, info) => {
-                                    const didDrag = Math.abs(info.offset.x) > 6 || Math.abs(info.velocity.x) > 60
-                                    if (didDrag) {
-                                      suppressOpClickRef.current = true
-                                      window.setTimeout(() => {
-                                        suppressOpClickRef.current = false
-                                      }, 0)
-                                    }
-
-                                    const threshold = OP_DELETE_REVEAL_PX * 0.33
-                                    const velocityThreshold = 420
-
-                                    if (!isSwipedOpen) {
-                                      const shouldOpen = info.offset.x < -threshold || info.velocity.x < -velocityThreshold
-                                      setSwipedOpId(shouldOpen ? op.id : null)
-                                      return
-                                    }
-
-                                    const shouldClose = info.offset.x > threshold || info.velocity.x > velocityThreshold
-                                    setSwipedOpId(shouldClose ? null : op.id)
-                                  }}
-                                  animate={{ x: canDeleteOp && isSwipedOpen ? -OP_DELETE_REVEAL_PX : 0 }}
-                                  transition={{ type: 'spring', stiffness: 560, damping: 46 }}
-                                  onClick={() => {
-                                    if (suppressOpClickRef.current) return
-                                    if (swipedOpId && swipedOpId !== op.id) {
-                                      setSwipedOpId(null)
-                                      return
-                                    }
-                                    if (isSwipedOpen) {
-                                      setSwipedOpId(null)
-                                      return
-                                    }
-                                    if (canEditOp) handleEditOp()
-                                  }}
-                                  style={{ touchAction: canDeleteOp ? 'pan-y' : 'auto' }}
-                                  className={`relative z-10 px-4 py-4 flex items-start justify-between gap-4 bg-white ${canEditOp ? 'cursor-pointer active:bg-slate-50' : ''}`}
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-[14px] font-semibold text-slate-900 truncate">
-                                      {title}
-                                    </div>
-                                    <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                      {formatTime(op.at)}
-                                    </div>
-                                    {noteText ? (
-                                      <div className="mt-1 text-[12px] font-medium text-slate-500 break-words">
-                                        {noteText}
-                                      </div>
-                                    ) : null}
-                                  </div>
-
-                                  <div className="text-right shrink-0">
-                                    <div className={`text-[14px] font-semibold ${deltaColor}`}>
-                                      {delta == null ? '—' : formatSigned(delta)}
-                                    </div>
-                                    <div className="mt-1 text-[11px] font-medium text-slate-400">
-                                      余额 {formatCny(displayAfter)}
-                                    </div>
-                                  </div>
-                                </motion.div>
-                              </div>
-                            </motion.div>
-                          )
-                        })
-                      })()}
-                    </AnimatePresence>
-                  )}
-                </div>
+                <OpsHistoryList
+                  account={account}
+                  relatedOps={relatedOps}
+                  getAccountName={(id) => byId.get(id)?.name}
+                  shouldStaggerOpsIntro={shouldStaggerOpsIntro}
+                  swipedOpId={swipedOpId}
+                  setSwipedOpId={setSwipedOpId}
+                  suppressOpClickRef={suppressOpClickRef}
+                  onEditOp={startEditOp}
+                  onDeleteOp={(op, title) => {
+                    void confirmDeleteOp(op, title)
+                  }}
+                />
               </motion.div>
             ) : action === 'adjust' ? (
               <motion.div
@@ -1449,101 +1022,21 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
-                <div className="mt-4 flex items-baseline gap-2">
-                  <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
-                  <input
-                    ref={adjustInputRef}
-                    className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
-                    {...amountInputProps}
-                    placeholder="0"
-                    value={adjustAmount}
-                    onChange={(e) => setAdjustAmount(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        if (canSubmitAdjust && !isAdjustNoop) submitAdjust()
-                      }
-                      if (e.key === 'Escape') {
-                        e.preventDefault()
-                        cancelEdit()
-                      }
-                    }}
-                    aria-label="adjust amount"
-                  />
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-4">
-                  <input
-                    className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
-                    placeholder="备注"
-                    value={noteValue}
-                    onChange={(e) => setNoteValue(e.target.value)}
-                    aria-label="note"
-                  />
-                  <div className="text-[13px] font-semibold text-slate-700">期间增减</div>
-                </div>
-
-                <div className="mt-2 text-[11px] font-semibold text-slate-400">
-                  “+”=期间净流入，“-”=期间净流出（非逐笔流水）
-                </div>
-
-                <div className="mt-4 flex rounded-full bg-slate-200/80 p-1">
-                  {(
-                    [
-                      { id: 'plus' as const, label: '+' },
-                      { id: 'minus' as const, label: '-' },
-                    ] as const
-                  ).map((item) => {
-                    const isActive = adjustDirection === item.id
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setAdjustDirection(item.id)}
-                        className="relative flex-1 h-11 rounded-full text-[18px] font-black"
-                        style={{ color: isActive ? '#fff' : 'var(--text)' }}
-                      >
-                        {isActive ? (
-                          <motion.div
-                            layoutId="accountAdjustDirBg"
-                            className="absolute inset-0 rounded-full bg-slate-900"
-                            transition={{ type: 'spring', stiffness: 600, damping: 40 }}
-                          />
-                        ) : null}
-                        <span className="relative z-10">{item.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                <div className="mt-3">
-                  <div className="text-[13px] font-semibold" style={{ color: 'var(--primary)' }}>
-                    {formatSigned(previewAdjustApplied)}
-                  </div>
-                  <div className="mt-1 text-[12px] font-medium text-slate-500">
-                    余额 {formatCny(previewAdjustAfter)}
-                  </div>
-                  {editingAdjustOp && !canApplyAdjustDiff ? (
-                    <div className="mt-1 text-[11px] font-semibold text-slate-400">
-                      余额不会变（已在后续校准中固定）
-                    </div>
-                  ) : null}
-                  {wouldAdjustGoNegative ? (
-                    <div className="mt-1 text-[11px] font-semibold text-rose-500">
-                      操作后余额不能为负
-                    </div>
-                  ) : null}
-                </div>
-
-                <motion.button
-                  type="button"
-                  onClick={submitAdjust}
-                  disabled={!canSubmitAdjust || isAdjustNoop}
-                  whileTap={{ scale: canSubmitAdjust && !isAdjustNoop ? 0.99 : 1 }}
-                  className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitAdjust && !isAdjustNoop ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
-                >
-                  {editingAdjustOp ? '保存修改' : '完成'}
-                </motion.button>
+                <AdjustPage
+                  account={account}
+                  editingOp={editingAdjustOp}
+                  direction={adjustDirection}
+                  amount={adjustAmount}
+                  note={noteValue}
+                  canApplyDiff={canApplyAdjustDiff}
+                  amountInputProps={amountInputProps}
+                  inputRef={adjustInputRef}
+                  onChangeAmount={setAdjustAmount}
+                  onChangeNote={setNoteValue}
+                  onChangeDirection={setAdjustDirection}
+                  onSubmit={submitAdjust}
+                  onCancel={cancelEdit}
+                />
               </motion.div>
             ) : action === 'set_balance' ? (
               <motion.div
@@ -1555,74 +1048,21 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
-                <div className="mt-4">
-                  <div className="flex items-baseline gap-2 min-w-0">
-                    <div className="text-[34px] font-black tracking-tight text-slate-900">¥</div>
-                    <input
-                      ref={setBalanceInputNode}
-                      className="flex-1 min-w-0 bg-transparent outline-none text-[34px] font-black tracking-tight text-slate-900 placeholder:text-slate-400"
-                      {...expressionInputProps}
-                      placeholder="0"
-                      value={balanceValue}
-                      autoFocus
-                      onChange={(e) => setBalanceValue(sanitizeMoneyExpressionInput(e.target.value))}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          if (canSubmitSetBalance && !isSetBalanceNoop) submitSetBalance()
-                        }
-                        if (e.key === 'Escape') {
-                          e.preventDefault()
-                          cancelEdit()
-                        }
-                      }}
-                      aria-label="set balance"
-                    />
-                  </div>
-                  <MoneyExpressionPreview show={setBalanceValueTrimmed !== ''} result={setBalanceExpression} />
-                  <MoneyExpressionKeypad onOperator={appendBalanceOperator} onClear={clearBalanceExpression} />
-                </div>
-
-                <div className="mt-3 flex items-center justify-between gap-4">
-                  <input
-                    className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-medium text-slate-700 placeholder:text-slate-400"
-                    placeholder="备注"
-                    value={noteValue}
-                    onChange={(e) => setNoteValue(e.target.value)}
-                    aria-label="note"
-                  />
-                  <div className="text-[13px] font-semibold text-slate-700">修改余额</div>
-                </div>
-
-                <div className="mt-3 flex items-center justify-between text-[12px] font-medium text-slate-400">
-                  <div>当前余额</div>
-                  <div className="text-slate-500">{formatCny(account.balance)}</div>
-                </div>
-                {editingSetBalanceOp && !canApplySetBalanceDiff ? (
-                  <div className="mt-1 text-[11px] font-semibold text-slate-400">
-                    余额不会变（已在后续校准中固定）
-                  </div>
-                ) : null}
-                {setBalanceExpression.ok && isNegativeAccountBalance(setBalanceParsed) ? (
-                  <div className="mt-1 text-[11px] font-semibold text-rose-500">
-                    余额不能为负
-                  </div>
-                ) : null}
-                {wouldSetBalanceGoNegative ? (
-                  <div className="mt-1 text-[11px] font-semibold text-rose-500">
-                    保存后余额不能为负
-                  </div>
-                ) : null}
-
-                <motion.button
-                  type="button"
-                  onClick={submitSetBalance}
-                  disabled={!canSubmitSetBalance || isSetBalanceNoop}
-                  whileTap={{ scale: canSubmitSetBalance && !isSetBalanceNoop ? 0.99 : 1 }}
-                  className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitSetBalance && !isSetBalanceNoop ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
-                >
-                  {editingSetBalanceOp ? '保存修改' : '完成'}
-                </motion.button>
+                <SetBalancePage
+                  account={account}
+                  editingOp={editingSetBalanceOp}
+                  value={balanceValue}
+                  note={noteValue}
+                  canApplyDiff={canApplySetBalanceDiff}
+                  expressionInputProps={expressionInputProps}
+                  inputRef={setBalanceInputNode}
+                  onChangeValue={setBalanceValue}
+                  onChangeNote={setNoteValue}
+                  onOperator={appendBalanceOperator}
+                  onClearExpression={clearBalanceExpression}
+                  onSubmit={submitSetBalance}
+                  onCancel={cancelEdit}
+                />
               </motion.div>
             ) : action === 'rename' ? (
               <motion.div
@@ -1634,38 +1074,13 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
-                <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
-                  {formatCny(account.balance)}
-                </div>
-
-                <div className="mt-5">
-                  <div className="text-[13px] font-semibold text-slate-500">账户名称</div>
-                  <input
-                    className="input mt-2"
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        submitRename()
-                      }
-                      if (e.key === 'Escape') {
-                        e.preventDefault()
-                        cancelEdit()
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-
-                <motion.button
-                  type="button"
-                  onClick={submitRename}
-                  whileTap={{ scale: 0.99 }}
-                  className="mt-6 w-full h-14 rounded-[22px] bg-slate-900 text-white font-semibold text-[16px] shadow-sm"
-                >
-                  完成
-                </motion.button>
+                <RenamePage
+                  account={account}
+                  value={renameValue}
+                  onChange={setRenameValue}
+                  onSubmit={submitRename}
+                  onCancel={cancelEdit}
+                />
               </motion.div>
             ) : (
               <motion.div
@@ -1677,77 +1092,22 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
-                <div className="mt-4 text-[34px] font-black tracking-tight text-slate-900">
-                  {formatCny(account.balance)}
-                </div>
-
-                <div className="mt-5">
-                  <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <SegmentedControl
-                      options={[
-                        { value: 'out', label: '转出' },
-                        { value: 'in', label: '转入' },
-                      ]}
-                      value={transferDirection}
-                      onChange={(v) => {
-                        if (editingTransferOp) return
-                        setTransferDirection(v as TransferDirection)
-                      }}
-                    />
-                  </div>
-                  {editingTransferOp ? (
-                    <div className="mt-2 text-center text-[11px] font-semibold text-slate-400">
-                      仅支持修改金额
-                    </div>
-                  ) : null}
-
-                  <div className="mt-4 stack" style={{ gap: 12 }}>
-                    <label className="field">
-                      <div className="fieldLabel">对方账户</div>
-                      <select
-                        className="select"
-                        value={transferPeerId}
-                        disabled={Boolean(editingTransferOp)}
-                        onChange={(e) => setTransferPeerId(e.target.value)}
-                      >
-                        <option value="">请选择</option>
-                        {selectablePeers.map((a) => (
-                          <option key={a.id} value={a.id}>
-                            {a.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div className="field">
-                      <div className="fieldLabel">金额</div>
-                      <div className="relative">
-                        <input
-                          ref={transferInputRef}
-                          className="input"
-                          {...expressionInputProps}
-                          placeholder="0.00"
-                          value={transferAmount}
-                          onChange={(e) => setTransferAmount(sanitizeMoneyExpressionInput(e.target.value))}
-                          style={{ fontSize: 20, fontWeight: 900, paddingLeft: 24 }}
-                        />
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-text)] font-black">¥</span>
-                      </div>
-                      <MoneyExpressionPreview show={transferAmountTrimmed !== ''} result={transferExpression} />
-                      <MoneyExpressionKeypad onOperator={appendTransferOperator} onClear={clearTransferExpression} />
-                    </div>
-                  </div>
-
-                  <motion.button
-                    type="button"
-                    onClick={submitTransfer}
-                    disabled={!canSubmitTransfer}
-                    whileTap={{ scale: canSubmitTransfer ? 0.99 : 1 }}
-                    className={`mt-6 w-full h-14 rounded-[22px] font-semibold text-[16px] transition-colors ${canSubmitTransfer ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-200 text-slate-400'}`}
-                  >
-                    {editingTransferOp ? '保存修改' : '完成'}
-                  </motion.button>
-                </div>
+                <TransferPage
+                  account={account}
+                  editingOp={editingTransferOp}
+                  direction={transferDirection}
+                  peerId={transferPeerId}
+                  amount={transferAmount}
+                  selectablePeers={selectablePeers}
+                  expressionInputProps={expressionInputProps}
+                  inputRef={transferInputRef}
+                  onChangeDirection={setTransferDirection}
+                  onChangePeer={setTransferPeerId}
+                  onChangeAmount={setTransferAmount}
+                  onOperator={appendTransferOperator}
+                  onClearExpression={clearTransferExpression}
+                  onSubmit={submitTransfer}
+                />
               </motion.div>
             )}
           </AnimatePresence>
