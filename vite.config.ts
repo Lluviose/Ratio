@@ -9,8 +9,8 @@ export default defineConfig(() => {
   const isUserOrOrgPagesRepo = Boolean(owner && repo && repo.toLowerCase() === `${owner.toLowerCase()}.github.io`)
   const base = repo && !isUserOrOrgPagesRepo ? `/${repo}/` : '/'
   const buildId = process.env.GITHUB_SHA?.slice(0, 7) ?? new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
-  const lazyChunkFilePattern = /(?:^|\/)(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown)-.*\.js$/i
-  const lazyChunkPattern = /\/assets\/(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown)-.*\.js$/i
+  const lazyChunkFilePattern = /(?:^|\/)(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown|vendor-matter)-.*\.js$/i
+  const lazyChunkPattern = /\/assets\/(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown|vendor-matter)-.*\.js$/i
 
   return {
     base,
@@ -34,6 +34,7 @@ export default defineConfig(() => {
             if (normalized.includes('/src/screens/SettingsScreen.tsx')) return 'screen-settings'
 
             if (normalized.includes('/node_modules/recharts/')) return 'vendor-charts'
+            if (normalized.includes('/node_modules/matter-js/')) return 'vendor-matter'
             if (
               normalized.includes('/node_modules/react-markdown/') ||
               normalized.includes('/node_modules/remark-gfm/') ||
@@ -79,6 +80,7 @@ export default defineConfig(() => {
             '**/screen-settings-*.js',
             '**/vendor-charts-*.js',
             '**/vendor-markdown-*.js',
+            '**/vendor-matter-*.js',
           ],
           runtimeCaching: [
             {

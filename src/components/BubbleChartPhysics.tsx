@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import * as Matter from 'matter-js'
+import type * as Matter from 'matter-js'
 import { animate, motionValue, type MotionValue } from 'framer-motion'
 import { useReducedMotion } from '../lib/useReducedMotion'
+
+// matter-js 按需加载：物理引擎不进首包（vendor-matter 分包，约 26KB gzip），
+// 首次挂载时开始拉取；加载完成前气泡停留在初始位置，flick/burst 静默忽略。
+type MatterModule = typeof import('matter-js')
+let matterModulePromise: Promise<MatterModule> | null = null
+function loadMatter(): Promise<MatterModule> {
+  matterModulePromise ??= import('matter-js')
+  return matterModulePromise
+}
 
 export type BubbleNode = {
   id: string
@@ -85,6 +94,7 @@ export function useBubblePhysics(
 
   const engineRef = useRef<Matter.Engine | null>(null)
   const runnerRef = useRef<Matter.Runner | null>(null)
+  const matterRef = useRef<MatterModule | null>(null)
   const bodiesRef = useRef(new Map<string, Matter.Body>())
   const driftSeedsRef = useRef(new Map<string, { a: number; b: number }>())
   const shardMotionsRef = useRef(new Map<string, ShardMotion>())
@@ -97,277 +107,295 @@ export function useBubblePhysics(
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
 
-    // 提高迭代次数让圆形碰撞解算更平滑（气泡数量小，成本可忽略）
-    const engine = Matter.Engine.create({ positionIterations: 8, velocityIterations: 6 })
-    const world = engine.world
-    engine.gravity.x = 0
-    engine.gravity.y = 0
+    let disposed = false
+    let teardown: (() => void) | null = null
 
-    bursts.clear()
-    driftSeedsRef.current = new Map()
-    shardMotionsRef.current = new Map()
-    burstStatesRef.current = new Map()
-    clusterBoostRef.current = null
-    burstProgress.forEach((p) => p.set(0))
-    bump((v) => v + 1)
+    // 引擎搭建保持同步逻辑不变，只是等 matter-js 模块就绪后再执行
+    function setupEngine(Matter: MatterModule): () => void {
+      // 提高迭代次数让圆形碰撞解算更平滑（气泡数量小，成本可忽略）
+      const engine = Matter.Engine.create({ positionIterations: 8, velocityIterations: 6 })
+      const world = engine.world
+      engine.gravity.x = 0
+      engine.gravity.y = 0
 
-    // 新气泡按黄金角环绕中心生成，向外轻推后被中心引力收拢，形成有机的绽放入场
-    const goldenAngle = Math.PI * (3 - Math.sqrt(5))
-    let freshIndex = 0
-    const freshVelocities = new Map<string, { x: number; y: number }>()
-
-    const bodies = nodes.map((node) => {
-      const isKnown = knownIdsRef.current.has(node.id)
-      const mv = positions.get(node.id)
-      const prevX = mv?.x.get()
-      const prevY = mv?.y.get()
-      const hasPrev =
-        isKnown &&
-        typeof prevX === 'number' &&
-        Number.isFinite(prevX) &&
-        typeof prevY === 'number' &&
-        Number.isFinite(prevY)
-
-      const radius = Number.isFinite(node.radius) && node.radius > 0 ? node.radius : 1
-
-      let x0: number
-      let y0: number
-      if (hasPrev) {
-        x0 = prevX as number
-        y0 = prevY as number
-      } else {
-        const angle = freshIndex * goldenAngle + Math.random() * 0.5
-        const ringR = Math.min(width, height) * 0.16 + freshIndex * 12
-        x0 = width / 2 + Math.cos(angle) * ringR
-        y0 = height / 2 + Math.sin(angle) * ringR
-        const bloomSpeed = reduceMotionRef.current ? 0 : 2.4 + Math.random() * 1.4
-        freshVelocities.set(node.id, { x: Math.cos(angle) * bloomSpeed, y: Math.sin(angle) * bloomSpeed })
-        freshIndex += 1
-      }
-
-      const minX = radius
-      const maxX = width - radius
-      const minY = radius
-      const maxY = height - radius
-
-      const x = maxX >= minX ? Math.min(Math.max(x0, minX), maxX) : width / 2
-      const y = maxY >= minY ? Math.min(Math.max(y0, minY), maxY) : height / 2
-
-      return Matter.Bodies.circle(x, y, radius, {
-        label: node.id,
-        frictionAir: 0.018,
-        restitution: 0.88,
-        density: 0.0012,
-        render: { fillStyle: node.color },
-      })
-    })
-
-    for (const body of bodies) {
-      const v = freshVelocities.get(body.label)
-      if (v) Matter.Body.setVelocity(body, v)
-    }
-
-    const wallOptions = { isStatic: true, render: { visible: false } }
-    const walls = [
-      Matter.Bodies.rectangle(width / 2, -500, width * 2, 1000, wallOptions),
-      Matter.Bodies.rectangle(width / 2, height + 500, width * 2, 1000, wallOptions),
-      Matter.Bodies.rectangle(-500, height / 2, 1000, height * 2, wallOptions),
-      Matter.Bodies.rectangle(width + 500, height / 2, 1000, height * 2, wallOptions),
-    ]
-
-    Matter.World.add(world, [...bodies, ...walls])
-    engineRef.current = engine
-    runnerRef.current = null
-    bodiesRef.current = new Map(bodies.map((b) => [b.label, b]))
-    knownIdsRef.current = new Set(nodes.map((n) => n.id))
-
-    const t0 = performance.now()
-    bodiesRef.current.forEach((body) => {
-      driftSeedsRef.current.set(body.label, { a: Math.random() * Math.PI * 2, b: Math.random() * Math.PI * 2 })
-    })
-
-    const finalizeBurst = (parentId: string, state: BurstState, cx: number, cy: number) => {
-      state.shardBodies.forEach((shard) => {
-        Matter.World.remove(world, shard)
-        bodiesRef.current.delete(shard.label)
-        driftSeedsRef.current.delete(shard.label)
-        shardMotionsRef.current.delete(shard.label)
-      })
-
-      Matter.Body.setPosition(state.originalBody, { x: cx, y: cy })
-      Matter.Body.setVelocity(state.originalBody, { x: 0, y: 0 })
-      Matter.Body.setAngularVelocity(state.originalBody, 0)
-      Matter.World.add(world, state.originalBody)
-      bodiesRef.current.set(parentId, state.originalBody)
-      driftSeedsRef.current.set(parentId, state.originalSeed)
-
-      bursts.delete(parentId)
-      burstStatesRef.current.delete(parentId)
-      burstProgress.get(parentId)?.set(0)
-      clusterBoostRef.current = { startMs: performance.now(), durationMs: 700, strength: 0.7 }
-      bump((v) => v + 1)
-    }
-
-    const onBeforeUpdate = () => {
-      const t = (performance.now() - t0) / 1000
-
-      // 减少动态偏好下停用环境漂移，仅保留聚拢力维持布局
-      const ambientScale = reduceMotionRef.current ? 0 : 1
-
-      const wander = Math.min(width, height) * 0.06 * ambientScale
-      const cx = width / 2 + Math.sin(t * 0.17) * wander
-      const cy = height / 2 + Math.cos(t * 0.13) * wander
-
-      const pulse = Math.sin(t * 0.35) * ambientScale
-      const baseCenterK = 0.000015 + 0.000005 * pulse
-      const swirlK = 0.000001 * Math.cos(t * 0.25) * ambientScale
-
-      let centerBoostMul = 1
-      const boost = clusterBoostRef.current
-      if (boost) {
-        const nowMs = performance.now()
-        const p = (nowMs - boost.startMs) / Math.max(1, boost.durationMs)
-        if (p >= 1) {
-          clusterBoostRef.current = null
-        } else {
-          const easeOut = 1 - Math.pow(p, 2)
-          centerBoostMul = 1 + boost.strength * 1.1 * easeOut
-        }
-      }
-      const centerK = baseCenterK * centerBoostMul
-
-      bodiesRef.current.forEach((body) => {
-        const dx = cx - body.position.x
-        const dy = cy - body.position.y
-
-        Matter.Body.applyForce(body, body.position, {
-          x: dx * centerK + -dy * swirlK,
-          y: dy * centerK + dx * swirlK,
-        })
-
-        const seed = driftSeedsRef.current.get(body.label)
-        if (!seed) return
-
-        const drift = 0.00012 * ambientScale
-        if (drift === 0) return
-        Matter.Body.applyForce(body, body.position, {
-          x: Math.sin(t * 0.9 + seed.a) * drift,
-          y: Math.cos(t * 1.1 + seed.b) * drift,
-        })
-      })
-
-      const nowMs = performance.now()
-      burstStatesRef.current.forEach((state, parentId) => {
-        if (nowMs < state.mergeStartMs) return
-
-        if (state.phase === 'burst') {
-          state.phase = 'merge'
-          animate(state.alpha, 0, { duration: 0.45, ease: [0.2, 0, 0, 1] })
-          const p = burstProgress.get(parentId)
-          if (p) animate(p, 0, { duration: 0.42, ease: [0.2, 0, 0, 1] })
-        }
-
-        const shards = state.shardBodies
-        if (shards.length === 0) {
-          finalizeBurst(parentId, state, width / 2, height / 2)
-          return
-        }
-
-        let sx = 0
-        let sy = 0
-        for (const shard of shards) {
-          sx += shard.position.x
-          sy += shard.position.y
-        }
-        const mx = sx / shards.length
-        const my = sy / shards.length
-
-        const mergeP = Math.min(1, Math.max(0, (nowMs - state.mergeStartMs) / Math.max(1, state.mergeDurationMs)))
-        const easeIn = mergeP * mergeP
-        const mergeK = 0.00006 + 0.00028 * easeIn
-
-        for (const shard of shards) {
-          const dx = mx - shard.position.x
-          const dy = my - shard.position.y
-          Matter.Body.applyForce(shard, shard.position, { x: dx * mergeK, y: dy * mergeK })
-        }
-
-        if (mergeP >= 1) {
-          finalizeBurst(parentId, state, mx, my)
-        }
-      })
-    }
-
-    Matter.Events.on(engine, 'beforeUpdate', onBeforeUpdate)
-
-    // 固定步长 + 限制单帧追帧时间：高刷屏与后台切换后表现一致，避免追帧导致的跳动
-    const runner = Matter.Runner.create({ delta: 1000 / 60, maxFrameTime: 1000 / 30 })
-    runnerRef.current = runner
-
-    const onAfterUpdate = () => {
-      bodiesRef.current.forEach((body) => {
-        // NaN/越界兜底：任何异常位置直接归位画面中心，防止气泡永久消失
-        if (!Number.isFinite(body.position.x) || !Number.isFinite(body.position.y)) {
-          Matter.Body.setPosition(body, { x: width / 2, y: height / 2 })
-          Matter.Body.setVelocity(body, { x: 0, y: 0 })
-          Matter.Body.setAngularVelocity(body, 0)
-        }
-
-        const m = positions.get(body.label)
-        if (m) {
-          m.x.set(body.position.x)
-          m.y.set(body.position.y)
-          return
-        }
-
-        const shard = shardMotionsRef.current.get(body.label)
-        if (!shard) return
-        shard.x.set(body.position.x - shard.radius)
-        shard.y.set(body.position.y - shard.radius)
-      })
-
-      burstStatesRef.current.forEach((state, parentId) => {
-        const m = positions.get(parentId)
-        if (!m) return
-
-        const shards = state.shardBodies
-        if (shards.length === 0) return
-        let sx = 0
-        let sy = 0
-        for (const shard of shards) {
-          sx += shard.position.x
-          sy += shard.position.y
-        }
-        m.x.set(sx / shards.length)
-        m.y.set(sy / shards.length)
-      })
-    }
-
-    Matter.Events.on(engine, 'afterUpdate', onAfterUpdate)
-
-    bodiesRef.current.forEach((body) => {
-      const m = positions.get(body.label)
-      if (m) {
-        m.x.set(body.position.x)
-        m.y.set(body.position.y)
-      }
-    })
-
-    return () => {
-      Matter.Events.off(engine, 'beforeUpdate', onBeforeUpdate)
-      Matter.Events.off(engine, 'afterUpdate', onAfterUpdate)
-      Matter.Runner.stop(runner)
-      runnerRunningRef.current = false
-      Matter.World.clear(world, false)
-      Matter.Engine.clear(engine)
-      engineRef.current = null
-      runnerRef.current = null
-      bodiesRef.current = new Map()
       bursts.clear()
       driftSeedsRef.current = new Map()
       shardMotionsRef.current = new Map()
       burstStatesRef.current = new Map()
       clusterBoostRef.current = null
+      burstProgress.forEach((p) => p.set(0))
+      bump((v) => v + 1)
+
+      // 新气泡按黄金角环绕中心生成，向外轻推后被中心引力收拢，形成有机的绽放入场
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5))
+      let freshIndex = 0
+      const freshVelocities = new Map<string, { x: number; y: number }>()
+
+      const bodies = nodes.map((node) => {
+        const isKnown = knownIdsRef.current.has(node.id)
+        const mv = positions.get(node.id)
+        const prevX = mv?.x.get()
+        const prevY = mv?.y.get()
+        const hasPrev =
+          isKnown &&
+          typeof prevX === 'number' &&
+          Number.isFinite(prevX) &&
+          typeof prevY === 'number' &&
+          Number.isFinite(prevY)
+
+        const radius = Number.isFinite(node.radius) && node.radius > 0 ? node.radius : 1
+
+        let x0: number
+        let y0: number
+        if (hasPrev) {
+          x0 = prevX as number
+          y0 = prevY as number
+        } else {
+          const angle = freshIndex * goldenAngle + Math.random() * 0.5
+          const ringR = Math.min(width, height) * 0.16 + freshIndex * 12
+          x0 = width / 2 + Math.cos(angle) * ringR
+          y0 = height / 2 + Math.sin(angle) * ringR
+          const bloomSpeed = reduceMotionRef.current ? 0 : 2.4 + Math.random() * 1.4
+          freshVelocities.set(node.id, { x: Math.cos(angle) * bloomSpeed, y: Math.sin(angle) * bloomSpeed })
+          freshIndex += 1
+        }
+
+        const minX = radius
+        const maxX = width - radius
+        const minY = radius
+        const maxY = height - radius
+
+        const x = maxX >= minX ? Math.min(Math.max(x0, minX), maxX) : width / 2
+        const y = maxY >= minY ? Math.min(Math.max(y0, minY), maxY) : height / 2
+
+        return Matter.Bodies.circle(x, y, radius, {
+          label: node.id,
+          frictionAir: 0.018,
+          restitution: 0.88,
+          density: 0.0012,
+          render: { fillStyle: node.color },
+        })
+      })
+
+      for (const body of bodies) {
+        const v = freshVelocities.get(body.label)
+        if (v) Matter.Body.setVelocity(body, v)
+      }
+
+      const wallOptions = { isStatic: true, render: { visible: false } }
+      const walls = [
+        Matter.Bodies.rectangle(width / 2, -500, width * 2, 1000, wallOptions),
+        Matter.Bodies.rectangle(width / 2, height + 500, width * 2, 1000, wallOptions),
+        Matter.Bodies.rectangle(-500, height / 2, 1000, height * 2, wallOptions),
+        Matter.Bodies.rectangle(width + 500, height / 2, 1000, height * 2, wallOptions),
+      ]
+
+      Matter.World.add(world, [...bodies, ...walls])
+      engineRef.current = engine
+      runnerRef.current = null
+      bodiesRef.current = new Map(bodies.map((b) => [b.label, b]))
+      knownIdsRef.current = new Set(nodes.map((n) => n.id))
+
+      const t0 = performance.now()
+      bodiesRef.current.forEach((body) => {
+        driftSeedsRef.current.set(body.label, { a: Math.random() * Math.PI * 2, b: Math.random() * Math.PI * 2 })
+      })
+
+      const finalizeBurst = (parentId: string, state: BurstState, cx: number, cy: number) => {
+        state.shardBodies.forEach((shard) => {
+          Matter.World.remove(world, shard)
+          bodiesRef.current.delete(shard.label)
+          driftSeedsRef.current.delete(shard.label)
+          shardMotionsRef.current.delete(shard.label)
+        })
+
+        Matter.Body.setPosition(state.originalBody, { x: cx, y: cy })
+        Matter.Body.setVelocity(state.originalBody, { x: 0, y: 0 })
+        Matter.Body.setAngularVelocity(state.originalBody, 0)
+        Matter.World.add(world, state.originalBody)
+        bodiesRef.current.set(parentId, state.originalBody)
+        driftSeedsRef.current.set(parentId, state.originalSeed)
+
+        bursts.delete(parentId)
+        burstStatesRef.current.delete(parentId)
+        burstProgress.get(parentId)?.set(0)
+        clusterBoostRef.current = { startMs: performance.now(), durationMs: 700, strength: 0.7 }
+        bump((v) => v + 1)
+      }
+
+      const onBeforeUpdate = () => {
+        const t = (performance.now() - t0) / 1000
+
+        // 减少动态偏好下停用环境漂移，仅保留聚拢力维持布局
+        const ambientScale = reduceMotionRef.current ? 0 : 1
+
+        const wander = Math.min(width, height) * 0.06 * ambientScale
+        const cx = width / 2 + Math.sin(t * 0.17) * wander
+        const cy = height / 2 + Math.cos(t * 0.13) * wander
+
+        const pulse = Math.sin(t * 0.35) * ambientScale
+        const baseCenterK = 0.000015 + 0.000005 * pulse
+        const swirlK = 0.000001 * Math.cos(t * 0.25) * ambientScale
+
+        let centerBoostMul = 1
+        const boost = clusterBoostRef.current
+        if (boost) {
+          const nowMs = performance.now()
+          const p = (nowMs - boost.startMs) / Math.max(1, boost.durationMs)
+          if (p >= 1) {
+            clusterBoostRef.current = null
+          } else {
+            const easeOut = 1 - Math.pow(p, 2)
+            centerBoostMul = 1 + boost.strength * 1.1 * easeOut
+          }
+        }
+        const centerK = baseCenterK * centerBoostMul
+
+        bodiesRef.current.forEach((body) => {
+          const dx = cx - body.position.x
+          const dy = cy - body.position.y
+
+          Matter.Body.applyForce(body, body.position, {
+            x: dx * centerK + -dy * swirlK,
+            y: dy * centerK + dx * swirlK,
+          })
+
+          const seed = driftSeedsRef.current.get(body.label)
+          if (!seed) return
+
+          const drift = 0.00012 * ambientScale
+          if (drift === 0) return
+          Matter.Body.applyForce(body, body.position, {
+            x: Math.sin(t * 0.9 + seed.a) * drift,
+            y: Math.cos(t * 1.1 + seed.b) * drift,
+          })
+        })
+
+        const nowMs = performance.now()
+        burstStatesRef.current.forEach((state, parentId) => {
+          if (nowMs < state.mergeStartMs) return
+
+          if (state.phase === 'burst') {
+            state.phase = 'merge'
+            animate(state.alpha, 0, { duration: 0.45, ease: [0.2, 0, 0, 1] })
+            const p = burstProgress.get(parentId)
+            if (p) animate(p, 0, { duration: 0.42, ease: [0.2, 0, 0, 1] })
+          }
+
+          const shards = state.shardBodies
+          if (shards.length === 0) {
+            finalizeBurst(parentId, state, width / 2, height / 2)
+            return
+          }
+
+          let sx = 0
+          let sy = 0
+          for (const shard of shards) {
+            sx += shard.position.x
+            sy += shard.position.y
+          }
+          const mx = sx / shards.length
+          const my = sy / shards.length
+
+          const mergeP = Math.min(1, Math.max(0, (nowMs - state.mergeStartMs) / Math.max(1, state.mergeDurationMs)))
+          const easeIn = mergeP * mergeP
+          const mergeK = 0.00006 + 0.00028 * easeIn
+
+          for (const shard of shards) {
+            const dx = mx - shard.position.x
+            const dy = my - shard.position.y
+            Matter.Body.applyForce(shard, shard.position, { x: dx * mergeK, y: dy * mergeK })
+          }
+
+          if (mergeP >= 1) {
+            finalizeBurst(parentId, state, mx, my)
+          }
+        })
+      }
+
+      Matter.Events.on(engine, 'beforeUpdate', onBeforeUpdate)
+
+      // 固定步长 + 限制单帧追帧时间：高刷屏与后台切换后表现一致，避免追帧导致的跳动
+      const runner = Matter.Runner.create({ delta: 1000 / 60, maxFrameTime: 1000 / 30 })
+      runnerRef.current = runner
+
+      const onAfterUpdate = () => {
+        bodiesRef.current.forEach((body) => {
+          // NaN/越界兜底：任何异常位置直接归位画面中心，防止气泡永久消失
+          if (!Number.isFinite(body.position.x) || !Number.isFinite(body.position.y)) {
+            Matter.Body.setPosition(body, { x: width / 2, y: height / 2 })
+            Matter.Body.setVelocity(body, { x: 0, y: 0 })
+            Matter.Body.setAngularVelocity(body, 0)
+          }
+
+          const m = positions.get(body.label)
+          if (m) {
+            m.x.set(body.position.x)
+            m.y.set(body.position.y)
+            return
+          }
+
+          const shard = shardMotionsRef.current.get(body.label)
+          if (!shard) return
+          shard.x.set(body.position.x - shard.radius)
+          shard.y.set(body.position.y - shard.radius)
+        })
+
+        burstStatesRef.current.forEach((state, parentId) => {
+          const m = positions.get(parentId)
+          if (!m) return
+
+          const shards = state.shardBodies
+          if (shards.length === 0) return
+          let sx = 0
+          let sy = 0
+          for (const shard of shards) {
+            sx += shard.position.x
+            sy += shard.position.y
+          }
+          m.x.set(sx / shards.length)
+          m.y.set(sy / shards.length)
+        })
+      }
+
+      Matter.Events.on(engine, 'afterUpdate', onAfterUpdate)
+
+      bodiesRef.current.forEach((body) => {
+        const m = positions.get(body.label)
+        if (m) {
+          m.x.set(body.position.x)
+          m.y.set(body.position.y)
+        }
+      })
+
+      return () => {
+        Matter.Events.off(engine, 'beforeUpdate', onBeforeUpdate)
+        Matter.Events.off(engine, 'afterUpdate', onAfterUpdate)
+        Matter.Runner.stop(runner)
+        runnerRunningRef.current = false
+        Matter.World.clear(world, false)
+        Matter.Engine.clear(engine)
+        engineRef.current = null
+        runnerRef.current = null
+        bodiesRef.current = new Map()
+        bursts.clear()
+        driftSeedsRef.current = new Map()
+        shardMotionsRef.current = new Map()
+        burstStatesRef.current = new Map()
+        clusterBoostRef.current = null
+      }
+    }
+
+    void loadMatter().then((loaded) => {
+      if (disposed) return
+      matterRef.current = loaded
+      teardown = setupEngine(loaded)
+    })
+
+    return () => {
+      disposed = true
+      teardown?.()
+      teardown = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nodesConfigHash encapsulates the relevant parts of nodes
   }, [bursts, burstProgress, height, nodesConfigHash, positions, width])
@@ -375,9 +403,10 @@ export function useBubblePhysics(
   useEffect(() => {
     if (!width || !height || nodes.length === 0) return
 
+    const Matter = matterRef.current
     const engine = engineRef.current
     const runner = runnerRef.current
-    if (!engine || !runner) return
+    if (!Matter || !engine || !runner) return
 
     const shouldRun = isActive || (keepBurstsVisible && burstStatesRef.current.size > 0)
 
@@ -400,8 +429,9 @@ export function useBubblePhysics(
   useEffect(() => {
     if (keepBurstsVisible) return
 
+    const Matter = matterRef.current
     const engine = engineRef.current
-    if (!engine) {
+    if (!engine || !Matter) {
       bursts.clear()
       burstStatesRef.current = new Map()
       shardMotionsRef.current = new Map()
@@ -431,6 +461,8 @@ export function useBubblePhysics(
   }, [bursts, burstProgress, keepBurstsVisible])
 
   const flick = useCallback((id: string, velocity: { x: number; y: number }) => {
+    const Matter = matterRef.current
+    if (!Matter) return
     const body = bodiesRef.current.get(id)
     if (!body) return
 
@@ -495,8 +527,9 @@ export function useBubblePhysics(
 
   const burst = useCallback(
     (id: string, point?: { x: number; y: number }) => {
+      const Matter = matterRef.current
       const engine = engineRef.current
-      if (!engine) return
+      if (!Matter || !engine) return
 
       const world = engine.world
       const nowMs = performance.now()
