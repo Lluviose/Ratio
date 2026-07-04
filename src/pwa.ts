@@ -38,14 +38,33 @@ registerSW({
     }
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener(
-        'controllerchange',
-        () => {
-          trackTelemetry('pwa_controller_changed', { swUrl })
-          reloadForUpdate('controllerchange')
-        },
-        { once: true },
-      )
+      const armReloadOnControllerChange = () => {
+        navigator.serviceWorker.addEventListener(
+          'controllerchange',
+          () => {
+            trackTelemetry('pwa_controller_changed', { swUrl })
+            reloadForUpdate('controllerchange')
+          },
+          { once: true },
+        )
+      }
+
+      if (navigator.serviceWorker.controller) {
+        // 页面加载时已受控：之后的 controllerchange 一定是新版本替换，需要刷新
+        armReloadOnControllerChange()
+      } else {
+        // 首次安装：clientsClaim 接管未受控页面也会触发一次 controllerchange，
+        // 此时页面本身就是最新版本，整页刷新只会打断用户首次使用（含 e2e 与
+        // iOS PWA 首开）。静默消费这一次，之后再武装真正的更新重载。
+        navigator.serviceWorker.addEventListener(
+          'controllerchange',
+          () => {
+            trackTelemetry('pwa_first_controller', { swUrl })
+            armReloadOnControllerChange()
+          },
+          { once: true },
+        )
+      }
     }
   },
 })
