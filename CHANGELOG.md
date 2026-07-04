@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-04 - 快速见效批次：首开流畅度、首包瘦身、安全与工程基础
+
+- 修复 iOS PWA 首开「占比页展开动画丢帧」：后台分包预热与首次交互争抢主线程所致；预热链加 1.6s 交互静默门控并把 AI 大分包纳入链尾统一治理（诊断全文见 TROUBLESHOOTING.md）。
+- matter-js 移出首包按需加载（`vendor-matter` 分包 26.3KB gzip）：首包 gzip 128.7 → 102.6KB（−20%）；加载完成前气泡停在初始位置，flick/burst 静默忽略。
+- 服务端 PBKDF2-SHA256 迭代 160k → 600k（OWASP 当前下限），旧记录在下次登录成功时透明重哈希升级（不动 updatedAt，并发改密安全）；已用真实服务进程冒烟验证注册/降级种子/升级/错误密码全路径。
+- 新增 CI 工作流：PR 与 main push 上跑 lint + 单测 + 构建 + Playwright chromium。
+- 启用 fast-check 首批性质测试（+10 项）：整数百分比分配「总和恒 100、正额≥1%、对抗性输入不越界」、金额运算「分域交换/结合/可逆、非有限数归零」、分段高度「段数不变、非负、恰好填满、保底退化均分」。
+- 空状态插画：趋势页/统计区间/操作历史的裸文案升级为主题色线稿 + 行动提示（共享 `EmptyState` 组件，原文案保留）。
+- 已通过 `npm run lint`、`npm test`（197 项）、`npm run build` 和 `npm run test:e2e`（18 项）验证。
+
 ## 2026-07-04 - 启用 React Compiler（作用域限定于懒加载屏幕）
 
 - 引入 `babel-plugin-react-compiler` 1.0，经 `react-compiler.shared.ts` 统一配置，vite 构建与 vitest 单测共用同一转换。

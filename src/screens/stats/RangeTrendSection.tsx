@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { PillTabs } from '../../components/PillTabs'
+import { EmptyState } from '../../components/EmptyState'
 import { formatCny } from '../../lib/format'
 import type { StatsRangeId, StatsRangeView } from '../../lib/snapshotDerived'
 import type { ThemeColors } from '../../lib/themes'
@@ -60,9 +61,13 @@ export function RangeTrendSection(props: {
       </motion.div>
 
       {!view ? (
-        <div className="muted" style={{ padding: '14px 0', textAlign: 'center', fontSize: 12, fontWeight: 600 }}>
-          暂无快照数据
-        </div>
+        <EmptyState
+          variant="trend"
+          title="暂无快照数据"
+          hint="记录第一条余额后，这里会展示区间内的变化"
+          paddingTop={14}
+          paddingBottom={14}
+        />
       ) : view.selectedCount < 2 ? (
         <GlowCard>
           <div className="muted" style={{ fontSize: 12, fontWeight: 700 }}>当前净资产</div>

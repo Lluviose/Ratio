@@ -4,6 +4,7 @@ import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } 
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { SegmentedControl } from './SegmentedControl'
+import { EmptyState } from './EmptyState'
 import { useOverlay } from '../lib/overlay'
 import { formatCny as formatCnyBase } from '../lib/format'
 import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from '../lib/money'
@@ -1125,9 +1126,11 @@ export function AccountDetailSheet(props: {
 
                 <div className="mt-3 rounded-[22px] bg-white/70 border border-white/70 overflow-hidden">
                   {relatedOps.length === 0 ? (
-                    <div className="py-10 text-center text-[13px] font-semibold text-slate-400">
-                      暂无操作
-                    </div>
+                    <EmptyState
+                      variant="ops"
+                      title="暂无操作"
+                      hint="用上方「期间增减」或「修改余额」记一笔，这里会保留历史"
+                    />
                   ) : (
                     <AnimatePresence initial={false}>
                       {(() => {

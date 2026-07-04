@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
+import { EmptyState } from '../components/EmptyState'
 import { getGroupIdByAccountType, type AccountGroupId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { getGoalDeltaDisplay } from '../lib/goalDeltaDisplay'
@@ -596,9 +597,12 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               )}
             </LineChart>
           ) : (
-            <div className="muted" style={{ textAlign: 'center', paddingTop: 80, fontSize: 13, fontWeight: 600 }}>
-              暂无快照数据
-            </div>
+            <EmptyState
+              variant="trend"
+              title="暂无快照数据"
+              hint="添加账户并更新余额后，这里会出现你的净资产曲线"
+              paddingTop={56}
+            />
           )}
         </motion.div>
 
