@@ -217,6 +217,7 @@ function AssetsListPageComponent(props: {
                     className="relative z-10 w-full text-left"
                     onClick={() => onToggleGroup(id)}
                     aria-expanded={isExpanded}
+                    aria-label={`account group ${id}`}
                   >
                     <div className="px-4 py-4">
                       <div className="flex items-start justify-between gap-4">

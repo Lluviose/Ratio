@@ -2,6 +2,41 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## PWA 首次安装后数秒自动整页刷新（并连带 CI e2e 失败）
+
+现象：
+
+- CI（ubuntu 双核）上 `app-smoke.spec.ts` 两个聚焦用例失败，本地 Windows 全绿；本地用 CDP `Emulation.setCPUThrottlingRate` 3x 节流可复现。
+- 失败形态诡异且不定点：元素先可见后「消失」、`dispatchEvent` 的事件在 document 捕获层完全无踪、页内探针日志整体丢失、expect 调用日志出现 `navigated to …/Ratio/`。
+- 真机侧对应体验：新用户首次打开（或清数据后首开）几秒后应用无故整页刷新一次。
+
+原因：
+
+- `src/pwa.ts` 在 `controllerchange` 上无条件 `location.reload()`。SW 配置了 `clientsClaim: true`，**首次安装**激活后接管未受控页面同样会触发一次 `controllerchange`——此时页面本就是最新版本，刷新纯属打断。快机器上 SW 安装极快，刷新落在测试早期的等待里无人察觉；慢机（CI/节流/低端真机）上 SW 安装需数秒，刷新正好砸进交互中段：React 状态清零（展开态、详情页），`addInitScript` 重跑换掉页内日志数组，一切「灵异现象」由此而来。
+- 排查此类「元素先在后无」时，优先怀疑整页刷新：在 `addInitScript` 里挂 document 捕获层 click 记录器 + MutationObserver，若最终读回的日志缺少早期标记，即页面中途重载。
+
+处理：
+
+- `src/pwa.ts`：仅当页面加载时已存在 `navigator.serviceWorker.controller`（即本次 `controllerchange` 是新版本替换）才刷新；首次接管静默消费，之后再武装真正的更新重载监听。更新路径行为不变。
+- e2e 帮助函数改为确定性写法（`e2e/app-smoke.spec.ts`）：等待首页真实初始化（fallback 首页换乘完成、`aria-hidden` 解除后「展开流动资金占比详情」才对 `getByRole` 可见）再交互；`openAccountDetail` 逐步断言目的地状态、按展开态幂等；分组卡新增稳定 `aria-label="account group ${id}"` 取代按金额文本的模糊过滤。
+- 观测补强：`playwright.config.ts` CI 上 `retries: 1`（首个重试自动带 trace），CI 工作流失败时上传 `playwright-report/` 与 `test-results/` 工件，避免再出现「CI 独有失败无日志可查」。
+- 有意不在 e2e 里屏蔽 Service Worker（`serviceWorkers: 'block'`）：这次正是 e2e 逮住了真实 PWA 缺陷，保留 SW 让这类回归继续可见。
+
+## GitHub Pages 部署偶发「Deployment failed, try again later」
+
+现象：
+
+- `Deploy to GitHub Pages` 工作流 build 成功，`actions/deploy-pages` 的 Deploy 步骤在创建部署后首次轮询即失败，注解只有「Deployment failed, try again later」；近几次推送约一半概率出现，与提交内容无关。
+
+原因：
+
+- Pages 服务端瞬时错误（部署创建成功但状态机立刻报失败），非仓库配置问题：同一工作流、同一配置在相邻提交上成功/失败交替，失败运行重跑即成功。
+
+处理：
+
+- 用 `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs` 重跑失败的 deploy job（或在 Actions 页面点 Re-run failed jobs）即可，无需改动工作流。
+- 若未来失败率明显升高再考虑在 deploy job 里加自动重试循环；当前保持简单。
+
 ## iOS PWA 首开：占比页展开动画丢帧/跳帧
 
 现象：

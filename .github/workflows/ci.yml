@@ -40,3 +40,15 @@ jobs:
 
       - name: E2E (chromium)
         run: npx playwright test --project=chromium
+
+      # 失败时上传报告与 trace，避免 CI 独有失败只能靠本地节流复现排查
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -5,7 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   timeout: 60_000,
   workers: 2,
-  reporter: 'list',
+  // CI 上重试一次：双核慢机的时序余量，且首个重试会带 trace（见 use.trace）
+  retries: process.env.CI ? 1 : 0,
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
     trace: 'on-first-retry',

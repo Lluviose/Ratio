@@ -33,17 +33,33 @@ async function seedApp(page: Page) {
 async function expectAssetsHomeVisible(page: Page) {
   await expect(page.getByRole('button', { name: 'stats' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'trend' })).toBeVisible()
-  await expect(accountTypeCard(page)).toBeVisible()
+  await expect(accountGroupCard(page)).toBeVisible()
 }
 
-function accountTypeCard(page: Page) {
-  return page.getByRole('button').filter({ hasText: '12,345' }).filter({ hasNotText: 'E2E Account' }).last()
+function accountGroupCard(page: Page) {
+  return page.getByRole('button', { name: 'account group liquid' })
 }
 
 async function openAccountDetail(page: Page) {
-  await accountTypeCard(page).dispatchEvent('click')
-  await page.getByRole('button', { name: 'account type bank_card' }).dispatchEvent('click')
-  await page.getByRole('button', { name: 'account E2E Account' }).dispatchEvent('click')
+  // 等首页真正初始化：fallback 首页换乘真实首页前，滚动区带 aria-hidden，
+  // 占比展开按钮对 getByRole 不可见。不等这一拍，dispatchEvent 可能解析到
+  // 即将卸载的 fallback 节点——已卸载节点上的事件不会冒泡到 React 根，点击被吞。
+  await expect(page.getByRole('button', { name: '展开流动资金占比详情' })).toBeVisible()
+
+  // 幂等：分组已展开（重开流程）时不再点分组卡，否则会把它折叠回去
+  const typeRow = page.getByRole('button', { name: 'account type bank_card' })
+  if (!(await typeRow.isVisible())) {
+    await accountGroupCard(page).dispatchEvent('click')
+  }
+  await expect(typeRow).toBeVisible()
+  await typeRow.dispatchEvent('click')
+
+  const accountRow = page.getByRole('button', { name: 'account E2E Account' })
+  await expect(accountRow).toBeVisible()
+  await accountRow.dispatchEvent('click')
+
+  // 详情页动作按钮就位后再返回，避免向进场中的表单派发事件
+  await expect(page.getByRole('button', { name: 'set balance action' })).toBeVisible()
 }
 
 test.beforeEach(async ({ page }) => {

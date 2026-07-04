@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-04 - 修复 PWA 首装自刷新（并稳定 CI e2e）
+
+- 修复真实缺陷：Service Worker 首次安装后 `clientsClaim` 接管页面触发 `controllerchange`，旧逻辑无条件整页刷新——新用户首开数秒后会被硬刷新一次（慢设备/iOS PWA 尤其明显）。现在仅当页面加载时已受控（即真正的版本更新替换）才刷新，更新路径行为不变。
+- 该缺陷在 CI 双核慢机上正好砸进 e2e 交互中段，是首个 CI 运行两用例失败的根因；本地用 CDP CPU 节流 3x 复现并验证，修复后 3x/4x/6x × 3 全绿（此前同矩阵 1 失败 + 5 侥幸重试）。
+- e2e 确定性加固：`openAccountDetail` 等待首页初始化完成、逐步断言、按展开态幂等；分组卡新增稳定 `aria-label="account group ${id}"`；CI 上 Playwright `retries: 1` + 失败自动上传 report/trace 工件。
+- GitHub Pages 偶发「Deployment failed, try again later」确认为服务端瞬时错误，重跑即可；诊断与处置全文见 TROUBLESHOOTING.md 前两节。
+- 已通过 `npm run lint`、`npm test`（197 项）、`npm run build` 和 `npx playwright test`（18 项全矩阵）验证。
+
 ## 2026-07-04 - 快速见效批次：首开流畅度、首包瘦身、安全与工程基础
 
 - 修复 iOS PWA 首开「占比页展开动画丢帧」：后台分包预热与首次交互争抢主线程所致；预热链加 1.6s 交互静默门控并把 AI 大分包纳入链尾统一治理（诊断全文见 TROUBLESHOOTING.md）。
