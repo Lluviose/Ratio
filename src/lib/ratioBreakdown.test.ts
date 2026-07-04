@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import fc from 'fast-check'
 import type { Account } from './accounts'
 import { buildGroupBreakdown, buildToneScale, distributeSegmentHeights, mixHexColors } from './ratioBreakdown'
 
@@ -99,6 +100,50 @@ describe('distributeSegmentHeights', () => {
 
   it('returns zero heights when nothing is available', () => {
     expect(distributeSegmentHeights([10, 20], 0, 34)).toEqual([0, 0])
+  })
+})
+
+// 性质测试：分段高度分配对任意输入都要保持「段数不变、非负、恰好填满」
+describe('distributeSegmentHeights properties', () => {
+  const amountsArb = fc.array(fc.double({ min: 0, max: 1e6, noNaN: true, noDefaultInfinity: true }), {
+    minLength: 1,
+    maxLength: 12,
+  })
+  const availableArb = fc.double({ min: 0, max: 5000, noNaN: true, noDefaultInfinity: true })
+  const minHeightArb = fc.double({ min: 0, max: 200, noNaN: true, noDefaultInfinity: true })
+
+  it('preserves segment count and never yields negative heights', () => {
+    fc.assert(
+      fc.property(amountsArb, availableArb, minHeightArb, (amounts, available, minHeight) => {
+        const heights = distributeSegmentHeights(amounts, available, minHeight)
+        expect(heights).toHaveLength(amounts.length)
+        for (const h of heights) {
+          expect(Number.isFinite(h)).toBe(true)
+          expect(h).toBeGreaterThanOrEqual(0)
+        }
+      }),
+    )
+  })
+
+  it('fills the available space exactly', () => {
+    fc.assert(
+      fc.property(amountsArb, availableArb, minHeightArb, (amounts, available, minHeight) => {
+        const heights = distributeSegmentHeights(amounts, available, minHeight)
+        const sum = heights.reduce((s, h) => s + h, 0)
+        expect(Math.abs(sum - Math.max(0, available))).toBeLessThan(1e-6)
+      }),
+    )
+  })
+
+  it('degenerates to an equal split when minimums cannot all fit', () => {
+    fc.assert(
+      fc.property(amountsArb, fc.double({ min: 1, max: 100, noNaN: true }), (amounts, minHeight) => {
+        // 刻意让可用空间低于「每段保底」所需
+        const available = minHeight * amounts.length * 0.9
+        const heights = distributeSegmentHeights(amounts, available, minHeight)
+        for (const h of heights) expect(h).toBeCloseTo(available / amounts.length, 6)
+      }),
+    )
   })
 })
 
