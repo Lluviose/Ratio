@@ -1,4 +1,4 @@
-import { AnimatePresence, motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
+import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
 import { BarChart3, Cloud, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
 import { type ComponentType, type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
@@ -11,16 +11,30 @@ import { CLOUD_SYNC_DIRTY_KEY, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEvents'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { overshootEase, quickFade } from '../lib/motionPresets'
+import {
+  LIST_GROUP_ORDER,
+  computeAssetFillerRect,
+  computeBlockKinds,
+  computeDebtFillerRect,
+  computeListBlockRects,
+  computeRatioLayout,
+  getBubbleRuntimeState,
+  getListCorner,
+  getRatioCorner,
+  isSameBubbleRuntimeState,
+  isSameRectMap,
+  lerp,
+  type BubbleRuntimeState,
+  type GroupId,
+  type ListMeasureItem,
+  type Rect,
+} from '../lib/homeGeometry'
 import { AssetsListPage } from './AssetsListPage'
 import { AssetsRatioPage, RATIO_CHART_TOP, type RatioPageBlock } from './AssetsRatioPage'
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
+import { OverlayBlock, type HomeBlockGeometry, type OverlayBlockModel } from './HomeOverlayBlock'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
-
-/** Linear interpolation helper */
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t
-}
 
 export type GroupedAccounts = {
   groupCards: Array<{ group: AccountGroup; accounts: Account[]; total: number }>
@@ -29,19 +43,8 @@ export type GroupedAccounts = {
   netWorth: number
 }
 
-type GroupId = 'liquid' | 'invest' | 'fixed' | 'receivable' | 'debt'
-
-type Rect = { x: number; y: number; w: number; h: number }
-
-const LIST_GROUP_ORDER: GroupId[] = ['liquid', 'invest', 'fixed', 'receivable', 'debt']
-
 const INITIAL_HOME_PAGE_INDEX = 2
 const HOME_PAGE_ACTIVE_TOLERANCE = 0.12
-const BUBBLE_PAGE_ACTIVE_MAX = 0.8
-const BUBBLE_PHYSICS_ENABLE_MAX = 0.24
-const BUBBLE_PHYSICS_DISABLE_MAX = 0.34
-const BUBBLE_BURSTS_ENABLE_MAX = 0.62
-const BUBBLE_BURSTS_DISABLE_MAX = 0.72
 const HIDE_AMOUNTS_KEY = 'ratio.hideAmounts'
 
 const horizontalPageStyle: CSSProperties = {
@@ -65,460 +68,8 @@ const homeScrollerStyle: CSSProperties = {
   contain: 'layout paint style',
 }
 
-type Block = {
-  id: GroupId
-  name: string
-  tone: string
-  amount: number
-  percent: number
-  hasCard: boolean
-}
+type Block = OverlayBlockModel
 
-type OverlayBlockModel = Block
-
-type CornerKind = 'debt' | 'assetTop' | 'assetMiddle' | 'assetBottom' | 'assetOnly' | 'assetTopNoDebt' | 'assetMiddleNoDebt' | 'assetBottomNoDebt' | 'assetOnlyNoDebt'
-
-type CornerRadii = { tl: number; tr: number; bl: number; br: number }
-
-type BubbleRuntimeState = {
-  pageActive: boolean
-  physicsActive: boolean
-  burstsVisible: boolean
-}
-
-type HomeBlockGeometry = {
-  block: OverlayBlockModel
-  kind: CornerKind
-  ratioRect?: Rect
-  listRect?: Rect
-  displayHeight?: number
-  bubblePos?: { x: MotionValue<number>; y: MotionValue<number> }
-  bubbleRadius: number
-  burstProgress?: MotionValue<number>
-  ratioCorner: CornerRadii
-  listCorner: CornerRadii
-  bubbleCorner: CornerRadii
-}
-
-function getRatioCorner(kind: CornerKind, chartRadius: number): CornerRadii {
-  if (kind === 'debt') return { tl: 0, tr: chartRadius, bl: chartRadius, br: 0 }
-  if (kind === 'assetOnly') return { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-  if (kind === 'assetTop') return { tl: 0, tr: chartRadius, bl: 0, br: 0 }
-  if (kind === 'assetBottom') return { tl: 0, tr: chartRadius, bl: 0, br: chartRadius }
-  if (kind === 'assetMiddle') return { tl: 0, tr: chartRadius, bl: 0, br: 0 }
-  if (kind === 'assetOnlyNoDebt') return { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
-  if (kind === 'assetTopNoDebt') return { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
-  if (kind === 'assetBottomNoDebt') return { tl: chartRadius, tr: chartRadius, bl: chartRadius, br: chartRadius }
-  if (kind === 'assetMiddleNoDebt') return { tl: chartRadius, tr: chartRadius, bl: 0, br: 0 }
-  return { tl: 0, tr: 0, bl: 0, br: 0 }
-}
-
-function getListCorner(kind: CornerKind, listRadius: number): CornerRadii {
-  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
-  return { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
-}
-
-function getBubbleRuntimeState(idx: number, current?: BubbleRuntimeState): BubbleRuntimeState {
-  const pageActive = idx < BUBBLE_PAGE_ACTIVE_MAX
-  const physicsActive = current?.physicsActive ? idx < BUBBLE_PHYSICS_DISABLE_MAX : idx < BUBBLE_PHYSICS_ENABLE_MAX
-  const burstsVisible = current?.burstsVisible ? idx < BUBBLE_BURSTS_DISABLE_MAX : idx < BUBBLE_BURSTS_ENABLE_MAX
-  return { pageActive, physicsActive, burstsVisible }
-}
-
-function isSameBubbleRuntimeState(a: BubbleRuntimeState, b: BubbleRuntimeState): boolean {
-  return a.pageActive === b.pageActive && a.physicsActive === b.physicsActive && a.burstsVisible === b.burstsVisible
-}
-
-function isSameRect(a?: Rect, b?: Rect): boolean {
-  if (!a || !b) return a === b
-  return (
-    Math.abs(a.x - b.x) < 0.5 &&
-    Math.abs(a.y - b.y) < 0.5 &&
-    Math.abs(a.w - b.w) < 0.5 &&
-    Math.abs(a.h - b.h) < 0.5
-  )
-}
-
-function isSameRectMap(a: Partial<Record<GroupId, Rect>>, b: Partial<Record<GroupId, Rect>>): boolean {
-  return LIST_GROUP_ORDER.every((id) => isSameRect(a[id], b[id]))
-}
-
-function OverlayBlockLabels(props: {
-  block: OverlayBlockModel
-  kind: CornerKind
-  ratio: Rect
-  displayHeight?: number
-  scrollIdx: MotionValue<number>
-  labelsOpacity: MotionValue<number>
-}) {
-  const { block, kind, ratio, displayHeight, scrollIdx, labelsOpacity } = props
-  const textColor = pickForegroundColor(block.tone)
-  const isDebt = kind === 'debt'
-  const basePercentSize = 36
-  const basePercentSymbolSize = 15
-  const baseLabelSize = 16
-  const baseLabelMargin = 4
-  const normalPadding = 16
-  const adaptivePaddingValue = 4
-  const verticalMinHeight = basePercentSize + baseLabelMargin + baseLabelSize + normalPadding * 2
-  const horizontalMinHeight = basePercentSize + adaptivePaddingValue * 2
-  const actualHeight = displayHeight ?? ratio.h
-  const useHorizontalLayout = !isDebt && actualHeight < verticalMinHeight
-
-  let fontScale = 1
-  if (!isDebt && actualHeight < horizontalMinHeight) {
-    const availableHeight = Math.max(0, actualHeight - adaptivePaddingValue * 2)
-    fontScale = Math.max(1 / 3, availableHeight / basePercentSize)
-  }
-
-  const needsScaling = fontScale < 1
-  const percentSize = needsScaling ? Math.round(basePercentSize * fontScale) : basePercentSize
-  const percentSymbolSize = needsScaling ? percentSize : basePercentSymbolSize
-  const labelSize = needsScaling ? Math.min(percentSize, baseLabelSize) : baseLabelSize
-
-  const paddingX = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return 0
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return lerp(0, normalPadding, t)
-  })
-  const paddingYTarget = useHorizontalLayout ? adaptivePaddingValue : normalPadding
-  const paddingY = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return 0
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return lerp(0, paddingYTarget, t)
-  })
-  const flexAlign = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
-  const flexJustify = useTransform(scrollIdx, (v) => (v < 0.5 ? 'center' : 'flex-start'))
-  const contentScale = useTransform(scrollIdx, [0, 0.5, 1], [1.1, 1, 1])
-  const amountOpacity = useTransform(scrollIdx, [0, 0.35, 0.55], [1, 1, 0])
-  const percentOpacity = useTransform(scrollIdx, [0.45, 0.65, 1], [0, 1, 1])
-
-  const ratioPercentSize = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return basePercentSize
-    if (!needsScaling) return basePercentSize
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return Math.round(lerp(basePercentSize, percentSize, t))
-  })
-  const ratioPercentSymbolSize = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return basePercentSymbolSize
-    if (!needsScaling) return basePercentSymbolSize
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return Math.round(lerp(basePercentSymbolSize, percentSymbolSize, t))
-  })
-  const ratioLabelSize = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return baseLabelSize
-    if (!needsScaling) return baseLabelSize
-    const t = Math.min(1, (idx - 0.5) * 2)
-    return Math.round(lerp(baseLabelSize, labelSize, t))
-  })
-  const ratioFlexDirection = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 'column'
-    return useHorizontalLayout ? 'row' : 'column'
-  })
-  const ratioAlignItems = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.5) return 'center'
-    if (idx < 0.8) return 'flex-start'
-    return useHorizontalLayout ? 'center' : 'flex-start'
-  })
-  const ratioLabelMarginTop = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 4
-    return useHorizontalLayout ? 0 : 4
-  })
-  const ratioLabelMarginLeft = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 0
-    return useHorizontalLayout ? 6 : 0
-  })
-  const extendedHeight = displayHeight ? ratio.h - displayHeight : 0
-  const ratioContentPaddingBottom = useTransform(scrollIdx, (idx) => {
-    if (idx < 0.8) return 0
-    if (useHorizontalLayout && extendedHeight > 0) return extendedHeight
-    return 0
-  })
-
-  return (
-    <motion.div
-      style={{
-        opacity: labelsOpacity,
-        color: textColor,
-        paddingLeft: paddingX,
-        paddingRight: paddingX,
-        paddingTop: paddingY,
-        paddingBottom: paddingY,
-      }}
-      className="w-full h-full flex flex-col relative z-10"
-    >
-      <motion.div
-        className="w-full h-full flex flex-col relative"
-        style={{
-          justifyContent: kind === 'debt' ? 'center' : flexJustify,
-          alignItems: flexAlign,
-          scale: contentScale,
-        }}
-      >
-        <motion.div
-          className="absolute inset-0 flex flex-col justify-center"
-          style={{ opacity: amountOpacity, alignItems: flexAlign }}
-        >
-          <div className="text-[12px] font-medium opacity-90 mb-0.5">{block.name}</div>
-          <div className="text-[20px] font-bold tracking-tight leading-none">{formatCny(block.amount)}</div>
-        </motion.div>
-
-        <motion.div
-          className="absolute inset-0 flex"
-          style={{
-            paddingBottom: ratioContentPaddingBottom,
-            opacity: percentOpacity,
-            justifyContent: isDebt ? 'center' : 'flex-start',
-            alignItems: isDebt ? 'flex-start' : ratioAlignItems,
-            flexDirection: ratioFlexDirection,
-          }}
-        >
-          <motion.div className="font-semibold tracking-tight leading-none" style={{ fontSize: ratioPercentSize }}>
-            {block.percent}
-            <motion.span className="ml-0.5" style={{ fontSize: ratioPercentSymbolSize }}>
-              %
-            </motion.span>
-          </motion.div>
-          <motion.div
-            className="font-medium opacity-85"
-            style={{
-              fontSize: ratioLabelSize,
-              marginTop: ratioLabelMarginTop,
-              marginLeft: ratioLabelMarginLeft,
-            }}
-          >
-            {block.name}
-          </motion.div>
-        </motion.div>
-      </motion.div>
-    </motion.div>
-  )
-}
-
-function OverlayBlock(props: {
-  geometry: HomeBlockGeometry
-  scrollIdx: MotionValue<number>
-  overlayFade: MotionValue<number>
-  labelsOpacity: MotionValue<number>
-  showLabels: boolean
-  isInitialLoad?: boolean
-  blockIndex?: number
-  viewportWidth?: number
-}) {
-  const {
-    geometry,
-    scrollIdx,
-    overlayFade,
-    labelsOpacity,
-    showLabels,
-    isInitialLoad = false,
-    blockIndex = 0,
-    viewportWidth = 400,
-  } = props
-
-  const {
-    block,
-    kind,
-    ratioRect,
-    listRect,
-    displayHeight,
-    bubblePos,
-    bubbleRadius,
-    burstProgress,
-    ratioCorner,
-    listCorner,
-    bubbleCorner,
-  } = geometry
-  const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
-  const list = listRect ?? ratioRect ?? ratio
-  const bRadius = bubbleRadius
-  
-  // Fallback for bubble pos if missing (shouldn't happen if initialized)
-  const defaultBX = useMotionValue(ratio.x + ratio.w / 2)
-  const defaultBY = useMotionValue(ratio.y + ratio.h / 2)
-  
-  const bX = bubblePos?.x ?? defaultBX
-  const bY = bubblePos?.y ?? defaultBY
-
-  // Interpolate Layout
-  // 0 -> 1: Bubble -> Ratio
-  // 1 -> 2: Ratio -> List
-  
-  const x = useTransform([scrollIdx, bX], (values) => {
-    const idx = values[0] as number
-    const bx = values[1] as number
-    
-    // Phase 1: Bubble -> Ratio
-    if (idx < 1) {
-      const t = Math.max(0, idx)
-      // Bubble center is bx, by. Top-left is bx - r, by - r
-      const bubbleLeft = bx - bRadius
-      return lerp(bubbleLeft, ratio.x, t)
-    }
-    // Phase 2: Ratio -> List
-    const t = Math.min(1, Math.max(0, idx - 1))
-    return lerp(ratio.x, list.x, t)
-  })
-
-  const y = useTransform([scrollIdx, bY], (values) => {
-    const idx = values[0] as number
-    const by = values[1] as number
-
-    if (idx < 1) {
-      const t = Math.max(0, idx)
-      const bubbleTop = by - bRadius
-      return lerp(bubbleTop, ratio.y, t)
-    }
-    const t = Math.min(1, Math.max(0, idx - 1))
-    return lerp(ratio.y, list.y, t)
-  })
-
-  const w = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) {
-      return lerp(bRadius * 2, ratio.w, Math.max(0, idx))
-    }
-    return lerp(ratio.w, list.w, Math.min(1, Math.max(0, idx - 1)))
-  })
-
-  const h = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) {
-      return lerp(bRadius * 2, ratio.h, Math.max(0, idx))
-    }
-    // List 模式：list.h 由 measureListRects 计算，包含「到下一个条目顶部的距离」以及
-    // 「覆盖下一个色块圆角所需的重叠量」，确保：
-    // 1) 当前色块上沿与条目上沿对齐
-    // 2) 视觉上当前色块下沿对齐到下一个条目上沿
-    // 3) 下一个色块圆角空白由上一个色块填充（多层叠不露底）
-    const listH = list.h
-
-    return lerp(ratio.h, listH, Math.min(1, Math.max(0, idx - 1)))
-  })
-  
-  const opacity = overlayFade
-  const fallbackBurst = useMotionValue(0)
-  const burstP = burstProgress ?? fallbackBurst
-  const burstOpacityRaw = useTransform(burstP, [0, 1], [1, 0])
-  const burstScaleRaw = useTransform(burstP, [0, 1], [1, 0.92])
-  const bubblePhase = useTransform(scrollIdx, (idx) => (idx < 0.95 ? 1 : 0) * 1)
-  const burstOpacityMul = useTransform([burstOpacityRaw, bubblePhase], (values) => {
-    const [o, m] = values as [number, number]
-    return m * o + (1 - m)
-  })
-  const burstScale = useTransform([burstScaleRaw, bubblePhase], (values) => {
-    const [s, m] = values as [number, number]
-    return m * s + (1 - m)
-  })
-  const finalOpacity = useTransform([opacity, burstOpacityMul], (values) => {
-    const [o, m] = values as [number, number]
-    return o * m
-  })
-
-  const tl = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(bubbleCorner.tl, ratioCorner.tl, Math.max(0, idx))
-    return lerp(ratioCorner.tl, listCorner.tl, Math.min(1, Math.max(0, idx - 1)))
-  })
-  const tr = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(bubbleCorner.tr, ratioCorner.tr, Math.max(0, idx))
-    return lerp(ratioCorner.tr, listCorner.tr, Math.min(1, Math.max(0, idx - 1)))
-  })
-  const bl = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(bubbleCorner.bl, ratioCorner.bl, Math.max(0, idx))
-    return lerp(ratioCorner.bl, listCorner.bl, Math.min(1, Math.max(0, idx - 1)))
-  })
-  const br = useTransform(scrollIdx, (idx) => {
-    if (idx < 1) return lerp(bubbleCorner.br, ratioCorner.br, Math.max(0, idx))
-    return lerp(ratioCorner.br, listCorner.br, Math.min(1, Math.max(0, idx - 1)))
-  })
-
-  // Sphere visual effects (fade out as we scroll to ratio)
-  const sphereEffectOpacity = useTransform(scrollIdx, [0, 0.5], [1, 0])
-  const surfaceHighlightOpacity = useTransform(scrollIdx, [0, 0.7, 1.6, 2], [0.18, 0.13, 0.1, 0.06])
-
-  // 是否需要入场动画（首次加载）
-  const needsEnterAnimation = isInitialLoad
-
-  // 入场动画的 translateX 偏移（从左侧飞入）
-  const enterTranslateX = needsEnterAnimation ? -viewportWidth : 0
-
-  return (
-    <motion.div
-      className="absolute inset-0 pointer-events-none"
-      initial={needsEnterAnimation ? { translateX: enterTranslateX, opacity: 0 } : false}
-      animate={{ translateX: 0, opacity: 1 }}
-      transition={needsEnterAnimation ? {
-        duration: 0.5,
-        delay: blockIndex * 0.04,
-        ease: [0.2, 0, 0, 1]
-      } : undefined}
-    >
-      <motion.div
-        className="absolute left-0 top-0 pointer-events-none"
-        style={{
-          x,
-          y,
-          width: w,
-          height: h,
-          background: block.tone,
-          borderTopLeftRadius: tl,
-          borderTopRightRadius: tr,
-          borderBottomLeftRadius: bl,
-          borderBottomRightRadius: br,
-          opacity: finalOpacity,
-          scale: burstScale,
-          originX: 0.5,
-          originY: 0.5,
-          overflow: 'hidden',
-          willChange: 'transform, opacity',
-          backfaceVisibility: 'hidden',
-          WebkitBackfaceVisibility: 'hidden',
-          contain: 'layout paint style',
-        }}
-      >
-        {/* Sphere 3D Effects Overlay */}
-        <motion.div
-          className="absolute inset-0 z-0"
-          style={{ opacity: sphereEffectOpacity }}
-        >
-          {/* Inner Highlight/Shadow using CSS gradients/shadows */}
-          <div className="absolute inset-0" style={{
-              background: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.15), transparent 60%)'
-          }} />
-          <div className="absolute inset-0" style={{
-              boxShadow: 'inset -10px -10px 20px rgba(0,0,0,0.1), inset 10px 10px 20px rgba(255,255,255,0.2)'
-          }} />
-        </motion.div>
-
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            zIndex: 1,
-            opacity: surfaceHighlightOpacity,
-            background: 'linear-gradient(to bottom, rgba(255,255,255,0.22), rgba(255,255,255,0) 36%)',
-          }}
-        />
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            zIndex: 1,
-            opacity: surfaceHighlightOpacity,
-            boxShadow: 'inset 0 -14px 20px rgba(15,23,42,0.04)',
-          }}
-        />
-
-        {showLabels ? (
-          <OverlayBlockLabels
-            block={block}
-            kind={kind}
-            ratio={ratio}
-            displayHeight={displayHeight}
-            scrollIdx={scrollIdx}
-            labelsOpacity={labelsOpacity}
-          />
-        ) : null}
-      </motion.div>
-    </motion.div>
-  )
-}
 
 export function AssetsScreen(props: {
   grouped: GroupedAccounts
@@ -924,144 +475,30 @@ export function AssetsScreen(props: {
     scrollToPage(3)
   }, [detailPageMounted, scrollerWidth, scrollToPage, selectedType])
 
-  const ratioLayout = useMemo(() => {
-    const top = RATIO_CHART_TOP
-    const chartH = Math.max(0, viewport.h - top)
-    const chartW = viewport.w
+  const ratioLayout = useMemo(
+    () =>
+      computeRatioLayout({
+        assets: blocks.assets,
+        debt: blocks.debt,
+        assetsTotal: grouped.assetsTotal || 0,
+        viewportW: viewport.w,
+        viewportH: viewport.h,
+        top: RATIO_CHART_TOP,
+      }),
+    [blocks, grouped.assetsTotal, viewport.h, viewport.w],
+  )
 
-    // 判断是否有负债
-    const hasDebt = blocks.debt && blocks.debt.amount > 0
-
-    // 如果没有负债，资产占满整个宽度；否则负债占 24%
-    const debtW = hasDebt ? Math.round(chartW * 0.24) : 0
-    const assetX = debtW
-    const assetW = Math.max(0, chartW - debtW)
-
-    const rects: Partial<Record<GroupId, Rect>> = {}
-
-    // 计算负债占资产的百分比
-    const assetsTotal = grouped.assetsTotal || 0
-    const debtTotal = blocks.debt?.amount || 0
-    const debtPercent = assetsTotal > 0 ? debtTotal / assetsTotal : 0
-
-    // 决定哪边是100%高度的基准
-    const debtExceeds = debtPercent > 1
-
-    // 计算实际显示高度
-    let assetDisplayH: number
-    let debtDisplayH: number
-    let assetStartY: number
-    let debtStartY: number
-
-    if (debtExceeds) {
-      // 负债超过100%：负债占满，资产按比例缩小（资产高度 = 100% / 负债百分比）
-      debtDisplayH = chartH
-      debtStartY = top
-      assetDisplayH = chartH / debtPercent
-      assetStartY = top // 资产从顶部开始
-    } else {
-      // 负债不超过100%：资产占满，负债按比例缩小
-      assetDisplayH = chartH
-      assetStartY = top
-      debtDisplayH = chartH * debtPercent
-      debtStartY = top + chartH - debtDisplayH // 负债底部对齐，与资产底部平齐
-    }
-
-    if (hasDebt && blocks.debt) {
-      rects.debt = { x: 0, y: debtStartY, w: debtW, h: debtDisplayH }
-    }
-
-    const ratioAssets = blocks.assets.filter((b) => b.amount > 0)
-    const total = ratioAssets.reduce((sum, b) => addMoney(sum, b.amount), 0)
-
-    // 最小高度阈值（允许字体缩放到最小时仍可显示）
-    // 最小字体 = 34/3 ≈ 11px，加上 padding 和一些余量
-    const minHeight = 28
-    // 圆角延伸高度（用于填充下方色块圆角处的空缺）
-    const cornerExtend = 32
-
-    // 存储每个色块的实际显示高度（不含延伸部分）
-    const displayHeights: Partial<Record<GroupId, number>> = {}
-
-    // 第一遍：找出需要使用最小高度的资产
-    const assetHeights: { id: GroupId; rawH: number; useMin: boolean }[] = []
-    let minHeightSum = 0
-
-    for (const b of ratioAssets) {
-      const rawH = total > 0 ? (assetDisplayH * b.amount) / total : 0
-      const useMin = rawH < minHeight && rawH > 0
-      if (useMin) minHeightSum += minHeight
-      assetHeights.push({ id: b.id, rawH, useMin })
-    }
-
-    // 第二遍：计算剩余高度给非最小高度的资产
-    const remainingH = Math.max(0, assetDisplayH - minHeightSum)
-    const nonMinTotal = assetHeights
-      .filter((a) => !a.useMin)
-      .reduce((sum, a) => sum + a.rawH, 0)
-
-    // 第三遍：分配最终高度（非最后的资产向下延伸以填充圆角空缺）
-    let y = assetStartY
-    for (let i = 0; i < ratioAssets.length; i += 1) {
-      const b = ratioAssets[i]
-      const info = assetHeights[i]
-      const isLast = i === ratioAssets.length - 1
-
-      let height: number
-      if (info.useMin) {
-        height = minHeight
-      } else if (nonMinTotal > 0) {
-        height = (remainingH * info.rawH) / nonMinTotal
-      } else {
-        height = info.rawH
-      }
-
-      // 最后一个资产填满剩余空间
-      if (isLast) {
-        height = assetStartY + assetDisplayH - y
-      }
-
-      // 保存实际显示高度（不含延伸部分）
-      displayHeights[b.id] = height
-
-      // 非最后的资产向下延伸一段，以填充下方色块圆角处的空缺
-      const extendedHeight = isLast ? height : height + cornerExtend
-
-      rects[b.id] = { x: assetX, y, w: assetW, h: Math.max(0, extendedHeight) }
-      y += height // 下一个色块的起始位置不变，仍然使用原始高度计算
-    }
-
-    return {
-      rects,
-      displayHeights,
-      topAssetId: ratioAssets.length > 0 ? ratioAssets[0]?.id ?? null : null,
-      bottomAssetId: ratioAssets.length > 0 ? ratioAssets[ratioAssets.length - 1]?.id ?? null : null,
-      debtExceeds,
-      assetDisplayH,
-      assetStartY,
-      hasDebt,
-    }
-  }, [blocks, grouped.assetsTotal, viewport.h, viewport.w])
-
-  const blockKinds = useMemo(() => {
-    const kinds: Partial<Record<GroupId, CornerKind>> = {}
-    if (blocks.debt) kinds.debt = 'debt'
-    const singleAsset = Boolean(ratioLayout.topAssetId && ratioLayout.topAssetId === ratioLayout.bottomAssetId)
-    const hasDebt = ratioLayout.hasDebt
-
-    for (const b of blocks.assets) {
-      if (singleAsset && b.id === ratioLayout.topAssetId) {
-        kinds[b.id] = hasDebt ? 'assetOnly' : 'assetOnlyNoDebt'
-      } else if (b.id === ratioLayout.topAssetId) {
-        kinds[b.id] = hasDebt ? 'assetTop' : 'assetTopNoDebt'
-      } else if (b.id === ratioLayout.bottomAssetId) {
-        kinds[b.id] = hasDebt ? 'assetBottom' : 'assetBottomNoDebt'
-      } else {
-        kinds[b.id] = hasDebt ? 'assetMiddle' : 'assetMiddleNoDebt'
-      }
-    }
-    return kinds
-  }, [blocks.assets, blocks.debt, ratioLayout.bottomAssetId, ratioLayout.topAssetId, ratioLayout.hasDebt])
+  const blockKinds = useMemo(
+    () =>
+      computeBlockKinds({
+        assetIds: blocks.assets.map((b) => b.id),
+        hasDebtBlock: Boolean(blocks.debt),
+        topAssetId: ratioLayout.topAssetId,
+        bottomAssetId: ratioLayout.bottomAssetId,
+        hasDebt: ratioLayout.hasDebt,
+      }),
+    [blocks.assets, blocks.debt, ratioLayout.bottomAssetId, ratioLayout.topAssetId, ratioLayout.hasDebt],
+  )
 
   const overlayBlocksInListOrder = useMemo(() => {
     const byId = new Map<GroupId, Block>()
@@ -1138,7 +575,6 @@ export function AssetsScreen(props: {
 
     const rootRect = root.getBoundingClientRect()
     const maxBlockWidth = Math.max(0, Math.round(rootRect.width))
-    const next: Partial<Record<GroupId, Rect>> = {}
     const blockGap = 12
     const overlap = listRadius
 
@@ -1180,7 +616,7 @@ export function AssetsScreen(props: {
 
     // 固定顺序，确保层叠方向稳定（后面的色块盖住前面的色块）
     const order = LIST_GROUP_ORDER
-    const items: Array<{ id: GroupId; top: number; height: number; cardLeft: number }> = []
+    const items: ListMeasureItem[] = []
 
     for (const id of order) {
       const el = groupElsRef.current[id]
@@ -1192,23 +628,7 @@ export function AssetsScreen(props: {
       items.push({ id, top, height: r.height, cardLeft })
     }
 
-    for (let i = 0; i < items.length; i += 1) {
-      const item = items[i]
-      if (!item) continue
-      const nextItem = items[i + 1]
-
-      const cardLeftOnListPage = item.cardLeft - listPageFinalOffsetX
-      const blockWidth = Math.min(maxBlockWidth, Math.max(0, Math.round(cardLeftOnListPage - blockGap)))
-      const baseHeight = nextItem ? Math.max(0, nextItem.top - item.top) : Math.max(0, item.height)
-      const blockHeight = nextItem ? baseHeight + overlap : baseHeight
-
-      next[item.id] = {
-        x: 0,
-        y: item.top,
-        w: blockWidth,
-        h: blockHeight,
-      }
-    }
+    const next = computeListBlockRects(items, { listPageFinalOffsetX, maxBlockWidth, blockGap, overlap })
 
     setListRects((prev) => (isSameRectMap(prev, next) ? prev : next))
   }, [scrollLeft, scrollerWidth])
@@ -1500,34 +920,16 @@ export function AssetsScreen(props: {
   useEffect(() => scheduleMeasure(), [expandedGroup, scheduleMeasure])
 
   // 计算负债上方的白色填充块（负债比例低于100%时）
-  const debtFillerRect = useMemo(() => {
-    if (!blocks.debt || ratioLayout.debtExceeds) return null
-    const debtRect = ratioLayout.rects.debt
-    if (!debtRect) return null
-
-    const top = RATIO_CHART_TOP
-    const fillerH = debtRect.y - top
-    if (fillerH <= 0) return null
-    
-    return { x: 0, y: top, w: debtRect.w, h: fillerH }
-  }, [blocks.debt, ratioLayout])
+  const debtFillerRect = useMemo(
+    () => (blocks.debt ? computeDebtFillerRect(ratioLayout, RATIO_CHART_TOP) : null),
+    [blocks.debt, ratioLayout],
+  )
 
   // 计算资产底部的白色填充块（负债比例超过100%时）
-  const assetFillerRect = useMemo(() => {
-    if (!blocks.debt || !ratioLayout.debtExceeds) return null
-
-    const top = RATIO_CHART_TOP
-    const chartH = Math.max(0, viewport.h - top)
-    const debtW = Math.round(viewport.w * 0.24)
-    const assetX = debtW
-    const assetW = Math.max(0, viewport.w - debtW)
-    
-    const assetEndY = ratioLayout.assetStartY + ratioLayout.assetDisplayH
-    const fillerH = top + chartH - assetEndY
-    if (fillerH <= 0) return null
-    
-    return { x: assetX, y: assetEndY, w: assetW, h: fillerH }
-  }, [blocks.debt, ratioLayout, viewport.h, viewport.w])
+  const assetFillerRect = useMemo(
+    () => (blocks.debt ? computeAssetFillerRect(ratioLayout, viewport.w, viewport.h, RATIO_CHART_TOP) : null),
+    [blocks.debt, ratioLayout, viewport.h, viewport.w],
+  )
 
   // 负债上方白色填充块的动画值
   const debtFillerLeft = useTransform(scrollIdx, (idx) => {
