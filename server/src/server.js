@@ -66,7 +66,8 @@ const failedAuthAccounts = new Map()
 const authCache = new Map()
 const telemetryPruneAt = new Map()
 const pbkdf2Async = promisify(pbkdf2)
-const PASSWORD_HASH_ITERATIONS = 160000
+// OWASP 对 PBKDF2-SHA256 的当前下限（~600k）；旧记录在下次登录成功时透明重哈希升级
+const PASSWORD_HASH_ITERATIONS = 600000
 const DUMMY_PASSWORD_USER = {
   passwordSalt: 'cmF0aW8tYXV0aC1kdW1teS1zYWx0',
   passwordIterations: PASSWORD_HASH_ITERATIONS,
@@ -380,6 +381,29 @@ async function verifyPassword(password, user) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+// 登录成功后把低于当前迭代目标的旧哈希透明升级；失败不阻断登录，下次再试。
+// 只替换哈希三元组，不动 updatedAt（这不是用户可见的资料变更）。
+async function maybeUpgradePasswordHash(user, password) {
+  const iterations = Number(user.passwordIterations)
+  if (Number.isFinite(iterations) && iterations >= PASSWORD_HASH_ITERATIONS) return user
+
+  try {
+    const passwordInfo = await hashPassword(password)
+    return await mutateUsers((data) => {
+      const record = data.users[user.username]
+      // 并发下记录可能已被改密/升级：仅在仍是刚校验过的那份哈希时替换，
+      // 否则维持本次请求已校验的原记录语义
+      if (!record || record.passwordHash !== user.passwordHash) return user
+      record.passwordHash = passwordInfo.hash
+      record.passwordSalt = passwordInfo.salt
+      record.passwordIterations = passwordInfo.iterations
+      return record
+    })
+  } catch {
+    return user
+  }
+}
+
 function authCacheKey(auth) {
   return createHash('sha256').update(`${auth.username}\0${auth.password}`, 'utf8').digest('hex')
 }
@@ -594,8 +618,9 @@ async function requireUser(req, res) {
   }
 
   clearAuthFailure(auth.username)
-  writeAuthCache(cacheKey, user)
-  return user
+  const upgradedUser = await maybeUpgradePasswordHash(user, auth.password)
+  writeAuthCache(cacheKey, upgradedUser)
+  return upgradedUser
 }
 
 function publicUser(user) {
