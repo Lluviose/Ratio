@@ -6,6 +6,7 @@ import { TourScreen } from './screens/TourScreen'
 import { AccountDetailSheet } from './components/AccountDetailSheet'
 import { AddAccountScreen } from './screens/AddAccountScreen'
 import { LazyAiAssistant } from './components/LazyAiAssistant'
+import { loadAiAssistant } from './components/aiAssistantLoader'
 import { LazyLoadBoundary } from './components/LazyLoadBoundary'
 import { ScreenSkeleton } from './components/ScreenSkeleton'
 import { type Account } from './lib/accounts'
@@ -114,21 +115,50 @@ function scheduleIdleWork(
   }
 }
 
+// 用户最近一次触摸后的静默窗口：窗口内不启动任何后台分包解析。
+// requestIdleCallback 只知道「当前帧有空闲」，不知道一个手势驱动的动画正要开始——
+// 在 iOS PWA 上，滑到占比页随手点开详情的瞬间恰好是 rIC 眼里的「空闲」，
+// 此时解析 300KB+ 的分包会阻塞主线程数百毫秒，弹簧动画直接跳帧到终态。
+const PRELOAD_INTERACTION_QUIET_MS = 1600
+
 function scheduleBackgroundTabPreloads() {
-  const tabs: TabId[] = ['settings', 'stats', 'trend']
+  if (typeof window === 'undefined') return () => {}
+
   let cancelled = false
   let cancelPending = () => {}
   let index = 0
+  let lastInteractionAt = 0
+
+  const markInteraction = () => {
+    lastInteractionAt = performance.now()
+  }
+  window.addEventListener('pointerdown', markInteraction, { passive: true, capture: true })
+  window.addEventListener('touchmove', markInteraction, { passive: true, capture: true })
+
+  // 从小到大排列，最大的 AI 分包放最后；全部在「空闲 + 用户静默」时才解析
+  const steps: Array<() => Promise<unknown>> = [
+    () => preloadTab('settings'),
+    () => preloadTab('stats'),
+    () => preloadTab('trend'),
+    () => loadAiAssistant(),
+  ]
 
   const scheduleNext = (minDelay: number) => {
     cancelPending = scheduleIdleWork(
       () => {
         if (cancelled) return
-        const tab = tabs[index]
-        index += 1
-        if (!tab) return
 
-        void preloadTab(tab)
+        // 用户刚交互过（滑动/点按），大概率有动画在跑：让路，稍后再试
+        if (performance.now() - lastInteractionAt < PRELOAD_INTERACTION_QUIET_MS) {
+          scheduleNext(1200)
+          return
+        }
+
+        const step = steps[index]
+        index += 1
+        if (!step) return
+
+        void step()
           .catch(() => undefined)
           .finally(() => {
             if (!cancelled) scheduleNext(1200)
@@ -143,6 +173,8 @@ function scheduleBackgroundTabPreloads() {
   return () => {
     cancelled = true
     cancelPending()
+    window.removeEventListener('pointerdown', markInteraction, { capture: true })
+    window.removeEventListener('touchmove', markInteraction, { capture: true })
   }
 }
 

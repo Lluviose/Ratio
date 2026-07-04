@@ -2,8 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Sparkles } from 'lucide-react'
 import { LazyLoadBoundary } from './LazyLoadBoundary'
-
-const loadAiAssistant = () => import('./AiAssistant')
+import { loadAiAssistant } from './aiAssistantLoader'
 
 const AiAssistant = lazy(() => loadAiAssistant().then((mod) => ({ default: mod.AiAssistant })))
 
