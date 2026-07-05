@@ -34,6 +34,7 @@ import { AssetsRatioPage, RATIO_CHART_TOP, type RatioPageBlock } from './AssetsR
 import { AssetsTypeDetailPage } from './AssetsTypeDetailPage'
 import { BubbleChartPage } from './BubbleChartPage'
 import { OverlayBlock, type HomeBlockGeometry, type OverlayBlockModel } from './HomeOverlayBlock'
+import { AnimatedAmount } from '../components/AnimatedAmount'
 import { useBubblePhysics, type BubbleNode } from '../components/BubbleChartPhysics'
 
 export type GroupedAccounts = {
@@ -1249,7 +1250,7 @@ export function AssetsScreen(props: {
                   exit={{ opacity: 0, y: -9, scale: 0.985, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
                   transition={quickFade}
                 >
-                  {hideAmounts ? maskedText : formatCny(grouped.netWorth)}
+                  {hideAmounts ? maskedText : <AnimatedAmount value={grouped.netWorth} />}
                 </motion.span>
               </AnimatePresence>
             </div>
