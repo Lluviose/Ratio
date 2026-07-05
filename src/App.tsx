@@ -25,6 +25,9 @@ import {
 } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMode, type ColorMode } from './lib/colorMode'
+import { queueToastAfterReload, useOverlay } from './lib/overlay'
+import { enterDemoMode, exitDemoMode } from './lib/demoData'
+import { isDemoModeActive } from './lib/demoMode'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
@@ -402,6 +405,52 @@ function ThemeTransitionOverlay(props: { transition: ThemeTransition }) {
   )
 }
 
+// 演示模式徽章：置顶悬浮提示 + 一键退出恢复。
+// 进出演示都会整页刷新，因此挂载时读一次标记即可。
+function DemoModeBadge() {
+  const [demoActive] = useState(() => isDemoModeActive())
+  const { toast, confirm } = useOverlay()
+
+  if (!demoActive) return null
+
+  const handleExit = async () => {
+    const ok = await confirm({
+      title: '退出演示',
+      message: '将清除演示数据，并恢复你进入演示前的全部数据。',
+      confirmText: '退出并恢复',
+      cancelText: '继续浏览',
+    })
+    if (!ok) return
+    try {
+      exitDemoMode()
+      queueToastAfterReload('已恢复你的数据', { tone: 'success' })
+      window.location.reload()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Exit demo failed', { tone: 'danger' })
+    }
+  }
+
+  return (
+    <motion.button
+      type="button"
+      onClick={() => void handleExit()}
+      initial={{ opacity: 0, y: -14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
+      className="absolute left-1/2 z-30 -translate-x-1/2 rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow-sm backdrop-blur-md"
+      style={{
+        top: 'calc(var(--safe-top) + 8px)',
+        background: 'rgb(var(--primary-rgb) / 0.14)',
+        borderColor: 'rgb(var(--primary-rgb) / 0.3)',
+        color: 'var(--primary)',
+      }}
+      aria-label="exit demo mode"
+    >
+      演示数据 · 点此退出
+    </motion.button>
+  )
+}
+
 export default function App() {
   const [tab, setTab] = useState<TabId>('assets')
   const [view, setView] = useState<ViewId>('main')
@@ -572,6 +621,7 @@ export default function App() {
       <div className="appViewport">
         <div className="appFrame">
           <OverlayProvider>
+          <DemoModeBadge />
           <AnimatePresence mode="wait">
           {!tourSeen ? (
             <motion.div
@@ -582,7 +632,14 @@ export default function App() {
               transition={{ duration: 0.38, ease: [0.05, 0.7, 0.1, 1] }}
               style={{ height: '100%' }}
             >
-              <TourScreen onClose={() => setTourSeen(true)} />
+              <TourScreen
+                onClose={() => setTourSeen(true)}
+                onEnterDemo={() => {
+                  enterDemoMode()
+                  queueToastAfterReload('已进入演示模式，可在设置中退出', { tone: 'success' })
+                  window.location.reload()
+                }}
+              />
             </motion.div>
           ) : view === 'addAccount' ? (
             <motion.div

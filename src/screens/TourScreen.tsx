@@ -275,8 +275,8 @@ function PhoneFrame(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent
   )
 }
 
-export function TourScreen(props: { onClose: () => void }) {
-  const { onClose } = props
+export function TourScreen(props: { onClose: () => void; onEnterDemo?: () => void }) {
+  const { onClose, onEnterDemo } = props
   const [index, setIndex] = useState(0)
   const [navDir, setNavDir] = useState(1)
 
@@ -442,6 +442,19 @@ export function TourScreen(props: { onClose: () => void }) {
              <ArrowRight size={20} strokeWidth={2.5} />
            </motion.button>
         </div>
+
+        {onEnterDemo ? (
+          <motion.button
+            type="button"
+            onClick={onEnterDemo}
+            className="mt-4 w-full text-center text-[13px] font-semibold text-slate-500"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: index === slides.length - 1 ? 1 : 0.65 }}
+            transition={{ duration: 0.25 }}
+          >
+            不想逐个添加账户？先看看演示数据 →
+          </motion.button>
+        ) : null}
       </div>
     </motion.div>
   )

@@ -12,6 +12,7 @@ import {
   writeCloudSyncSettingsPatch,
 } from './cloud'
 import { STORAGE_WRITE_EVENT, dispatchStorageWrite, type StorageWriteDetail } from './storageEvents'
+import { DEMO_KEY_PREFIX, isDemoModeActive } from './demoMode'
 import { trackTelemetry } from './telemetry'
 
 const AUTO_SYNC_DELAY_MS = 2500
@@ -37,6 +38,9 @@ function getWriteDetail(event: Event): StorageWriteDetail | null {
 function shouldAutoSyncKey(key: string) {
   if (!key.startsWith('ratio.')) return false
   if (key.startsWith(CLOUD_SYNC_SETTINGS_KEY)) return false
+  if (key.startsWith(DEMO_KEY_PREFIX)) return false
+  // 演示模式期间的数据写入不标脏：演示数据永远不该进云端
+  if (isDemoModeActive()) return false
   return true
 }
 
@@ -64,6 +68,7 @@ function setCloudSyncDirty() {
 
 function shouldScheduleSync(options: { includeRemoteProbe?: boolean } = {}) {
   const settings = getCloudSyncSettings()
+  if (isDemoModeActive()) return false
   if (!settings.autoSync || !hasCloudCredentials(settings)) return false
   if (
     isCloudSyncDirty() ||
@@ -297,6 +302,7 @@ async function runAutoSync(reason: string) {
   const settings = getCloudSyncSettings()
   const dirty = isCloudSyncDirty()
 
+  if (isDemoModeActive()) return
   if (!settings.autoSync || !hasCloudCredentials(settings)) return
   if (syncInFlight) {
     pendingReason = reason

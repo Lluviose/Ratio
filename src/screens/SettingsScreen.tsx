@@ -29,6 +29,8 @@ import {
 import { cancelPendingCloudAutoSync, markCloudSyncClean, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { coerceColorMode, COLOR_MODE_KEY, COLOR_MODE_OPTIONS, type ColorMode } from '../lib/colorMode'
+import { enterDemoMode, exitDemoMode } from '../lib/demoData'
+import { isDemoModeActive } from '../lib/demoMode'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -106,6 +108,8 @@ export function SettingsScreen(props: {
   const cloudAbortRef = useRef<AbortController | null>(null)
   const [busy, setBusy] = useState(false)
   const { toast, confirm } = useOverlay()
+  // 演示模式进出都会整页刷新，读一次即可
+  const [demoActive] = useState(() => isDemoModeActive())
 
   useEffect(() => {
     cloudSyncRef.current = cloudSync
@@ -123,6 +127,48 @@ export function SettingsScreen(props: {
   }, [monthStartDay, monthStartDayRaw, setMonthStartDayRaw])
 
   const randomSwatches = themeOptions.filter((t) => t.id !== 'random').map((t) => t.colors.invest)
+
+  const handleEnterDemo = async () => {
+    const ok = await confirm({
+      title: '进入演示模式',
+      message: '将展示一套带 18 个月历史的示例账本；你现有的数据会安全暂存，退出演示后自动恢复。',
+      confirmText: '进入演示',
+      cancelText: '取消',
+    })
+    if (!ok) return
+
+    setBusy(true)
+    try {
+      enterDemoMode()
+      queueToastAfterReload('已进入演示模式', { tone: 'success' })
+      window.location.reload()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Enter demo failed'
+      toast(msg, { tone: 'danger' })
+      setBusy(false)
+    }
+  }
+
+  const handleExitDemo = async () => {
+    const ok = await confirm({
+      title: '退出演示',
+      message: '将清除演示数据，并恢复你进入演示前的全部数据。',
+      confirmText: '退出并恢复',
+      cancelText: '取消',
+    })
+    if (!ok) return
+
+    setBusy(true)
+    try {
+      exitDemoMode()
+      queueToastAfterReload('已恢复你的数据', { tone: 'success' })
+      window.location.reload()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Exit demo failed'
+      toast(msg, { tone: 'danger' })
+      setBusy(false)
+    }
+  }
 
   const exportBackup = () => {
     try {
@@ -148,6 +194,10 @@ export function SettingsScreen(props: {
   }
 
   const importBackup = async (file: File) => {
+    if (demoActive) {
+      toast('演示模式下不可导入备份，请先退出演示', { tone: 'danger' })
+      return
+    }
     const ok = await confirm({
       title: '导入备份',
       message: '导入备份会覆盖当前设备上的所有数据，是否继续？',
@@ -306,6 +356,10 @@ export function SettingsScreen(props: {
   }
 
   const uploadCloud = async (force = false, requestSettings: CloudSyncSettings = cloudSyncRef.current): Promise<void> => {
+    if (demoActive) {
+      toast('演示模式下不可上传云端，请先退出演示', { tone: 'danger' })
+      return
+    }
     let retrying = false
     const controller = startCloudOperation()
     const dirtyToken = readCloudSyncDirtyToken()
@@ -450,6 +504,10 @@ export function SettingsScreen(props: {
   }
 
   const restoreCloud = async () => {
+    if (demoActive) {
+      toast('演示模式下不可从云端恢复，请先退出演示', { tone: 'danger' })
+      return
+    }
     const ok = await confirm({
       title: '从云端恢复',
       message: '云端备份会覆盖当前设备上的 Ratio 数据。继续前建议先导出一个本地备份。',
@@ -576,6 +634,26 @@ export function SettingsScreen(props: {
               value={colorMode}
               onChange={(v) => setColorMode(coerceColorMode(v))}
             />
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="cardInner">
+          <div style={{ fontWeight: 800, fontSize: 16 }}>演示数据</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
+            {demoActive ? '正在浏览示例账本；你的真实数据已安全暂存' : '一键填充带 18 个月历史的示例账本，随时退出并恢复'}
+          </div>
+          <div style={{ marginTop: 14 }}>
+            {demoActive ? (
+              <button type="button" className="primaryBtn" style={{ width: '100%' }} disabled={busy} onClick={() => void handleExitDemo()}>
+                退出演示并恢复我的数据
+              </button>
+            ) : (
+              <button type="button" className="ghostBtn" disabled={busy} onClick={() => void handleEnterDemo()}>
+                试试演示数据
+              </button>
+            )}
           </div>
         </div>
       </div>

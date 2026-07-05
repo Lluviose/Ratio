@@ -4,7 +4,13 @@ import { canonicalizeTransactionsForBackup } from './ledgerStorage'
 
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
-export const RATIO_BACKUP_EXCLUDE_PREFIXES: readonly string[] = ['ratio.cloudSync', 'ratio.aiPrivacyAcceptedServerUrl']
+// ratio.demo* = 演示模式标记与真实数据暂存：不进备份文件，也不被恢复流程清掉
+//（否则进入演示时的 restoreRatioBackup 会顺手删掉刚写入的暂存）
+export const RATIO_BACKUP_EXCLUDE_PREFIXES: readonly string[] = [
+  'ratio.cloudSync',
+  'ratio.aiPrivacyAcceptedServerUrl',
+  'ratio.demo',
+]
 
 export type RatioBackupFile = {
   schema: typeof RATIO_BACKUP_SCHEMA_V1
