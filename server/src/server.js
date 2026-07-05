@@ -168,6 +168,12 @@ function corsHeaders() {
 }
 
 function fail(res, status, message, code = 'error', details = undefined) {
+  // 流式响应中途失败时 headers 已发出，再 writeHead 会抛 ERR_HTTP_HEADERS_SENT
+  // 并沿 route().catch 变成 unhandled rejection 打挂进程；只能断开连接示错。
+  if (res.headersSent) {
+    res.destroy()
+    return
+  }
   jsonResponse(res, status, { error: { code, message, ...(details && typeof details === 'object' ? details : {}) } })
 }
 
@@ -1010,9 +1016,38 @@ function aiProxyHeaders(upstream) {
   }
 }
 
+function clientClosedError() {
+  const error = new Error('Client closed connection during stream')
+  error.code = 'ai_client_closed'
+  return error
+}
+
 async function writeChunk(res, chunk) {
+  if (res.destroyed || res.writableEnded) throw clientClosedError()
   if (res.write(chunk)) return
-  await new Promise((resolve) => res.once('drain', resolve))
+  // 客户端断连后 'drain' 永不触发，必须与 'close'/'error' 竞速，否则协程永久挂起。
+  await new Promise((resolve, reject) => {
+    const cleanup = () => {
+      res.off('drain', onDrain)
+      res.off('close', onClose)
+      res.off('error', onError)
+    }
+    const onDrain = () => {
+      cleanup()
+      resolve()
+    }
+    const onClose = () => {
+      cleanup()
+      reject(clientClosedError())
+    }
+    const onError = (error) => {
+      cleanup()
+      reject(error)
+    }
+    res.once('drain', onDrain)
+    res.once('close', onClose)
+    res.once('error', onError)
+  })
 }
 
 async function pipeUpstreamStreamLimited(upstream, res, maxBytes) {
@@ -1038,7 +1073,7 @@ async function pipeUpstreamStreamLimited(upstream, res, maxBytes) {
       await writeChunk(res, chunk)
     }
   } finally {
-    res.end()
+    if (!res.destroyed && !res.writableEnded) res.end()
   }
   return total
 }
@@ -2128,10 +2163,16 @@ await ensureDataDir()
 
 const server = http.createServer((req, res) => {
   route(req, res).catch((error) => {
-    const status = error && Number.isFinite(error.status) ? error.status : 500
-    const message = status >= 500 ? 'Internal server error' : error.message
-    if (status >= 500) console.error(error)
-    fail(res, status, message, error?.code || 'error')
+    // 兜底处理器自身绝不能再抛：这里抛出会成为 unhandled rejection 并终止进程。
+    try {
+      const status = error && Number.isFinite(error.status) ? error.status : 500
+      const message = status >= 500 ? 'Internal server error' : error.message
+      if (status >= 500) console.error(error)
+      fail(res, status, message, error?.code || 'error')
+    } catch (failError) {
+      console.error('[ratio-server] failed to send error response', failError)
+      res.destroy()
+    }
   })
 })
 

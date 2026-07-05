@@ -238,7 +238,8 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
 
 function PhoneFrame(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'; accent: string }) {
   return (
-    <div className="relative mx-auto w-[min(300px,90%)] z-10">
+    // tourPhoneLock：mockup 是「浅色 App 截图」，暗色模式下锁定浅色渲染（见 index.css）
+    <div className="tourPhoneLock relative mx-auto w-[min(300px,90%)] z-10">
       <motion.div
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -330,14 +331,12 @@ export function TourScreen(props: { onClose: () => void; onEnterDemo?: () => voi
     return 'ratio'
   })()
 
-  // Background color animation
-  const bgColors = ['#f8fafc', '#eff6ff', '#f1f5f9', '#eef2ff', '#f5f3ff']
-
+  // 页面背景色按幻灯片切换：色值在 index.css 的 .tourRoot 变量组里定义（浅/暗各一套），
+  // 颜色过渡交给 CSS transition，切换外观模式时也能平滑跟随
   return (
-    <motion.div 
-      className="h-full relative overflow-hidden flex flex-col touch-none"
-      animate={{ backgroundColor: bgColors[index % bgColors.length] }}
-      transition={{ duration: 0.7 }}
+    <motion.div
+      className="tourRoot h-full relative overflow-hidden flex flex-col touch-none"
+      style={{ backgroundColor: `var(--tour-bg-${index % 5})` }}
       onPanEnd={(_, { offset }) => {
         if (offset.x < -50 && index < slides.length - 1) {
           goTo(index + 1)
@@ -401,7 +400,10 @@ export function TourScreen(props: { onClose: () => void; onEnterDemo?: () => voi
       </div>
 
       {/* Bottom Nav */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 pt-12 bg-gradient-to-t from-white via-white/90 to-transparent z-40">
+      <div
+        className="absolute bottom-0 left-0 right-0 p-6 pt-12 z-40"
+        style={{ background: 'linear-gradient(to top, var(--tour-fade), var(--tour-fade-soft) 50%, transparent)' }}
+      >
         <div className="flex items-center justify-between">
            {/* Dots */}
            <div className="flex gap-2">

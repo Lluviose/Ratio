@@ -9,12 +9,13 @@ import {
   type ReactNode,
 } from 'react'
 import { BottomSheet } from './BottomSheet'
-import { OverlayContext, takeQueuedToastAfterReload, type ConfirmOptions, type OverlayApi, type ToastOptions, type ToastTone } from '../lib/overlay'
+import { OverlayContext, subscribeAppToasts, takeQueuedToastAfterReload, type ConfirmOptions, type OverlayApi, type ToastAction, type ToastOptions, type ToastTone } from '../lib/overlay'
 
 type ToastItem = {
   id: string
   message: string
   tone: ToastTone
+  action?: ToastAction
 }
 
 type ConfirmRequest = {
@@ -55,11 +56,11 @@ export function OverlayProvider(props: { children: ReactNode }) {
     (message: string, options?: ToastOptions) => {
       const tone: ToastTone = options?.tone ?? 'neutral'
       const durationMs =
-        options?.durationMs ?? (tone === 'danger' ? 3200 : tone === 'success' ? 2400 : 2400)
+        options?.durationMs ?? (options?.action ? 8000 : tone === 'danger' ? 3200 : tone === 'success' ? 2400 : 2400)
 
       const id = makeId()
       setToasts((prev) => {
-        const next = [...prev, { id, message, tone }]
+        const next = [...prev, { id, message, tone, action: options?.action }]
         while (next.length > 3) {
           const removed = next.shift()
           if (removed) clearToastTimer(removed.id)
@@ -80,6 +81,9 @@ export function OverlayProvider(props: { children: ReactNode }) {
     if (!queued) return
     toast(queued.message, queued.options)
   }, [toast])
+
+  // 模块级代码（pwa 更新、存储层）发出的 toast：挂载前排队的会在订阅时补发
+  useEffect(() => subscribeAppToasts((request) => toast(request.message, request.options)), [toast])
 
   useEffect(() => {
     const onCloudSync = (event: Event) => {
@@ -219,14 +223,28 @@ export function OverlayProvider(props: { children: ReactNode }) {
                 }
               />
               <div className="toastText">{t.message}</div>
-              <button
-                type="button"
-                className="toastClose"
-                aria-label="close"
-                onClick={() => dismissToast(t.id)}
-              >
-                <X size={16} strokeWidth={2.6} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {t.action ? (
+                  <button
+                    type="button"
+                    className="toastAction"
+                    onClick={() => {
+                      t.action?.onClick()
+                      dismissToast(t.id)
+                    }}
+                  >
+                    {t.action.label}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="toastClose"
+                  aria-label="close"
+                  onClick={() => dismissToast(t.id)}
+                >
+                  <X size={16} strokeWidth={2.6} />
+                </button>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>

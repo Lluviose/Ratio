@@ -58,7 +58,9 @@ export default defineConfig(() => {
         babel: reactCompilerBabelConfig,
       }),
       VitePWA({
-        registerType: 'autoUpdate',
+        // prompt 模式：新版本先 waiting，由 src/pwa.ts 弹 toast 征得用户同意后再接管，
+        // 避免部署新版时把正在输入的用户整页强刷（skipWaiting 必须保持 false）
+        registerType: 'prompt',
         injectRegister: false,
         includeAssets: [
           'pwa.svg',
@@ -71,7 +73,7 @@ export default defineConfig(() => {
         ],
         workbox: {
           navigateFallback: 'index.html',
-          skipWaiting: true,
+          skipWaiting: false,
           clientsClaim: true,
           globIgnores: [
             '**/ai-assistant-*.js',

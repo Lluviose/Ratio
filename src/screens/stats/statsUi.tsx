@@ -30,7 +30,7 @@ const compactMetricTileStyle = {
 const metricLabelStyle = {
   fontSize: 11,
   fontWeight: 650,
-  color: 'rgba(71, 85, 105, 0.82)',
+  color: 'var(--muted-text)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
@@ -46,7 +46,7 @@ const metricSubStyle = {
   fontSize: 11,
   fontWeight: 560,
   marginTop: 4,
-  color: 'rgba(71, 85, 105, 0.72)',
+  color: 'var(--muted-text)',
   overflowWrap: 'anywhere',
 } satisfies CSSProperties
 
@@ -132,7 +132,7 @@ export function InfoDot(props: {
         height: size,
         borderRadius: 999,
         border: '1px solid var(--hairline)',
-        background: 'rgb(255 255 255 / 0.84)',
+        background: 'rgb(var(--glass-rgb) / 0.84)',
         color: open ? 'var(--text)' : 'var(--muted-text)',
         display: 'inline-flex',
         alignItems: 'center',
@@ -200,7 +200,7 @@ export function StatusChip(props: { text: string; tone: string; dot?: boolean })
         gap: 6,
         borderRadius: 999,
         padding: '6px 10px',
-        background: 'rgb(255 255 255 / 0.84)',
+        background: 'rgb(var(--glass-rgb) / 0.84)',
         border: '1px solid rgb(var(--edge-rgb) / 0.06)',
         boxShadow: '0 8px 20px -18px rgba(15, 23, 42, 0.36)',
         color: tone,

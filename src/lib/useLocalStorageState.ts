@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { emitAppToast } from './overlay'
 import { dispatchStorageWrite, STORAGE_WRITE_EVENT, type StorageWriteDetail } from './storageEvents'
 
 export type UseLocalStorageStateErrorPhase = 'read' | 'write'
@@ -18,6 +19,11 @@ type HookState<T> = {
   canPersist: boolean
 }
 
+// 写入失败（配额满 / 隐私模式禁写）对用户是静默数据丢失，默认必须给出可见提示；
+// 一次失败往往连带多个 key 同时失败，30s 节流避免 toast 刷屏。
+const WRITE_ERROR_TOAST_THROTTLE_MS = 30_000
+let lastWriteErrorToastAt = 0
+
 function reportStorageError(
   key: string,
   phase: UseLocalStorageStateErrorPhase,
@@ -31,6 +37,14 @@ function reportStorageError(
 
   if (typeof console !== 'undefined' && typeof console.error === 'function') {
     console.error(`useLocalStorageState ${phase} failed for ${key}`, error)
+  }
+
+  if (phase === 'write') {
+    const now = Date.now()
+    if (now - lastWriteErrorToastAt >= WRITE_ERROR_TOAST_THROTTLE_MS) {
+      lastWriteErrorToastAt = now
+      emitAppToast('本地存储写入失败，最近的修改可能没有保存', { tone: 'danger', durationMs: 6000 })
+    }
   }
 }
 

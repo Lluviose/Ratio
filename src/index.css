@@ -318,6 +318,13 @@ a {
   transition: background 400ms ease;
 }
 
+:root[data-mode="dark"] .appViewport {
+  background:
+    radial-gradient(1100px 620px at 18% -12%, rgb(var(--primary-rgb) / 0.1), transparent 62%),
+    radial-gradient(900px 560px at 88% 112%, rgb(var(--primary-rgb) / 0.07), transparent 58%),
+    linear-gradient(180deg, #05070c, #0a0e18);
+}
+
 .appFrame {
   width: min(420px, 100%);
   height: 100%;
@@ -608,6 +615,13 @@ a {
 .iosTrendChartCard .recharts-wrapper {
   position: relative;
   z-index: 1;
+}
+
+/* recharts v3 的 accessibilityLayer 让图表元素可聚焦：鼠标点选数据点时，
+   浏览器默认焦点环会框住 ReferenceArea/Surface（暗色 color-scheme 下是
+   一圈亮白矩形）。只消鼠标路径的焦点环，键盘 :focus-visible 保留。 */
+.iosTrendChartCard :focus:not(:focus-visible) {
+  outline: none;
 }
 
 .iosTrendDetailPanel {
@@ -1316,6 +1330,24 @@ button:disabled {
   background: rgb(var(--ink-rgb) / 0.05);
 }
 
+.toastAction {
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgb(var(--primary-rgb) / 0.3);
+  background: rgb(var(--primary-rgb) / 0.14);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.toastAction:hover {
+  background: rgb(var(--primary-rgb) / 0.2);
+}
+
 .groupSummary {
   margin: 12px;
   border-radius: 22px;
@@ -1700,4 +1732,44 @@ button:disabled {
 .skeletonRows .skeletonBlock {
   height: 42px;
   border-radius: 18px;
+}
+
+/* 引导页（TourScreen）：页面层跟随明暗模式，手机 mockup 保持浅色截图质感。
+   —— 页面背景按幻灯片索引取 --tour-bg-N，颜色变化由 background-color 过渡动画完成；
+   —— 底部渐隐 --tour-fade* 固定每模式一组（浅色与原 from-white 行为一致）；
+   —— mockup 内部混用 Tailwind 桥接工具类与字面浅色，暗色下桥接翻转会撕裂版面，
+      因此 .tourPhoneLock 把用到的桥接变量重新钉回浅色值，整块锁定为浅色渲染。 */
+.tourRoot {
+  --tour-bg-0: #f8fafc;
+  --tour-bg-1: #eff6ff;
+  --tour-bg-2: #f1f5f9;
+  --tour-bg-3: #eef2ff;
+  --tour-bg-4: #f5f3ff;
+  --tour-fade: #ffffff;
+  --tour-fade-soft: rgb(255 255 255 / 0.9);
+  transition: background-color 700ms ease;
+}
+
+:root[data-mode="dark"] .tourRoot {
+  --tour-bg-0: #0d1220;
+  --tour-bg-1: #0c1526;
+  --tour-bg-2: #0d1322;
+  --tour-bg-3: #10142a;
+  --tour-bg-4: #130f26;
+  --tour-fade: #0b101a;
+  --tour-fade-soft: rgb(11 16 26 / 0.9);
+}
+
+:root[data-mode="dark"] .tourPhoneLock {
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-gray-100: #f3f4f6;
+  --color-gray-400: #9ca3af;
+  --color-gray-500: #6b7280;
+  --color-gray-800: #1f2937;
+  --color-gray-900: #111827;
+  --color-indigo-50: #eef2ff;
+  --color-indigo-900: #312e81;
+  color: #0f172a;
+  color-scheme: light;
 }

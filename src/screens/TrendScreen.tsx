@@ -327,13 +327,13 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           {p.goalTarget != null ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>目标路径</div>
-              <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalTarget)}</div>
+              <div style={{ color: 'rgb(var(--ink-rgb) / 0.72)' }}>{formatCny(p.goalTarget)}</div>
             </div>
           ) : null}
           {p.goalTarget == null && p.goalComparison != null ? (
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12, fontWeight: 650, marginTop: 6 }}>
               <div style={{ color: 'var(--muted-text)' }}>目标基准</div>
-              <div style={{ color: 'rgba(15,23,42,0.72)' }}>{formatCny(p.goalComparison)}</div>
+              <div style={{ color: 'rgb(var(--ink-rgb) / 0.72)' }}>{formatCny(p.goalComparison)}</div>
             </div>
           ) : null}
           {projectedNetForDetail != null ? (
@@ -369,7 +369,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
             <div style={{ fontWeight: 700, fontSize: 14 }}>净资产 {formatMaybeCny(p.net)}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgba(11, 15, 26, 0.2)' }} />
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'rgb(var(--ink-rgb) / 0.2)' }} />
             <div style={{ fontWeight: 700, fontSize: 14, opacity: 0.6 }}>负债 {formatMaybeCny(p.debt)}</div>
           </div>
           {goalPanel}
@@ -479,7 +479,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <Tooltip
                 content={captureActivePoint}
                 wrapperStyle={{ opacity: 0, visibility: 'hidden', pointerEvents: 'none' }}
-                cursor={{ stroke: 'rgba(15, 23, 42, 0.16)', strokeWidth: 2, strokeDasharray: '4 6' }}
+                cursor={{ stroke: 'rgb(var(--ink-rgb) / 0.16)', strokeWidth: 2, strokeDasharray: '4 6' }}
               />
               {mode === 'netDebt' ? (
                 <>
@@ -488,7 +488,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       <Line
                         type="monotone"
                         dataKey="goalComparison"
-                        stroke="rgba(15, 23, 42, 0.42)"
+                        stroke="rgb(var(--ink-rgb) / 0.42)"
                         strokeWidth={2.25}
                         strokeDasharray="6 7"
                         strokeLinecap="round"
@@ -503,7 +503,7 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
                       <Line
                         type="linear"
                         dataKey="projectedBridgeNet"
-                        stroke="rgba(15, 23, 42, 0.28)"
+                        stroke="rgb(var(--ink-rgb) / 0.28)"
                         strokeWidth={2}
                         strokeDasharray="3 7"
                         strokeLinecap="round"
@@ -636,12 +636,12 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>
-                  <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.42)' }} />
+                  <span style={{ width: 18, borderTop: '2px dashed rgb(var(--ink-rgb) / 0.42)' }} />
                   目标路径
                 </span>
                 {hasProjectionBridge ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: 'var(--muted-text)' }}>
-                    <span style={{ width: 18, borderTop: '2px dashed rgba(15,23,42,0.28)' }} />
+                    <span style={{ width: 18, borderTop: '2px dashed rgb(var(--ink-rgb) / 0.28)' }} />
                     记录延伸
                   </span>
                 ) : null}

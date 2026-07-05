@@ -72,6 +72,7 @@ docker compose up -d --build   # 后端地址 http://localhost:8787
 - 主题切换：`handleThemeChange` 创建全屏 bloom 过渡覆盖层（脉冲环 + 径向扩散 + 颜色 wash），用两个定时器编排「先播动画 → 中途应用 `data-theme` 与 CSS 变量 → 结束移除覆盖层」。`SettingsScreen` 通过 `onThemeChange(id, origin)` 上报点击坐标作为扩散原点——改主题流程时不要破坏这个坐标约定。
 - 账户详情 `AccountDetailSheet` 挂在 App 层：从资产列表行进入时走 `sheetMotion="morph"`（共享 `layoutId`，行卡片变形为抽屉），其他入口走 `slide`。
 - 每日快照同步（`useDailySnapshotSync`）、云自动同步、遥测都在这里初始化。
+- `main.tsx` 在 App 外层挂根级 `RootErrorBoundary`：渲染崩溃不再白屏，兜底界面提供「刷新 + 导出数据备份」（数据在 localStorage，渲染崩溃不伤数据）。`useLocalStorageState` 写入失败（配额满/隐私模式）默认经 `emitAppToast` 提示用户（30s 节流）；`lib/overlay.ts` 的 `emitAppToast` 是 React 树外发 toast 的统一入口（Provider 挂载前排队），toast 支持可选动作按钮。
 
 ### 资产首页：滚动驱动的形态变换（src/screens/AssetsScreen.tsx）
 
@@ -137,6 +138,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 ### 懒加载与分包（vite.config.ts）
 
 - manualChunks：`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-charts`（recharts）、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载）。
+- SW 更新采用 prompt 模式（`registerType: 'prompt'`，`skipWaiting: false`，`clientsClaim: true`）：新版本先 waiting，`src/pwa.ts` 弹「新版本已就绪」toast，用户点「立即更新」才接管并刷新；忽略则下次冷启动自然生效。更新检查在回到前台时触发（5 分钟节流 + 30 分钟兜底定时器），没有固定轮询。**不要改回 autoUpdate/skipWaiting**——那会在部署瞬间强刷正在输入的用户，也会复活首装 controllerchange 一类缺陷（见 TROUBLESHOOTING）。
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。
 - 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
 - **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 recharts/react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。

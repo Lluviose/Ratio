@@ -25,7 +25,7 @@ import {
 } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMode, type ColorMode } from './lib/colorMode'
-import { queueToastAfterReload, useOverlay } from './lib/overlay'
+import { emitAppToast, queueToastAfterReload, useOverlay } from './lib/overlay'
 import { enterDemoMode, exitDemoMode } from './lib/demoData'
 import { isDemoModeActive } from './lib/demoMode'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
@@ -635,7 +635,15 @@ export default function App() {
               <TourScreen
                 onClose={() => setTourSeen(true)}
                 onEnterDemo={() => {
-                  enterDemoMode()
+                  // 进演示的第一步是把现有数据整包 stash 进 localStorage（全应用
+                  // 最大的一次写入），配额不足时 enterDemoMode 抛错且数据未动——
+                  // 必须拦住提示，不能带着异常直接刷新
+                  try {
+                    enterDemoMode()
+                  } catch (err) {
+                    emitAppToast(err instanceof Error ? err.message : 'Enter demo failed', { tone: 'danger' })
+                    return
+                  }
                   queueToastAfterReload('已进入演示模式，可在设置中退出', { tone: 'success' })
                   window.location.reload()
                 }}

@@ -22,6 +22,10 @@
 - 观测补强：`playwright.config.ts` CI 上 `retries: 1`（首个重试自动带 trace），CI 工作流失败时上传 `playwright-report/` 与 `test-results/` 工件，避免再出现「CI 独有失败无日志可查」。
 - 有意不在 e2e 里屏蔽 Service Worker（`serviceWorkers: 'block'`）：这次正是 e2e 逮住了真实 PWA 缺陷，保留 SW 让这类回归继续可见。
 
+后续（2026-07-05）：
+
+- PWA 更新流程已重做为 prompt 模式（`registerType: 'prompt'` + toast 确认更新，见 CHANGELOG 与 PROJECT.md「懒加载与分包」），`src/pwa.ts` 的 `controllerchange` 重载逻辑整体删除——上面「处理」第 1 点已被该重构取代；本条保留是因为诊断方法（捕获层日志 + MutationObserver 判定页面中途重载）仍然适用。
+
 ## GitHub Pages 部署偶发「Deployment failed, try again later」
 
 现象：

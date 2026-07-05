@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import './longpress-guard.css'
 import App from './App.tsx'
+import { RootErrorBoundary } from './components/RootErrorBoundary.tsx'
 import './pwa'
 
 const isCoarsePointer =
@@ -78,6 +79,8 @@ if (isCoarsePointer) {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <RootErrorBoundary>
+      <App />
+    </RootErrorBoundary>
   </StrictMode>,
 )

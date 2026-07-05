@@ -2,9 +2,15 @@ import { createContext, useContext } from 'react'
 
 export type ToastTone = 'neutral' | 'success' | 'danger'
 
+export type ToastAction = {
+  label: string
+  onClick: () => void
+}
+
 export type ToastOptions = {
   tone?: ToastTone
   durationMs?: number
+  action?: ToastAction
 }
 
 export type ConfirmOptions = {
@@ -26,6 +32,33 @@ export function useOverlay(): OverlayApi {
   const ctx = useContext(OverlayContext)
   if (!ctx) throw new Error('useOverlay must be used within <OverlayProvider>')
   return ctx
+}
+
+// React 树之外的 toast 入口（pwa 更新提示、存储层写入失败等模块级代码）。
+// Provider 尚未挂载时先排队，挂载后按序补发。
+type AppToastRequest = { message: string; options?: ToastOptions }
+
+let appToastListener: ((request: AppToastRequest) => void) | null = null
+const pendingAppToasts: AppToastRequest[] = []
+const MAX_PENDING_APP_TOASTS = 8
+
+export function emitAppToast(message: string, options?: ToastOptions) {
+  const request: AppToastRequest = { message, options }
+  if (appToastListener) {
+    appToastListener(request)
+    return
+  }
+  pendingAppToasts.push(request)
+  if (pendingAppToasts.length > MAX_PENDING_APP_TOASTS) pendingAppToasts.shift()
+}
+
+export function subscribeAppToasts(listener: (request: AppToastRequest) => void): () => void {
+  appToastListener = listener
+  const queued = pendingAppToasts.splice(0, pendingAppToasts.length)
+  for (const request of queued) listener(request)
+  return () => {
+    if (appToastListener === listener) appToastListener = null
+  }
 }
 
 const PENDING_TOAST_KEY = 'ratio.pendingToast.v1'

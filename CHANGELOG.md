@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-05 - 止血批次：服务端流式崩溃、PWA 更新不再强刷、暗色残留、根级错误兜底
+
+- 修复服务端严重缺陷：AI 流式转发中途失败/超时会打挂整个后端进程——流式响应 headers 已发出后，错误路径再调 `fail()` → `writeHead` 抛 `ERR_HTTP_HEADERS_SENT` → unhandled rejection → Node 20 默认退出。`fail()` 加 `headersSent` 守护（改为断开连接示错），全局兜底处理器自身包 try/catch；`writeChunk` 的 `drain` 等待与 `close`/`error` 竞速，客户端断连不再永久挂起协程。已用真实服务进程 + 「永不结束的模拟上游」冒烟验证：1.2s 流式超时触发后进程存活、`/api/health` 200。
+- PWA 更新流程重做：`autoUpdate`（skipWaiting + 无预警整页强刷，可能丢掉用户正在输入的内容）改为 `prompt` 模式——新版本先 waiting，toast「新版本已就绪 / 立即更新」征得同意后才接管刷新，忽略则下次冷启动自然生效；60s 固定轮询改为回前台时检查（5 分钟节流 + 30 分钟兜底）。首装 controllerchange 一类缺陷从结构上消失（相应逻辑已删除，TROUBLESHOOTING 对应条目已加注）。toast 组件新增动作按钮；`lib/overlay.ts` 新增 `emitAppToast` 模块级入口（Provider 挂载前排队补发）。
+- 暗色模式字面色残留清理（暗色新用户第一屏即引导页，此前是浅底白字）：引导页页面层跟随明暗（`.tourRoot` 变量组 + CSS 过渡），手机 mockup 经 `.tourPhoneLock` 钉回浅色值、锁定「浅色截图」质感；趋势页目标路径/记录延伸虚线、图例虚线、详情面板数值、负债圆点、点选 cursor 全部换 `--ink-rgb`（浅色渲染逐像素不变）；统计页指标瓦片标签/副文案换 `--muted-text`、InfoDot 与 StatusChip 底色换 `--glass-rgb`；桌面端 `.appViewport` 背景补暗色对。
+- 顺手修复一处既有缺陷：recharts v3 `accessibilityLayer` 让图表元素可聚焦，点选趋势数据点后浏览器默认焦点环会框住预测区域（浅色下是黑框、暗色下是刺眼白框，两种模式均存在）。按 `:focus:not(:focus-visible)` 只消鼠标路径焦点环，键盘焦点环保留。
+- 健壮性兜底：`main.tsx` 新增根级 `RootErrorBoundary`，渲染崩溃不再白屏，兜底界面提供「刷新 + 导出数据备份」；`useLocalStorageState` 写入失败（配额满/隐私模式禁写）从仅 console 升级为 toast 提示（30s 节流防刷屏）；引导页「先看看演示数据」入口补 try/catch——stash 是全应用最大单次写入，此前配额不足会带着异常直接刷新。
+- 视觉基线：statsUi 令牌化使 7 张 stats 基线有意更新（6 主题 + 暗色），其余 14 张字节不变。经验记录：`--update-snapshots`（changed 模式）不会重录容差内的真实变化，令牌类改动重录基线需 `--update-snapshots=all`。
+- 首包 gzip 103.3 → 105.3KB（+2KB：错误边界 + 更新提示 + overlay 桥接，均为首包职责内的健壮性代码）。
+- 已通过 `npm run lint`、`npm test`（244 项）、`npm run build` 和 `npx playwright test`（功能 18 项全矩阵 + 视觉 21 项）验证；暗色引导页/趋势/统计另经逐屏截图目检。
+
 ## 2026-07-04 - 修复 PWA 首装自刷新（并稳定 CI e2e）
 
 - 修复真实缺陷：Service Worker 首次安装后 `clientsClaim` 接管页面触发 `controllerchange`，旧逻辑无条件整页刷新——新用户首开数秒后会被硬刷新一次（慢设备/iOS PWA 尤其明显）。现在仅当页面加载时已受控（即真正的版本更新替换）才刷新，更新路径行为不变。
