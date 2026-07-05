@@ -162,7 +162,7 @@ function AssetsListPageComponent(props: {
           {groupModels.map((g, i) => {
             const id = g.id
             const isExpanded = expandedGroup === id
-            const cardBg = isExpanded ? withAlpha(g.group.tone, 0.42) : '#ffffff'
+            const cardBg = isExpanded ? withAlpha(g.group.tone, 0.42) : 'var(--color-white)'
             const listLeft = isExpanded ? 44 : 56
 
 
@@ -206,8 +206,9 @@ function AssetsListPageComponent(props: {
                   className={clsx(
                     'relative overflow-hidden rounded-[22px] border border-black/5 shadow-[0_10px_22px_-18px_rgba(15,23,42,0.35)]',
                   )}
-                  animate={{ backgroundColor: cardBg }}
-                  transition={{ backgroundColor: { duration: 0.2, ease: standardEase } }}
+                  // framer 无法在 var() 与 rgba 之间插值；改用 CSS transition
+                  //（对计算后颜色过渡，暗色模式的 var(--color-white) 同样生效）
+                  style={{ backgroundColor: cardBg, transition: 'background-color 0.2s cubic-bezier(0.2, 0, 0, 1)' }}
                 >
                   {/* Animated Background Layer - Completely removed as it's now handled by OverlayBlock */}
                   <div className="absolute inset-0 z-0 opacity-0"></div>
@@ -319,7 +320,7 @@ function AssetsListPageComponent(props: {
                                 className={clsx(
                                   'flex items-center justify-between rounded-[18px] px-3 py-3 text-left',
                                   'bg-white border border-black/5 shadow-[0_6px_20px_-18px_rgba(15,23,42,0.45)]',
-                                  'transition-colors duration-200',
+                                  'transition-colors duration-200 hover:bg-white/90',
                                 )}
                                 onClick={() => onPickType(t.type)}
                                 initial={{ opacity: 0, y: 10, scale: 0.985 }}
@@ -327,9 +328,6 @@ function AssetsListPageComponent(props: {
                                 exit={{ opacity: 0, y: 4 }}
                                 transition={{ duration: 0.26, delay: 0.04 + typeIndex * 0.035, ease: expressiveEase }}
                                 whileTap={{ scale: 0.975 }}
-                                whileHover={{
-                                  backgroundColor: 'rgba(255,255,255,0.92)',
-                                }}
                               >
                                 <div className="flex items-center gap-3 min-w-0">
                                   <div

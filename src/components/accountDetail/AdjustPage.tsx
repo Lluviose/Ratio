@@ -118,7 +118,7 @@ export function AdjustPage(props: {
               type="button"
               onClick={() => onChangeDirection(item.id)}
               className="relative flex-1 h-11 rounded-full text-[18px] font-black"
-              style={{ color: isActive ? '#fff' : 'var(--text)' }}
+              style={{ color: isActive ? 'var(--color-white)' : 'var(--text)' }}
             >
               {isActive ? (
                 <motion.div

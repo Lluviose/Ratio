@@ -15,8 +15,8 @@ export function MoneyExpressionPreview(props: { show: boolean; result: MoneyExpr
       transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
       className="mt-2 flex min-h-10 items-center justify-between rounded-[18px] border border-white/80 px-3.5 py-2 shadow-sm"
       style={{
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.86), rgba(248,250,252,0.72))',
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.86), 0 10px 26px -24px rgba(15,23,42,0.55)',
+        background: 'linear-gradient(180deg, rgb(var(--glass-rgb) / 0.86), rgb(var(--glass-tint-rgb) / 0.72))',
+        boxShadow: 'inset 0 1px 0 rgb(var(--glass-rgb) / 0.86), 0 10px 26px -24px rgba(15,23,42,0.55)',
       }}
     >
       <div className="text-[13px] font-black text-slate-400">=</div>
@@ -50,10 +50,10 @@ export function MoneyExpressionKeypad(props: { onOperator: (operator: MoneyExpre
   const keyClass =
     'relative h-12 overflow-hidden rounded-[18px] border text-[18px] font-black outline-none transition-colors focus-visible:ring-4 focus-visible:ring-[rgb(var(--primary-rgb)/0.16)]'
   const keyStyle = {
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.94))',
-    borderColor: 'rgba(255,255,255,0.9)',
+    background: 'linear-gradient(180deg, rgb(var(--glass-rgb) / 0.98), rgb(var(--glass-tint-rgb) / 0.94))',
+    borderColor: 'rgb(var(--glass-rgb) / 0.9)',
     boxShadow:
-      'inset 0 1px 0 rgba(255,255,255,0.98), inset 0 -1px 0 rgba(15,23,42,0.035), 0 10px 20px -16px rgba(15,23,42,0.7)',
+      'inset 0 1px 0 rgb(var(--glass-rgb) / 0.98), inset 0 -1px 0 rgba(15,23,42,0.035), 0 10px 20px -16px rgba(15,23,42,0.7)',
   } as const
   const tapMotion = {
     y: 1,
@@ -99,8 +99,8 @@ export function MoneyExpressionKeypad(props: { onOperator: (operator: MoneyExpre
         className={`${keyClass} text-[14px]`}
         style={{
           ...keyStyle,
-          color: '#9f1239',
-          background: 'linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,241,242,0.9))',
+          color: 'var(--danger-key-text)',
+          background: 'linear-gradient(180deg, rgb(var(--glass-rgb) / 0.98), rgb(var(--rose-tint-rgb) / 0.9))',
         }}
         aria-label="clear"
       >

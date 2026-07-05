@@ -97,7 +97,7 @@ export function OpsHistoryList(props: {
                             e.stopPropagation()
                             onDeleteOp(op, title)
                           }}
-                          className="w-11 h-11 rounded-full bg-rose-600 text-white shadow-sm flex items-center justify-center active:scale-95 transition"
+                          className="w-11 h-11 rounded-full bg-rose-600 text-[#fff] shadow-sm flex items-center justify-center active:scale-95 transition"
                           aria-label="删除记录"
                           title="删除"
                           initial={false}

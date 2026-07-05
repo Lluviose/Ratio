@@ -42,7 +42,7 @@ function GoalProgressTrack(props: { progress: number; color: string }) {
           width: 10,
           height: 10,
           borderRadius: 999,
-          background: '#fff',
+          background: 'var(--surface-elevated)',
           border: `2px solid ${color}`,
           marginLeft: -5,
           boxShadow: `0 1px 4px rgba(15, 23, 42, 0.18), 0 0 8px -2px ${color}`,

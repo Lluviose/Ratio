@@ -28,6 +28,7 @@ import {
 } from '../lib/cloud'
 import { cancelPendingCloudAutoSync, markCloudSyncClean, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
+import { coerceColorMode, COLOR_MODE_KEY, COLOR_MODE_OPTIONS, type ColorMode } from '../lib/colorMode'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -85,6 +86,9 @@ export function SettingsScreen(props: {
     ACCOUNT_SORT_MODE_KEY,
     'balance',
   )
+  const [colorMode, setColorMode] = useLocalStorageState<ColorMode>(COLOR_MODE_KEY, 'system', {
+    coerce: coerceColorMode,
+  })
   const [monthStartDayRaw, setMonthStartDayRaw] = useLocalStorageState<number>(
     MONTH_START_DAY_KEY,
     DEFAULT_MONTH_START_DAY,
@@ -562,6 +566,22 @@ export function SettingsScreen(props: {
     >
       <div className="card">
         <div className="cardInner">
+          <div style={{ fontWeight: 800, fontSize: 16 }}>外观</div>
+          <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
+            深色模式可跟随系统或手动固定
+          </div>
+          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center' }}>
+            <SegmentedControl
+              options={COLOR_MODE_OPTIONS.map((o) => ({ value: o.id, label: o.label }))}
+              value={colorMode}
+              onChange={(v) => setColorMode(coerceColorMode(v))}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="cardInner">
           <div style={{ fontWeight: 800, fontSize: 16 }}>个性主题</div>
           <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
             图标匹配主题色
@@ -582,7 +602,7 @@ export function SettingsScreen(props: {
                   tabIndex={0}
                   style={{
                     background: activeBackground,
-                    borderColor: active ? activeAccent : 'rgba(11, 15, 26, 0.06)',
+                    borderColor: active ? activeAccent : 'rgb(var(--edge-rgb) / 0.06)',
                     boxShadow: activeShadow,
                   }}
                   onKeyDown={(e) => {

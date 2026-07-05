@@ -24,6 +24,7 @@ import {
   type ThemeId,
 } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
+import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMode, type ColorMode } from './lib/colorMode'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
@@ -405,6 +406,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('assets')
   const [view, setView] = useState<ViewId>('main')
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
+  const [colorMode] = useLocalStorageState<ColorMode>(COLOR_MODE_KEY, 'system', { coerce: coerceColorMode })
   const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
@@ -452,6 +454,18 @@ export default function App() {
   useLayoutEffect(() => {
     applyDocumentTheme(resolvedTheme, themeColors)
   }, [resolvedTheme, themeColors])
+
+  // 外观模式：设置页写 ratio.colorMode，这里统一应用到 <html data-mode>；
+  // 跟随系统时监听系统偏好变化实时切换
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => applyDocumentColorMode(resolveColorMode(colorMode, mq.matches))
+    apply()
+    if (colorMode !== 'system') return
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [colorMode])
 
   useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts, accounts.storageReady && snapshotsStorageReady)
 

@@ -205,7 +205,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
                   <motion.div 
                     initial={{ scale: 0 }} 
                     animate={{ scale: 1 }}
-                    className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-white"
+                    className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[#fff]"
                   >
                     <Check size={12} strokeWidth={4} />
                   </motion.div>
@@ -221,7 +221,7 @@ function PhoneScreenContent(props: { kind: 'ratio' | 'trend' | 'stats' | 'theme'
           transition={{ delay: 0.8 }}
           className="mt-6 bg-indigo-50/50 p-4 rounded-2xl flex gap-3 items-center"
         >
-           <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center text-white font-black text-lg">
+           <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center text-[#fff] font-black text-lg">
              Aa
            </div>
            <div>

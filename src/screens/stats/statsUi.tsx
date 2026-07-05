@@ -11,11 +11,11 @@ import {
 
 const metricTileStyle = {
   minWidth: 0,
-  border: '1px solid rgba(15, 23, 42, 0.06)',
+  border: '1px solid rgb(var(--edge-rgb) / 0.06)',
   borderRadius: 14,
   padding: 12,
-  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(248, 250, 252, 0.7))',
-  boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.82), 0 6px 16px -16px rgba(15, 23, 42, 0.36)',
+  background: 'linear-gradient(180deg, rgb(var(--glass-rgb) / 0.76), rgb(var(--glass-tint-rgb) / 0.7))',
+  boxShadow: 'inset 0 1px 0 rgb(var(--glass-rgb) / 0.82), 0 6px 16px -16px rgba(15, 23, 42, 0.36)',
   backdropFilter: 'blur(14px) saturate(1.04)',
   WebkitBackdropFilter: 'blur(14px) saturate(1.04)',
 } satisfies CSSProperties
@@ -24,7 +24,7 @@ const compactMetricTileStyle = {
   ...metricTileStyle,
   borderRadius: 13,
   padding: 10,
-  background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.66))',
+  background: 'linear-gradient(180deg, rgb(var(--glass-rgb) / 0.72), rgb(var(--glass-tint-rgb) / 0.66))',
 } satisfies CSSProperties
 
 const metricLabelStyle = {
@@ -201,7 +201,7 @@ export function StatusChip(props: { text: string; tone: string; dot?: boolean })
         borderRadius: 999,
         padding: '6px 10px',
         background: 'rgb(255 255 255 / 0.84)',
-        border: '1px solid rgba(15, 23, 42, 0.06)',
+        border: '1px solid rgb(var(--edge-rgb) / 0.06)',
         boxShadow: '0 8px 20px -18px rgba(15, 23, 42, 0.36)',
         color: tone,
         fontSize: 11,

@@ -91,7 +91,7 @@ export function AssetsTypeDetailPage(props: {
     <div className="h-full flex flex-col overflow-y-auto" style={{ background: 'var(--bg)' }}>
       <motion.div
         className="sticky top-0 z-10 backdrop-blur-md border-b border-[var(--hairline)]"
-        style={{ background: 'rgba(255,255,255,0.85)' }}
+        style={{ background: 'rgb(var(--glass-rgb) / 0.85)' }}
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
