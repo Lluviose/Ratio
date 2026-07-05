@@ -20,15 +20,30 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
+      testIgnore: /visual\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'mobile-chrome',
+      testIgnore: /visual\.spec\.ts$/,
       use: { ...devices['Pixel 5'] },
     },
     {
       name: 'mobile-safari',
+      testIgnore: /visual\.spec\.ts$/,
       use: { ...devices['iPhone 14'] },
+    },
+    {
+      // 视觉回归（npm run test:visual，仅本地）：基线含平台后缀，只在开发机有效；
+      // CI 只跑 --project=chromium 功能项目，不会执行本项目
+      name: 'visual',
+      testMatch: /visual\.spec\.ts$/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 1,
+        serviceWorkers: 'block',
+      },
     },
   ],
 })
