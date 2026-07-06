@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { emitAppToast } from './overlay'
+import { storageKernel } from './storageKernel'
 import { dispatchStorageWrite, STORAGE_WRITE_EVENT, type StorageWriteDetail } from './storageEvents'
 
 export type UseLocalStorageStateErrorPhase = 'read' | 'write'
@@ -56,7 +57,7 @@ function readStoredValue<T>(
 ): { value: T; raw: string | null; canPersist: boolean } {
   let raw: string | null = null
   try {
-    raw = localStorage.getItem(key)
+    raw = storageKernel.get(key)
     if (!raw) return { value: initialValue, raw: null, canPersist: true }
     const parsed = JSON.parse(raw) as unknown
     const value = coerce ? coerce(parsed) : (parsed as T)
@@ -167,7 +168,7 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
       const detail = getEventDetail(event)
       if (!detail || detail.key !== key) return
       syncFromRaw(
-        detail.raw ?? localStorage.getItem(key),
+        detail.raw ?? storageKernel.get(key),
         key,
         initialValueRef.current,
         setState,
@@ -197,13 +198,13 @@ export function useLocalStorageState<T>(key: string, initialValue: T, options?: 
 
     try {
       const nextRaw = JSON.stringify(state.value)
-      const prevRaw = localStorage.getItem(key)
+      const prevRaw = storageKernel.get(key)
       if (prevRaw === nextRaw) {
         lastRawRef.current = nextRaw
         return
       }
 
-      localStorage.setItem(key, nextRaw)
+      storageKernel.set(key, nextRaw)
       lastRawRef.current = nextRaw
       dispatchStorageWrite(key, nextRaw)
     } catch (error) {

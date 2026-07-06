@@ -4,6 +4,7 @@ import './index.css'
 import './longpress-guard.css'
 import App from './App.tsx'
 import { RootErrorBoundary } from './components/RootErrorBoundary.tsx'
+import { storageKernel } from './lib/storageKernel'
 import './pwa'
 
 const isCoarsePointer =
@@ -77,10 +78,15 @@ if (isCoarsePointer) {
   );
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <RootErrorBoundary>
-      <App />
-    </RootErrorBoundary>
-  </StrictMode>,
-)
+// 存储内核水合完成（IndexedDB → 内存，含首次迁移）后才挂载 React：
+// 组件树里的所有同步读（useLocalStorageState 等）由此保证读到权威数据。
+// ready 永不 reject（IDB 不可用时内部回退 localStorage 后照常 resolve）。
+void storageKernel.ready.then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <RootErrorBoundary>
+        <App />
+      </RootErrorBoundary>
+    </StrictMode>,
+  )
+})

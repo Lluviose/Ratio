@@ -12,6 +12,7 @@ import {
   writeCloudSyncSettingsPatch,
 } from './cloud'
 import { STORAGE_WRITE_EVENT, dispatchStorageWrite, type StorageWriteDetail } from './storageEvents'
+import { storageKernel } from './storageKernel'
 import { DEMO_KEY_PREFIX, isDemoModeActive } from './demoMode'
 import { trackTelemetry } from './telemetry'
 
@@ -46,7 +47,7 @@ function shouldAutoSyncKey(key: string) {
 
 export function readCloudSyncDirtyToken() {
   try {
-    return localStorage.getItem(CLOUD_SYNC_DIRTY_KEY) || ''
+    return storageKernel.get(CLOUD_SYNC_DIRTY_KEY) || ''
   } catch {
     return ''
   }
@@ -59,7 +60,7 @@ function isCloudSyncDirty() {
 function setCloudSyncDirty() {
   try {
     const token = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, token)
+    storageKernel.set(CLOUD_SYNC_DIRTY_KEY, token)
     dispatchStorageWrite(CLOUD_SYNC_DIRTY_KEY, token)
   } catch {
     // Auto-sync bookkeeping must not block the primary local write.
@@ -85,7 +86,7 @@ export function markCloudSyncClean(expectedDirtyToken?: string) {
   if (typeof window === 'undefined') return
   try {
     if (expectedDirtyToken !== undefined && readCloudSyncDirtyToken() !== expectedDirtyToken) return
-    localStorage.removeItem(CLOUD_SYNC_DIRTY_KEY)
+    storageKernel.remove(CLOUD_SYNC_DIRTY_KEY)
     dispatchStorageWrite(CLOUD_SYNC_DIRTY_KEY)
   } catch {
     // Auto-sync bookkeeping must not block the primary local write.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { normalizeMoney } from '../../lib/money'
+import { storageKernel } from '../../lib/storageKernel'
 import type { SavingsGoal, SavingsGoalSummary } from '../../lib/savingsGoal'
 import { clampProgress } from './statsFormat'
 
@@ -47,7 +48,7 @@ function getGoalMilestoneStorageKey(goal: SavingsGoal) {
 
 function readSavedGoalMilestone(key: string) {
   try {
-    const saved = Number(localStorage.getItem(key) ?? '0')
+    const saved = Number(storageKernel.get(key) ?? '0')
     return Number.isFinite(saved) ? saved : 0
   } catch {
     return 0
@@ -56,7 +57,7 @@ function readSavedGoalMilestone(key: string) {
 
 function writeSavedGoalMilestone(key: string, milestone: number) {
   try {
-    localStorage.setItem(key, String(milestone))
+    storageKernel.set(key, String(milestone))
   } catch {
     // Ignore storage failures; the animation can simply replay later.
   }

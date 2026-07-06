@@ -7,6 +7,7 @@ import { DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY, clampMonthStartDay } from
 import { getSavingsGoalSummary, coerceSavingsGoal, coerceSavingsPaceAlgorithm, SAVINGS_PACE_ALGORITHM_KEY } from './savingsGoal'
 import { buildCurrentSnapshotStats, buildStatsRangeView, safeRatio, type StatsRangeId } from './snapshotDerived'
 import { buildSnapshot, isSnapshotDateKey, normalizeSnapshot, todayDateKey, type Snapshot } from './snapshots'
+import { appStorage } from './storageKernel'
 import type { AccountOp } from './accountOps'
 import type { Transaction } from './ledger'
 
@@ -586,7 +587,7 @@ function buildSections(args: {
 }
 
 export function buildAiFinancialContext(
-  storage: Storage = localStorage,
+  storage: Storage = appStorage,
   options: AiContextBuildOptions = {},
 ): AiFinancialContextV1 {
   const resolvedOptions = { ...DEFAULT_CONTEXT_OPTIONS, ...options }
@@ -645,7 +646,7 @@ export function buildAiFinancialContext(
   }
 }
 
-export function buildAiSystemMessage(storage: Storage = localStorage): AiChatMessage {
+export function buildAiSystemMessage(storage: Storage = appStorage): AiChatMessage {
   const context = buildAiFinancialContext(storage)
   return {
     role: 'system',

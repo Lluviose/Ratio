@@ -12,8 +12,9 @@ type RootErrorBoundaryState = {
 }
 
 // 根级错误边界：首包渲染树任何一处抛错都不再白屏。
-// 核心数据全部在 localStorage，渲染崩溃不影响数据本身——兜底界面先给用户
-// 一条导出备份的生路，再引导刷新；这里在 OverlayProvider 之外，只能用自绘 UI。
+// 核心数据全部在本机存储内核（IndexedDB / localStorage 回退），渲染崩溃不影响
+// 数据本身——兜底界面先给用户一条导出备份的生路，再引导刷新；
+// 这里在 OverlayProvider 之外，只能用自绘 UI。
 export class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBoundaryState> {
   state: RootErrorBoundaryState = { failed: false, exportState: 'idle' }
 

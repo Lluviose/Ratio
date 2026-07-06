@@ -28,6 +28,7 @@ import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMo
 import { emitAppToast, queueToastAfterReload, useOverlay } from './lib/overlay'
 import { enterDemoMode, exitDemoMode } from './lib/demoData'
 import { isDemoModeActive } from './lib/demoMode'
+import { storageKernel } from './lib/storageKernel'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
@@ -424,6 +425,8 @@ function DemoModeBadge() {
     try {
       exitDemoMode()
       queueToastAfterReload('已恢复你的数据', { tone: 'success' })
+      // 恢复走的是 IDB 异步落盘，刷新前必须等挂起写入全部提交
+      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Exit demo failed', { tone: 'danger' })
@@ -634,10 +637,10 @@ export default function App() {
             >
               <TourScreen
                 onClose={() => setTourSeen(true)}
-                onEnterDemo={() => {
-                  // 进演示的第一步是把现有数据整包 stash 进 localStorage（全应用
-                  // 最大的一次写入），配额不足时 enterDemoMode 抛错且数据未动——
-                  // 必须拦住提示，不能带着异常直接刷新
+                onEnterDemo={async () => {
+                  // 进演示的第一步是把现有数据整包 stash 进存储内核（全应用
+                  // 最大的一次写入），local 回退模式下配额不足时 enterDemoMode
+                  // 同步抛错且数据未动——必须拦住提示，不能带着异常直接刷新
                   try {
                     enterDemoMode()
                   } catch (err) {
@@ -645,6 +648,7 @@ export default function App() {
                     return
                   }
                   queueToastAfterReload('已进入演示模式，可在设置中退出', { tone: 'success' })
+                  await storageKernel.flush()
                   window.location.reload()
                 }}
               />

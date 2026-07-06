@@ -1,4 +1,5 @@
 import { coerceRatioBackup, type RatioBackupFile } from './backup'
+import { appStorage } from './storageKernel'
 import { dispatchStorageWrite } from './storageEvents'
 
 export const CLOUD_SYNC_SETTINGS_KEY = 'ratio.cloudSync' as const
@@ -96,7 +97,7 @@ export function coerceCloudSyncSettings(value: unknown): CloudSyncSettings {
   }
 }
 
-export function getCloudSyncSettings(storage: Storage = localStorage): CloudSyncSettings {
+export function getCloudSyncSettings(storage: Storage = appStorage): CloudSyncSettings {
   try {
     const raw = storage.getItem(CLOUD_SYNC_SETTINGS_KEY)
     if (!raw) return DEFAULT_CLOUD_SYNC_SETTINGS
@@ -106,11 +107,11 @@ export function getCloudSyncSettings(storage: Storage = localStorage): CloudSync
   }
 }
 
-export function writeCloudSyncSettingsPatch(patch: Partial<CloudSyncSettings>, storage: Storage = localStorage) {
+export function writeCloudSyncSettingsPatch(patch: Partial<CloudSyncSettings>, storage: Storage = appStorage) {
   const current = getCloudSyncSettings(storage)
   const raw = JSON.stringify({ ...current, ...patch })
   storage.setItem(CLOUD_SYNC_SETTINGS_KEY, raw)
-  if (typeof localStorage !== 'undefined' && storage === localStorage) {
+  if (storage === appStorage || (typeof localStorage !== 'undefined' && storage === localStorage)) {
     dispatchStorageWrite(CLOUD_SYNC_SETTINGS_KEY, raw)
   }
 }

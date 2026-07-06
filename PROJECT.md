@@ -4,14 +4,14 @@
 
 ## 如何使用本文档
 
-- 改数据/金额/备份/云同步 → 读「领域模型」「本地存储键」「备份」「云同步与后端」。
+- 改数据/金额/备份/云同步 → 读「领域模型」「本地存储：内核与键」「备份」「云同步与后端」。
 - 改页面交互/动画 → 读「前端架构」全部小节，尤其「资产首页」「动效系统」。
 - 改构建/PWA → 读「懒加载与分包」。
 - 不确定从哪下手 → 直接查「变更导航」表。
 
 ## 一句话定位
 
-Ratio 是一个本地优先的个人资产/负债管理 PWA。核心数据保存在浏览器 `localStorage`，可选配一个 Node 后端用于云备份、AI 代理、遥测和管理控制台。
+Ratio 是一个本地优先的个人资产/负债管理 PWA。核心数据保存在浏览器本机（IndexedDB 为权威存储，localStorage 兜底，见「本地存储：内核与键」），可选配一个 Node 后端用于云备份、AI 代理、遥测和管理控制台。
 
 三个贯穿全局的设计决策：
 
@@ -194,7 +194,15 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - `src/lib/monthStart.ts`：统计月起始日；`src/lib/monthlyDisposable.ts`：月可支配估算。
 - `src/lib/robustStats.ts`：稳健统计工具。
 
-## 本地存储键
+## 本地存储：内核与键
+
+持久层是 `src/lib/storageKernel.ts`（**改存储行为前必读文件头注释**）：IndexedDB 为权威存储，启动时全量水合进内存、同步读写内存、异步批量落盘；IDB 不可用时整体回退为 localStorage 直读直写。要点：
+
+- `main.tsx` 等 `storageKernel.ready` 后才挂载 React，组件树内的同步读一定读到权威数据。
+- 首次以 IDB 模式启动时把 localStorage 的 `ratio.*` 全量导入 IDB 并写迁移标记；localStorage 旧副本冻结保留（旧版本回滚可用），此后不再更新——例外是 `ratio.colorMode`/`ratio.theme`（`BOOT_MIRROR_KEYS`）持续镜像回 localStorage，供 `public/color-mode-boot.js` 首帧同步读取。
+- 跨标签同步走 BroadcastChannel（IDB 写不触发 `storage` 事件），收到广播后派发既有 storageEvents 自定义事件，hooks 无感知；localStorage 回退模式下仍靠原生 `storage` 事件。
+- **写入后要整页刷新的路径（恢复备份、进出演示模式）必须先 `await storageKernel.flush()`**，否则最后一批写入可能未落盘就被刷新丢弃。页面隐藏（pagehide/visibilitychange）时内核会自动抢跑 flush。
+- 按 `Storage` 接口消费的模块（backup/ai/demo/cloud）默认存储是 `appStorage` 适配器；jsdom 单测环境无 indexedDB，全局内核自动回退 localStorage 语义，测试无需感知。内核自身的测试（`storageKernel.test.ts`）用 `fake-indexeddb` 注入覆盖 IDB 模式。
 
 主要键都以 `ratio.` 开头。备份默认包含 `ratio.*`，但**排除**云同步账号配置和 AI 隐私确认键。
 
@@ -217,7 +225,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 | `ratio.aiPrivacyAcceptedServerUrl` | 已确认 AI 隐私提示的服务器地址——不进备份 |
 | `ratio.pendingToast.v1` | 页面刷新后待展示 toast |
 
-读写统一走 `src/lib/useLocalStorageState.ts`（带 coerce 容错）；跨组件同步靠 `src/lib/storageEvents.ts` 的自定义写事件 + 原生 `storage` 事件。新增键必须提供 coerce/迁移，并检查是否应进备份与 AI 上下文。
+组件读写统一走 `src/lib/useLocalStorageState.ts`（带 coerce 容错，底层已接内核）；跨组件同步靠 `src/lib/storageEvents.ts` 的自定义写事件。新增键必须提供 coerce/迁移，并检查是否应进备份与 AI 上下文。
 
 ## 备份（src/lib/backup.ts）
 

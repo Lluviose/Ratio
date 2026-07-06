@@ -31,6 +31,7 @@ import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { coerceColorMode, COLOR_MODE_KEY, COLOR_MODE_OPTIONS, type ColorMode } from '../lib/colorMode'
 import { enterDemoMode, exitDemoMode } from '../lib/demoData'
 import { isDemoModeActive } from '../lib/demoMode'
+import { storageKernel } from '../lib/storageKernel'
 import { clampMonthStartDay, DEFAULT_MONTH_START_DAY, MAX_MONTH_START_DAY, MIN_MONTH_START_DAY, MONTH_START_DAY_KEY } from '../lib/monthStart'
 import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -141,6 +142,7 @@ export function SettingsScreen(props: {
     try {
       enterDemoMode()
       queueToastAfterReload('已进入演示模式', { tone: 'success' })
+      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Enter demo failed'
@@ -162,6 +164,7 @@ export function SettingsScreen(props: {
     try {
       exitDemoMode()
       queueToastAfterReload('已恢复你的数据', { tone: 'success' })
+      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Exit demo failed'
@@ -223,6 +226,7 @@ export function SettingsScreen(props: {
         })
       }
       queueToastAfterReload(`已恢复 ${res.restoredKeys.length} 项数据`, { tone: 'success' })
+      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Import failed'
@@ -548,6 +552,7 @@ export function SettingsScreen(props: {
         ...cloudSyncTelemetryPayload(cloudSyncRef.current),
       })
       queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
+      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       if (isAbortError(err)) return

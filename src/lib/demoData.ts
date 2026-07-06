@@ -9,6 +9,7 @@ import {
 } from './backup'
 import { cancelPendingCloudAutoSync, markCloudSyncClean } from './cloudSync'
 import { DEMO_STASH_KEY, setDemoModeActive } from './demoMode'
+import { appStorage } from './storageKernel'
 import { addMoney, normalizeMoney } from './money'
 import type { Account, AccountTypeId } from './accounts'
 import type { AccountOp } from './accountOps'
@@ -200,7 +201,7 @@ export function buildDemoSnapshots(now: Date): DemoSnapshot[] {
   return snapshots
 }
 
-export function buildDemoBackup(now: Date, storage: Storage = localStorage): RatioBackupFile {
+export function buildDemoBackup(now: Date, storage: Storage = appStorage): RatioBackupFile {
   const items: Record<string, string> = {
     'ratio.accounts': JSON.stringify(buildDemoAccounts(now)),
     'ratio.accountOps': JSON.stringify(buildDemoOps(now)),
@@ -225,7 +226,7 @@ export function buildDemoBackup(now: Date, storage: Storage = localStorage): Rat
 // 调用方随后应整页刷新（与导入备份同一模式）。
 export function enterDemoMode(now = new Date()) {
   const stash = stringifyRatioBackup(buildRatioBackup())
-  localStorage.setItem(DEMO_STASH_KEY, stash)
+  appStorage.setItem(DEMO_STASH_KEY, stash)
   restoreRatioBackup(buildDemoBackup(now))
   setDemoModeActive(true)
   cancelPendingCloudAutoSync()
@@ -234,13 +235,13 @@ export function enterDemoMode(now = new Date()) {
 // 退出演示：恢复暂存并清理标记。恢复的数据与进入前逐字节一致，
 // 因此可以直接标记云同步为干净。
 export function exitDemoMode() {
-  const raw = localStorage.getItem(DEMO_STASH_KEY)
+  const raw = appStorage.getItem(DEMO_STASH_KEY)
   if (raw) {
     restoreRatioBackup(parseRatioBackup(raw))
   } else {
     clearRatioStorage()
   }
-  localStorage.removeItem(DEMO_STASH_KEY)
+  appStorage.removeItem(DEMO_STASH_KEY)
   setDemoModeActive(false)
   cancelPendingCloudAutoSync()
   markCloudSyncClean()

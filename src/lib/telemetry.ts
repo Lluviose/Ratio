@@ -1,4 +1,5 @@
 import { getCloudSyncSettings, hasCloudCredentials, sendCloudTelemetry } from './cloud'
+import { storageKernel } from './storageKernel'
 import { APP_BUILD } from './appBuild'
 
 type TelemetryEvent = {
@@ -60,7 +61,7 @@ function readCustomEventDetail(event: Event): Record<string, unknown> | undefine
 
 function readCloudSyncDirty() {
   try {
-    return (localStorage.getItem(CLOUD_SYNC_DIRTY_KEY) || '').length > 0
+    return (storageKernel.get(CLOUD_SYNC_DIRTY_KEY) || '').length > 0
   } catch {
     return false
   }

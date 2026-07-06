@@ -11,7 +11,7 @@
 
 ## 项目定位
 
-Ratio 是本地优先的个人资产/负债管理 PWA。前端核心数据在浏览器 `localStorage`，可选 Node 后端只负责云备份、AI 代理、遥测和管理控制台。核心原则：**没有后端时应用必须完整可用**。
+Ratio 是本地优先的个人资产/负债管理 PWA。前端核心数据在浏览器本机存储内核（IndexedDB 权威 + localStorage 回退，见 `src/lib/storageKernel.ts` 文件头），可选 Node 后端只负责云备份、AI 代理、遥测和管理控制台。核心原则：**没有后端时应用必须完整可用**。
 
 ## 常用验证
 
@@ -31,6 +31,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 数据与隐私：
 
 - 核心存储键都以 `ratio.` 开头；备份包含多数 `ratio.*`，但排除 `ratio.cloudSync` 和 `ratio.aiPrivacyAcceptedServerUrl`。
+- 存储读写走 `storageKernel`/`appStorage`（IndexedDB 异步落盘），**写入后要整页刷新的路径必须先 `await storageKernel.flush()`**；新增此类路径时对照 `src/lib/storageKernel.ts` 文件头约定。
 - 不要把云同步账号密码、AI API Key、AI Base URL 或模型配置写入前端备份和 AI 上下文。
 - `accountOps.adjust` 是期间净变动汇总，不是单笔交易；`accountOps.transfer` 是内部转移，不算收入/支出。
 - `ledger` 是可选明细，可能不完整；趋势和统计以 `snapshots` 为准。

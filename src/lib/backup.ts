@@ -1,4 +1,5 @@
 import { dispatchStorageWrite } from './storageEvents'
+import { appStorage } from './storageKernel'
 import { canonicalizeAccountOpsForBackup } from './accountOpsStorage'
 import { canonicalizeTransactionsForBackup } from './ledgerStorage'
 
@@ -35,7 +36,7 @@ function isExcludedKey(key: string, excludeKeyPrefixes: readonly string[]) {
 }
 
 export function readRatioStorage(
-  storage: Storage = localStorage,
+  storage: Storage = appStorage,
   prefix: string = RATIO_STORAGE_PREFIX,
   excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
 ) {
@@ -60,7 +61,7 @@ export function readRatioStorage(
 }
 
 export function buildRatioBackup(
-  storage: Storage = localStorage,
+  storage: Storage = appStorage,
   prefix: string = RATIO_STORAGE_PREFIX,
   excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
 ): RatioBackupFile {
@@ -163,7 +164,7 @@ export type RestoreResult = {
 }
 
 export function clearRatioStorage(
-  storage: Storage = localStorage,
+  storage: Storage = appStorage,
   prefix: string = RATIO_STORAGE_PREFIX,
   excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
 ) {
@@ -224,7 +225,9 @@ function applyRatioStorageItems(
 }
 
 function isBrowserLocalStorage(storage: Storage) {
-  return typeof window !== 'undefined' && storage === localStorage
+  if (typeof window === 'undefined') return false
+  // 应用实际使用的两个「活」存储都要广播写事件：内核适配器与 localStorage 本体
+  return storage === appStorage || storage === localStorage
 }
 
 function notifyRatioStorageDiff(storage: Storage, previousItems: Record<string, string>, nextItems: Record<string, string>) {
@@ -244,7 +247,7 @@ function notifyRatioStorageDiff(storage: Storage, previousItems: Record<string, 
 
 export function restoreRatioBackup(
   backup: RatioBackupFile,
-  storage: Storage = localStorage,
+  storage: Storage = appStorage,
   prefix: string = RATIO_STORAGE_PREFIX,
   excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
 ): RestoreResult {
