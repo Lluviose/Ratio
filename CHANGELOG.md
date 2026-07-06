@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-07-06 - 存储层全量迁移 IndexedDB（storageKernel 内核）
+
+- 新增存储内核 `src/lib/storageKernel.ts`（文件头注释是改动前必读的约定清单），接管全部应用数据持久化：IndexedDB 为权威存储（配额远大于 localStorage 的 ~5MB，且启动即申请 `navigator.storage.persist()` 豁免驱逐），启动时全量水合进内存，之后同步读内存、写走 `setTimeout(0)` 合批异步落盘；IndexedDB 不可用（隐私模式禁开/老浏览器/jsdom）时整体回退 localStorage 直读直写，读写异常向上透传，语义与迁移前逐项对齐。`main.tsx` await `storageKernel.ready` 后才挂载 React，组件树内的同步读保证命中权威数据，没有读写空窗。
+- 无感迁移：首次以 IDB 模式启动把 localStorage 的 `ratio.*` 全量导入 IndexedDB 并写迁移标记（标记存 IDB、不带 `ratio.` 前缀，永不进备份/清理，「清空数据后重启」不会把旧副本导回）；localStorage 旧副本冻结保留，回滚到旧版本仍有近期数据可用。例外：`ratio.colorMode`/`ratio.theme` 持续镜像回 localStorage，`color-mode-boot.js` 首帧防闪白的同步读不受影响。
+- 跨标签同步改走 BroadcastChannel（IDB 写不触发原生 `storage` 事件），收到广播后同步内存并重放为既有 storageEvents 自定义事件，hooks 层无感知；回退模式保留原生 `storage` 事件路径。
+- 落盘可靠性：恢复备份/云端恢复/进出演示模式等 6 处「写完即整页刷新」路径刷新前统一 `await storageKernel.flush()`（否则最后一批合批写入可能未提交就被刷新丢弃）；页面隐藏（pagehide/visibilitychange）自动抢跑 flush，缩短移动端切后台的未落盘窗口；IDB 写失败 console.error + 30s 节流 toast。
+- 调用方迁移：useLocalStorageState / backup / cloud / cloudSync / ai / demoData / demoMode / telemetry / 里程碑庆祝的默认存储全部改为 `appStorage`（Storage 形状适配器，只暴露 `ratio.*` 键）或 storageKernel 直连，源码中不再有对 `localStorage` 的业务直引。
+- 测试：新增 `storageKernel.test.ts` 11 例，用 fake-indexeddb 按用例注入覆盖 IDB 模式（首启迁移/标记防重导/boot 镜像/落盘持久性/预 ready 写重放/Storage 适配器/回退与异常透传）；jsdom 无 indexedDB，既有单测自动运行在回退模式、无需感知内核。首包增量 +0.1KB gzip（内核注释在产物中剥离，代码高度可压缩）。
+- 文档：PROJECT.md「本地存储键」升级为「本地存储：内核与键」，AGENTS.md 高风险点补 flush 不变量，README 数据描述更新；TROUBLESHOOTING 新增「vitest fork 池本机高负载卡死」条目（判定卡死看 worker CPU 增量为零，串行 `--no-file-parallelism` 可绕过）。
+- 已通过 `npm run lint`、`npm test`（31 文件 255 项，本机以串行模式验证）、`npm run build` 和 `npx playwright test`（功能 18 项全矩阵，真实 Chromium/WebKit IndexedDB 路径）验证。
+
 ## 2026-07-05 - 止血批次：服务端流式崩溃、PWA 更新不再强刷、暗色残留、根级错误兜底
 
 - 修复服务端严重缺陷：AI 流式转发中途失败/超时会打挂整个后端进程——流式响应 headers 已发出后，错误路径再调 `fail()` → `writeHead` 抛 `ERR_HTTP_HEADERS_SENT` → unhandled rejection → Node 20 默认退出。`fail()` 加 `headersSent` 守护（改为断开连接示错），全局兜底处理器自身包 try/catch；`writeChunk` 的 `drain` 等待与 `close`/`error` 竞速，客户端断连不再永久挂起协程。已用真实服务进程 + 「永不结束的模拟上游」冒烟验证：1.2s 流式超时触发后进程存活、`/api/health` 200。

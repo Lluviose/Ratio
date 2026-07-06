@@ -57,6 +57,23 @@
 - 交互静默门控：距最近一次 `pointerdown`/`touchmove` 不足 1.6s 时不启动任何分包解析，改为重排稍后再试，保证手势后的动画窗口不被解析打断。
 - AI 分包也纳入链尾统一治理，顺带消除「首次点 AI 按钮时面板动画被解析卡住」的同类问题（唯一动态导入点在 `src/components/aiAssistantLoader.ts`）。
 
+## 单测卡死：vitest fork 池在本机高负载下全体冻结
+
+现象：
+
+- `npm test` 长时间无输出不结束；所有 vitest worker（node 进程）CPU 累积到 ~50s 后完全停止增长（用 `Get-Process node | Select Id,CPU` 间隔 60s 采样两次对比确认），既不推进也不超时。
+- 同一套测试用 `npx vitest --run --no-file-parallelism` 串行跑全部通过，单个文件单独跑也正常——排除代码死锁。
+
+原因：
+
+- 本机（开发机常驻安卓模拟器与大量 node 常驻进程）高负载时，默认 fork 池并行拉起 8 个 jsdom 环境（每个启动约 20s）出现进程间死锁；与测试内容无关。
+- 判定「慢」还是「卡死」看 CPU 增量而不是等待时长：增量为零即卡死，重跑无意义。
+
+处理：
+
+- 负载高时用 `npx vitest --run --no-file-parallelism` 串行验证（环境启动占大头，总时长 ~7 分钟）；CI 双核机器 worker 数少，不受影响。
+- 长期缓解：跑全量单测前关掉模拟器等大户，或 `--maxWorkers=2` 降低并发。
+
 ## E2E 不稳定：Windows 无头 WebKit 下 `toBeHidden` 偶发超时
 
 现象：
