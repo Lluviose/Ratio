@@ -1,4 +1,4 @@
-import { Activity, Bot, Check, ChevronDown, Cloud, Download, DownloadCloud, RefreshCw, Upload, UploadCloud } from 'lucide-react'
+import { Activity, Bot, Check, ChevronDown, Cloud, Download, DownloadCloud, History, RefreshCw, Upload, UploadCloud } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
@@ -10,8 +10,16 @@ import {
   restoreRatioBackup,
   sameRatioBackupData,
   stringifyRatioBackup,
+  summarizeRatioBackupContent,
   summarizeRatioBackupDiff,
+  type RatioBackupContentSummary,
 } from '../lib/backup'
+import {
+  listLocalBackups,
+  restoreLocalBackup,
+  writePreOperationLocalBackup,
+  type LocalBackupEntry,
+} from '../lib/localBackups'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
   CloudRequestError,
@@ -108,6 +116,8 @@ export function SettingsScreen(props: {
   const { toast, confirm } = useOverlay()
   // 演示模式进出都会整页刷新，读一次即可
   const [demoActive] = useState(() => isDemoModeActive())
+  // 本机滚动快照列表：恢复/导入路径都会整页刷新，同样读一次即可
+  const [localSnapshots] = useState<LocalBackupEntry[]>(() => listLocalBackups())
 
   useEffect(() => {
     cloudSyncRef.current = cloudSync
@@ -141,8 +151,19 @@ export function SettingsScreen(props: {
     setBusy(true)
     try {
       enterDemoMode()
+      if (!(await storageKernel.flush())) {
+        // 落盘失败：回滚内存态，避免「界面已演示、磁盘还是真实数据」的分裂；
+        // 失败批次与回滚写入都留在队列里按先后序自动重试
+        try {
+          exitDemoMode()
+        } catch {
+          // 回滚失败保持现状，用户可从设置手动退出
+        }
+        toast('数据未能写入本机存储，已取消进入演示，请稍后重试', { tone: 'danger' })
+        setBusy(false)
+        return
+      }
       queueToastAfterReload('已进入演示模式', { tone: 'success' })
-      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Enter demo failed'
@@ -163,8 +184,13 @@ export function SettingsScreen(props: {
     setBusy(true)
     try {
       exitDemoMode()
+      if (!(await storageKernel.flush())) {
+        // 内存已是真实数据（安全侧）；失败批次会随后续 flush 自动重试
+        toast('数据未能完全写入本机存储，已取消刷新；稍后会自动重试', { tone: 'danger' })
+        setBusy(false)
+        return
+      }
       queueToastAfterReload('已恢复你的数据', { tone: 'success' })
-      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Exit demo failed'
@@ -201,9 +227,28 @@ export function SettingsScreen(props: {
       toast('演示模式下不可导入备份，请先退出演示', { tone: 'danger' })
       return
     }
+
+    // 先解析并预检内容，确认弹窗展示计数：coerce 只校验文件结构，
+    // 「合法 JSON 但内容退化」的备份此前会静默恢复成空账本
+    let backup: ReturnType<typeof parseRatioBackup>
+    let summary: RatioBackupContentSummary
+    try {
+      backup = parseRatioBackup(await file.text())
+      summary = summarizeRatioBackupContent(backup)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Import failed', { tone: 'danger' })
+      return
+    }
+
+    const contentLine = `账户 ${summary.accountCount ?? '?'} · 快照 ${summary.snapshotCount ?? '?'} · 操作记录 ${summary.opCount ?? '?'}`
+    const message = summary.looksEmpty
+      ? `该备份看起来是空的（${contentLine}），继续导入会清空当前设备上的数据！`
+      : summary.corruptKeys.length > 0
+        ? `备份中 ${summary.corruptKeys.join('、')} 无法解析，可能已损坏。继续导入会覆盖当前设备上的所有数据。`
+        : `该备份包含：${contentLine}。导入会覆盖当前设备上的所有数据，是否继续？`
     const ok = await confirm({
       title: '导入备份',
-      message: '导入备份会覆盖当前设备上的所有数据，是否继续？',
+      message,
       confirmText: '继续导入',
       cancelText: '取消',
       tone: 'danger',
@@ -212,8 +257,8 @@ export function SettingsScreen(props: {
 
     setBusy(true)
     try {
-      const text = await file.text()
-      const backup = parseRatioBackup(text)
+      // 覆盖前抢一代本机快照：导入了错误/损坏的备份仍可回退
+      writePreOperationLocalBackup()
       const res = restoreRatioBackup(backup)
       cancelPendingCloudAutoSync()
       markCloudSyncClean()
@@ -225,12 +270,69 @@ export function SettingsScreen(props: {
           lastSyncMessage: 'Imported a local backup; confirm before uploading to cloud',
         })
       }
+      if (!(await storageKernel.flush())) {
+        toast('数据未能写入本机存储，已取消刷新；可稍后重试或从本机快照恢复', { tone: 'danger' })
+        return
+      }
       queueToastAfterReload(`已恢复 ${res.restoredKeys.length} 项数据`, { tone: 'success' })
-      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Import failed'
       toast(msg, { tone: 'danger' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const kindLabel = (kind: LocalBackupEntry['kind']) =>
+    kind === 'daily' ? '每日快照' : kind === 'pre' ? '操作前快照' : '降级期间数据'
+
+  const formatSnapshotTime = (createdAt: string) => {
+    // daily 是 YYYY-MM-DD、其余是 ISO 时间戳，统一转本地「M月d日 (HH:mm)」
+    const hasTime = createdAt.includes('T')
+    const date = new Date(hasTime ? createdAt : `${createdAt}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return createdAt
+    const base = `${date.getMonth() + 1}月${date.getDate()}日`
+    if (!hasTime) return base
+    return `${base} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  }
+
+  const restoreLocalSnapshot = async (entry: LocalBackupEntry) => {
+    if (demoActive) {
+      toast('演示模式下不可恢复本机快照，请先退出演示', { tone: 'danger' })
+      return
+    }
+    const ok = await confirm({
+      title: '恢复本机快照',
+      message: `将把数据恢复到「${formatSnapshotTime(entry.createdAt)} · ${kindLabel(entry.kind)}」的状态；当前数据会先另存一代快照。`,
+      confirmText: '恢复',
+      cancelText: '取消',
+      tone: 'danger',
+    })
+    if (!ok) return
+
+    setBusy(true)
+    try {
+      writePreOperationLocalBackup()
+      const res = restoreLocalBackup(entry.key)
+      cancelPendingCloudAutoSync()
+      markCloudSyncClean()
+      if (cloudSyncRef.current.autoSync) {
+        writeCloudSyncSettingsPatch({
+          lastBackupAt: undefined,
+          lastSyncAt: new Date().toISOString(),
+          lastSyncStatus: 'conflict',
+          lastSyncMessage: 'Restored a local snapshot; confirm before uploading to cloud',
+        })
+      }
+      if (!(await storageKernel.flush())) {
+        toast('数据未能写入本机存储，已取消刷新', { tone: 'danger' })
+        return
+      }
+      queueToastAfterReload(`已恢复 ${res.restoredKeys.length} 项数据`, { tone: 'success' })
+      window.location.reload()
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Restore failed', { tone: 'danger' })
     } finally {
       setBusy(false)
     }
@@ -534,6 +636,24 @@ export function SettingsScreen(props: {
         toast('云端还没有备份', { tone: 'neutral' })
         return
       }
+      // 云端内容预检：空/损坏的备份要在覆盖本机前拿到用户的二次确认
+      const summary = summarizeRatioBackupContent(res.backup)
+      if (summary.looksEmpty || summary.corruptKeys.length > 0) {
+        if (mountedRef.current) setBusy(false)
+        const proceed = await confirm({
+          title: '云端备份可能有问题',
+          message: summary.looksEmpty
+            ? '云端备份看起来是空的（0 账户 / 0 快照 / 0 操作记录），继续恢复会清空本机数据！'
+            : `云端备份中 ${summary.corruptKeys.join('、')} 无法解析，可能已损坏。确定继续覆盖本机数据？`,
+          confirmText: '仍然恢复',
+          cancelText: '取消',
+          tone: 'danger',
+        })
+        if (!proceed || !canUseCloudResult(controller)) return
+        if (mountedRef.current) setBusy(true)
+      }
+      // 覆盖前抢一代本机快照
+      writePreOperationLocalBackup()
       const restore = restoreRatioBackup(res.backup)
       const restoredAt = new Date().toISOString()
       cancelPendingCloudAutoSync()
@@ -551,8 +671,11 @@ export function SettingsScreen(props: {
         remoteUpdatedAt: res.meta?.updatedAt || '',
         ...cloudSyncTelemetryPayload(cloudSyncRef.current),
       })
+      if (!(await storageKernel.flush())) {
+        toast('数据未能写入本机存储，已取消刷新；可稍后重试或从本机快照恢复', { tone: 'danger' })
+        return
+      }
       queueToastAfterReload(`已从云端恢复 ${restore.restoredKeys.length} 项数据`, { tone: 'success' })
-      await storageKernel.flush()
       window.location.reload()
     } catch (err) {
       if (isAbortError(err)) return
@@ -1128,6 +1251,45 @@ export function SettingsScreen(props: {
           </div>
         </div>
       </motion.div>
+
+      {localSnapshots.length > 0 ? (
+        <motion.div
+          className="card"
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.26, ease: standardEase }}
+        >
+          <div className="cardInner">
+            <div style={{ fontWeight: 800, fontSize: 16 }}>本机快照</div>
+            <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
+              自动保留的近期数据副本（每日一份 + 危险操作前抢存），导错备份或误清数据时可回退
+            </div>
+
+            <div className="stack" style={{ marginTop: 16 }}>
+              {localSnapshots.map((entry) => (
+                <button
+                  key={entry.key}
+                  type="button"
+                  className="assetItem"
+                  style={{ background: 'var(--bg)', border: 'none', padding: 14, width: '100%', textAlign: 'left' }}
+                  disabled={busy}
+                  onClick={() => void restoreLocalSnapshot(entry)}
+                >
+                  <div>
+                    <div className="assetName">
+                      {formatSnapshotTime(entry.createdAt)} · {kindLabel(entry.kind)}
+                    </div>
+                    <div className="assetSub" style={{ marginTop: 4 }}>
+                      {Math.max(1, Math.round(entry.sizeBytes / 1024))} KB · 点按恢复到该时刻
+                    </div>
+                  </div>
+                  <History size={18} />
+                </button>
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      ) : null}
 
       <input
         ref={fileInputRef}

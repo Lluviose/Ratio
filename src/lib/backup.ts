@@ -157,6 +157,55 @@ export function parseRatioBackup(text: string): RatioBackupFile {
   return coerceRatioBackup(parsed)
 }
 
+export type RatioBackupContentSummary = {
+  itemCount: number
+  /** null = 键缺失或无法解析 */
+  accountCount: number | null
+  snapshotCount: number | null
+  opCount: number | null
+  /** 存在但解析失败（非 JSON 数组）的关键键 */
+  corruptKeys: string[]
+  /** 三大关键集合全部为空或缺失（且没有损坏键）——「看起来是空的」 */
+  looksEmpty: boolean
+}
+
+// 恢复前的内容预检：coerceRatioBackup 只校验文件结构，一个「合法 JSON 但
+// 内容退化」的备份（被截断修补/同步盘转码）会静默恢复成空账本。这里对三个
+// 关键键做浅解析计数，供确认弹窗展示并在退化时加重警告。
+export function summarizeRatioBackupContent(backup: RatioBackupFile): RatioBackupContentSummary {
+  const corruptKeys: string[] = []
+  const countOf = (key: string): number | null => {
+    const raw = backup.items[key]
+    if (raw == null) return null
+    try {
+      const parsed: unknown = JSON.parse(raw)
+      if (!Array.isArray(parsed)) {
+        corruptKeys.push(key)
+        return null
+      }
+      return parsed.length
+    } catch {
+      corruptKeys.push(key)
+      return null
+    }
+  }
+
+  const accountCount = countOf('ratio.accounts')
+  const snapshotCount = countOf('ratio.snapshots')
+  const opCount = countOf('ratio.accountOps')
+  const looksEmpty =
+    corruptKeys.length === 0 && (accountCount ?? 0) === 0 && (snapshotCount ?? 0) === 0 && (opCount ?? 0) === 0
+
+  return {
+    itemCount: Object.keys(backup.items).length,
+    accountCount,
+    snapshotCount,
+    opCount,
+    corruptKeys,
+    looksEmpty,
+  }
+}
+
 export type RestoreResult = {
   restoredKeys: string[]
   clearedKeys: string[]

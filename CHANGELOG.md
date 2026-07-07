@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-07-08 - 数据可靠性批次：落盘失败不再静默、本机滚动快照、iOS 连接防护、恢复预检
+
+- 存储内核落盘可靠性重做（`storageKernel.ts`）：失败的写入批次不再被丢弃——此前 `runFlush` 在事务提交前就清空队列、错误被吞、`flush()` 恒成功，「恢复备份/退出演示」可以假成功（刷新后读回旧数据且成功 toast 照常显示）。现在条目在提交成功前留在队列、由后续任意 flush 自动重试；写失败先重开一次连接再试；`flush()` 返回布尔，六处「写入后整页刷新」路径（导入备份/云端恢复/本机快照恢复/设置页进出演示/引导页进演示/演示徽章退出）在 false 时中止刷新并明确提示，进演示失败还会回滚内存态避免「界面演示、磁盘真实」分裂。
+- iOS/WebKit 连接防护：挂 `db.onclose`（系统挂起后单方面断开连接 → 置空由写入路径惰性重连）；`openDb` 加 5s 超时（WebKit open 永不回调的已知缺陷 → 回退 local 而不是 ready 悬挂白屏），超时后迟到的成功连接会被主动关闭。
+- 迁移安全：首启迁移中 localStorage 读取失败不再写迁移标记——此前按「空数据」盖章，几年的旧数据会被永久遗弃；现在整体放弃本次迁移，下次启动自动重试导入。
+- **本机滚动快照**（新模块 `src/lib/localBackups.ts`）：IDB 模式下自动保留近期全量数据副本——每日一代保 7 代（App 启动空闲 3.5s 后写，演示模式/空数据跳过）、危险操作前抢一代保 3 代（导入备份/云端恢复/进入演示统一接线）、降级会话抢救保 1 代。键以 `__backup.` 开头（非 `ratio.*`）：不进备份文件、不被恢复/清空触碰、不触发云同步脏标记、不出现在 appStorage 视图（内核新增 `internalKeys()`）。设置页新增「本机快照」卡片，可一键恢复到任一代（恢复前同样先抢一代）。**未配云同步的用户从此有本机恢复手段**——上次审计的最高优先遗留项。
+- 降级会话警示与抢救：IDB 存在却打开失败时 toast 明确警示（此前静默跑在冻结于迁移日的旧副本上，用户在旧账本上无感记账）；降级会话的写入在 localStorage 打标（`FALLBACK_WRITES_MARKER_KEY`），下次 IDB 正常启动自动把降级期间数据另存为 fallback 快照并提示，不再「将来被静默抛弃」。
+- 恢复预检（`summarizeRatioBackupContent`）：导入备份的确认弹窗展示内容计数（账户/快照/操作记录），「合法 JSON 但内容退化」的空备份与解析失败的损坏键触发加重警告——此前 coerce 只校验文件结构，坏备份会静默恢复成空账本；云端恢复同样预检，异常时二次确认后才覆盖本机。
+- 测试：storageKernel 11→17 例（flaky 工厂模拟连接失效：失败回灌+稍后重试、单次瞬时失败透明重开；open 超时回退；迁移读取失败不盖章；降级标记打/不打；internalKeys 视图隔离），新增 `localBackups.test.ts` 5 例（每日幂等与超额裁剪、操作前代际恢复 roundtrip、演示/空数据/回退模式停用、降级抢救与标记消费、零数据消费标记），backup +3 例（内容预检三态）。
+- 文档：PROJECT.md「本地存储:内核与键」「备份」更新（flush 布尔约定、滚动快照、迁移与降级语义、openDb 超时），AGENTS.md 高风险点同步（flush 检查返回值 + 覆盖前抢快照）。
+- 已通过 `npm run lint`、`npm test`（32 文件 272 项）、`npm run build` 和 `npx playwright test`（功能 18 项全矩阵 + 视觉 22 项）验证。
+
 ## 2026-07-08 - 止血批次：StrictMode 挂载守卫失效、演示模式重入防护、部署门禁、暗色底色块
 
 - 修复 mountedRef 模式在 StrictMode 下永久失效（dev/prod 行为分裂）：`useRef(true)` 只在 cleanup 置 false、effect body 不复位，dev 环境（main.tsx 开启 StrictMode）首次模拟卸载后 ref 恒为 false——AI 助手的流式回填/错误提示/发送态复位与设置页全部云操作的结果处理（toast、busy 翻转、设置写回）在 dev 下实际失效；生产构建无 StrictMode 不受影响。两处 effect body 补复位；顺带把三份实现不一致的 `isAbortError` 收敛为 `lib/abortError.ts` 单一实现（按 name 判定，是 `instanceof DOMException` 的更宽安全集合）。

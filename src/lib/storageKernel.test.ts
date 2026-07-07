@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
-import { BOOT_MIRROR_KEYS, createStorageKernel } from './storageKernel'
+import { BOOT_MIRROR_KEYS, createStorageKernel, FALLBACK_WRITES_MARKER_KEY } from './storageKernel'
 
 // 每个用例注入独立的 fake IDBFactory 与内存 Storage，互不串扰；
 // 全局单例 storageKernel 在 jsdom（无 indexedDB）下自动走 local 回退，
@@ -34,13 +34,64 @@ function makeKernel(options: {
   factory?: IDBFactory | null
   local?: Storage | null
   dbName?: string
+  openTimeoutMs?: number
 } = {}) {
   return createStorageKernel({
     indexedDBFactory: options.factory === undefined ? new IDBFactory() : options.factory,
     localStorageRef: options.local === undefined ? makeMemoryStorage() : options.local,
     enableBroadcast: false,
     databaseName: options.dbName,
+    openTimeoutMs: options.openTimeoutMs,
   })
+}
+
+// 包装 fake-indexeddb：state.failTransactions > 0 时 transaction() 同步抛
+// InvalidStateError（模拟 iOS 挂起后连接被系统单方面关闭的典型表现）
+function makeFlakyFactory(base: IDBFactory) {
+  const state = { failTransactions: 0 }
+  const wrapped = new WeakMap<IDBDatabase, IDBDatabase>()
+
+  function wrapDb(db: IDBDatabase): IDBDatabase {
+    const cached = wrapped.get(db)
+    if (cached) return cached
+    const proxy = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'transaction' && state.failTransactions > 0) {
+          state.failTransactions -= 1
+          return () => {
+            throw new DOMException('The database connection is closing.', 'InvalidStateError')
+          }
+        }
+        const value = Reflect.get(target, prop)
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+      },
+      set(target, prop, value) {
+        Reflect.set(target, prop, value)
+        return true
+      },
+    })
+    wrapped.set(db, proxy)
+    return proxy
+  }
+
+  const factory = {
+    open(name: string, version?: number) {
+      const request = base.open(name, version)
+      return new Proxy(request, {
+        get(target, prop) {
+          if (prop === 'result') return wrapDb(Reflect.get(target, prop) as IDBDatabase)
+          const value = Reflect.get(target, prop)
+          return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value
+        },
+        set(target, prop, value) {
+          Reflect.set(target, prop, value)
+          return true
+        },
+      })
+    },
+  } as unknown as IDBFactory
+
+  return { factory, state }
 }
 
 describe('storageKernel (IDB 模式)', () => {
@@ -169,6 +220,101 @@ describe('storageKernel (IDB 模式)', () => {
     expect(storage.length).toBe(0)
     expect(kernel.get('internal.meta')).toBe('hidden')
   })
+
+  it('落盘失败的批次不丢弃：flush 报告失败，条目留队列稍后重试成功', async () => {
+    const base = new IDBFactory()
+    const { factory, state } = makeFlakyFactory(base)
+    const kernel = createStorageKernel({
+      indexedDBFactory: factory,
+      localStorageRef: makeMemoryStorage(),
+      enableBroadcast: false,
+    })
+    await kernel.ready
+    expect(kernel.getBackend()).toBe('idb')
+
+    // 首试 + 重开重试全部失败
+    state.failTransactions = 99
+    kernel.set('ratio.accounts', '[1]')
+    await expect(kernel.flush()).resolves.toBe(false)
+    // 内存视图不受影响
+    expect(kernel.get('ratio.accounts')).toBe('[1]')
+
+    // 故障恢复后，同一批条目由下一次 flush 自动重试提交
+    state.failTransactions = 0
+    await expect(kernel.flush()).resolves.toBe(true)
+
+    const second = createStorageKernel({ indexedDBFactory: base, localStorageRef: null, enableBroadcast: false })
+    await second.ready
+    expect(second.get('ratio.accounts')).toBe('[1]')
+  })
+
+  it('连接失效时重开连接重试：单次瞬时失败对调用方透明', async () => {
+    const base = new IDBFactory()
+    const { factory, state } = makeFlakyFactory(base)
+    const kernel = createStorageKernel({
+      indexedDBFactory: factory,
+      localStorageRef: makeMemoryStorage(),
+      enableBroadcast: false,
+    })
+    await kernel.ready
+
+    state.failTransactions = 1
+    kernel.set('ratio.theme', '"miro"')
+    await expect(kernel.flush()).resolves.toBe(true)
+
+    const second = createStorageKernel({ indexedDBFactory: base, localStorageRef: null, enableBroadcast: false })
+    await second.ready
+    expect(second.get('ratio.theme')).toBe('"miro"')
+  })
+
+  it('IDB open 挂死时按超时回退 local，ready 不悬挂（白屏防护）', async () => {
+    const hangingFactory = {
+      open: () => ({}) as IDBOpenDBRequest,
+    } as unknown as IDBFactory
+    const local = makeMemoryStorage({ 'ratio.accounts': '[7]' })
+    const kernel = makeKernel({ factory: hangingFactory, local, openTimeoutMs: 20 })
+    await kernel.ready
+    expect(kernel.getBackend()).toBe('local')
+    expect(kernel.get('ratio.accounts')).toBe('[7]')
+  })
+
+  it('迁移期间 localStorage 读取失败：不写迁移标记，下次启动重试导入', async () => {
+    const factory = new IDBFactory()
+    const goodLocal = makeMemoryStorage({ 'ratio.accounts': '[7]' })
+    const brokenLocal = {
+      getItem: goodLocal.getItem.bind(goodLocal),
+      setItem: goodLocal.setItem.bind(goodLocal),
+      removeItem: goodLocal.removeItem.bind(goodLocal),
+      key: goodLocal.key.bind(goodLocal),
+      clear: goodLocal.clear.bind(goodLocal),
+      get length(): number {
+        throw new Error('SecurityError')
+      },
+    } as Storage
+
+    const first = makeKernel({ factory, local: brokenLocal })
+    await first.ready
+    expect(first.getBackend()).toBe('idb')
+    // 本次没导入任何数据，但也没有盖「已迁移」章
+    expect(first.keys()).toEqual([])
+    await first.flush()
+
+    // localStorage 恢复可读的下一次启动：迁移照常执行
+    const second = makeKernel({ factory, local: goodLocal })
+    await second.ready
+    expect(second.get('ratio.accounts')).toBe('[7]')
+  })
+
+  it('internalKeys 枚举内核键；keys/appStorage 视图不见它们', async () => {
+    const kernel = makeKernel()
+    await kernel.ready
+    kernel.set('__backup.daily.2026-07-08', '{"schema":"ratio.backup.v1"}')
+    kernel.set('ratio.accounts', '[1]')
+
+    expect(kernel.internalKeys('__backup.')).toEqual(['__backup.daily.2026-07-08'])
+    expect(kernel.keys()).toEqual(['ratio.accounts'])
+    expect(kernel.storage.length).toBe(1)
+  })
 })
 
 describe('storageKernel (local 回退模式)', () => {
@@ -185,7 +331,7 @@ describe('storageKernel (local 回退模式)', () => {
     expect(local.getItem('ratio.accounts')).toBeNull()
     expect(kernel.keys()).toEqual(['ratio.theme'])
     // local 模式下 flush 是空操作但必须可等待（刷新前统一 await flush）
-    await expect(kernel.flush()).resolves.toBeUndefined()
+    await expect(kernel.flush()).resolves.toBe(true)
   })
 
   it('IDB 打开失败时回退 local，且 ready 不会 reject', async () => {
@@ -199,6 +345,26 @@ describe('storageKernel (local 回退模式)', () => {
     await expect(kernel.ready).resolves.toBeUndefined()
     expect(kernel.getBackend()).toBe('local')
     expect(kernel.get('ratio.accounts')).toBe('[7]')
+  })
+
+  it('回退会话（IDB 本应可用）的写入打降级标记；无 IDB 工厂的常态不打', async () => {
+    const brokenFactory = {
+      open() {
+        throw new Error('boom')
+      },
+    } as unknown as IDBFactory
+    const local = makeMemoryStorage()
+    const kernel = makeKernel({ factory: brokenFactory, local })
+    await kernel.ready
+    kernel.set('ratio.accounts', '[1]')
+    expect(local.getItem(FALLBACK_WRITES_MARKER_KEY)).toBeTruthy()
+
+    // 真正没有 IDB 的环境（老浏览器/jsdom）不算降级，不打标
+    const plainLocal = makeMemoryStorage()
+    const plainKernel = makeKernel({ factory: null, local: plainLocal })
+    await plainKernel.ready
+    plainKernel.set('ratio.accounts', '[1]')
+    expect(plainLocal.getItem(FALLBACK_WRITES_MARKER_KEY)).toBeNull()
   })
 
   it('local 模式写入配额错误向上抛给调用方（与迁移前语义一致）', async () => {

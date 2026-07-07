@@ -198,11 +198,13 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 持久层是 `src/lib/storageKernel.ts`（**改存储行为前必读文件头注释**）：IndexedDB 为权威存储，启动时全量水合进内存、同步读写内存、异步批量落盘；IDB 不可用时整体回退为 localStorage 直读直写。要点：
 
-- `main.tsx` 等 `storageKernel.ready` 后才挂载 React，组件树内的同步读一定读到权威数据。
-- 首次以 IDB 模式启动时把 localStorage 的 `ratio.*` 全量导入 IDB 并写迁移标记；localStorage 旧副本冻结保留（旧版本回滚可用），此后不再更新——例外是 `ratio.colorMode`/`ratio.theme`（`BOOT_MIRROR_KEYS`）持续镜像回 localStorage，供 `public/color-mode-boot.js` 首帧同步读取。
+- `main.tsx` 等 `storageKernel.ready` 后才挂载 React，组件树内的同步读一定读到权威数据。`openDb` 带超时（默认 5s）：IDB open 挂死（WebKit 已知缺陷）时按不可用回退 local，ready 不会悬挂白屏。
+- 首次以 IDB 模式启动时把 localStorage 的 `ratio.*` 全量导入 IDB 并写迁移标记；**localStorage 读取中途失败时整体放弃且不写标记（下次启动重试），绝不把空/半份数据盖章成已迁移**。localStorage 旧副本冻结保留（旧版本回滚可用），此后不再更新——例外是 `ratio.colorMode`/`ratio.theme`（`BOOT_MIRROR_KEYS`）持续镜像回 localStorage，供 `public/color-mode-boot.js` 首帧同步读取。
 - 跨标签同步走 BroadcastChannel（IDB 写不触发 `storage` 事件），收到广播后派发既有 storageEvents 自定义事件，hooks 无感知；localStorage 回退模式下仍靠原生 `storage` 事件。
-- **写入后要整页刷新的路径（恢复备份、进出演示模式）必须先 `await storageKernel.flush()`**，否则最后一批写入可能未落盘就被刷新丢弃。页面隐藏（pagehide/visibilitychange）时内核会自动抢跑 flush。
-- 按 `Storage` 接口消费的模块（backup/ai/demo/cloud）默认存储是 `appStorage` 适配器；jsdom 单测环境无 indexedDB，全局内核自动回退 localStorage 语义，测试无需感知。内核自身的测试（`storageKernel.test.ts`）用 `fake-indexeddb` 注入覆盖 IDB 模式。
+- 落盘可靠性：失败的写入批次**不会被丢弃**，条目留在待写队列由后续任意 flush 自动重试；写失败会先重开一次连接再试（iOS 挂起恢复后连接被系统关闭的场景，`onclose` 后由写入路径惰性重连）。IDB 本应可用却回退的会话会警示用户，且写入会在 localStorage 打降级标记，下次正常启动由 `localBackups.importFallbackSessionSnapshot()` 把降级期间的数据另存为本机快照。
+- **写入后要整页刷新的路径（恢复备份、进出演示模式）必须先 `await storageKernel.flush()` 并检查返回值：false 表示有批次未能落盘，必须中止刷新并提示**——否则刷新会丢弃内存态、读回旧数据，操作看似成功实际没发生。页面隐藏（pagehide/visibilitychange）时内核会自动抢跑 flush。
+- 本机滚动快照（`src/lib/localBackups.ts`）：IDB 模式下自动保留近期全量副本——每日一代保 7 代（App 启动空闲时写，演示模式跳过）、危险操作（导入备份/云端恢复/进入演示）前抢一代保 3 代、降级会话抢救保 1 代；键以 `__backup.` 开头（非 `ratio.*`），不进备份文件、不被恢复/清空触碰、不触发云同步脏标记；设置页「本机快照」卡片可恢复。local 回退模式整体停用（5MB 配额装不下多代副本）。
+- 按 `Storage` 接口消费的模块（backup/ai/demo/cloud）默认存储是 `appStorage` 适配器；jsdom 单测环境无 indexedDB，全局内核自动回退 localStorage 语义，测试无需感知。内核自身的测试（`storageKernel.test.ts`）用 `fake-indexeddb` 注入覆盖 IDB 模式，`localBackups.test.ts` 同法。
 
 主要键都以 `ratio.` 开头。备份默认包含 `ratio.*`，但**排除**云同步账号配置和 AI 隐私确认键。
 
@@ -232,6 +234,8 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - schema 为 `ratio.backup.v1`。
 - `ratio.cloudSync` 与 `ratio.aiPrivacyAcceptedServerUrl` 永不进入备份。
 - 恢复失败会尝试回滚原本地数据。
+- 恢复前用 `summarizeRatioBackupContent()` 做内容预检（账户/快照/操作记录计数 + 损坏键检测）：确认弹窗展示计数，「合法 JSON 但内容退化」的备份会触发加重警告，不再静默恢复成空账本。
+- 覆盖式恢复（导入备份/云端恢复/本机快照恢复/进入演示）前统一 `writePreOperationLocalBackup()` 抢一代本机快照。
 - 比较备份时会规范化 `ratio.accountOps` 和 `ratio.ledger`，避免自动生成的 id 造成「内容相同却判不同」。
 
 ## 云同步与后端

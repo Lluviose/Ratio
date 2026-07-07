@@ -9,6 +9,7 @@ import {
 } from './backup'
 import { cancelPendingCloudAutoSync, markCloudSyncClean } from './cloudSync'
 import { DEMO_STASH_KEY, isDemoModeActive, setDemoModeActive } from './demoMode'
+import { writePreOperationLocalBackup } from './localBackups'
 import { appStorage } from './storageKernel'
 import { addMoney, normalizeMoney } from './money'
 import type { Account, AccountTypeId } from './accounts'
@@ -228,6 +229,8 @@ export function enterDemoMode(now = new Date()) {
   // 重入守卫：另一标签可能已进入演示（本标签 UI 读一次标记后不再刷新），
   // 此时 buildRatioBackup() 读到的是演示数据，再暂存会覆盖真实数据的 stash
   if (isDemoModeActive()) throw new Error('已处于演示模式，请刷新页面后再操作')
+  // stash 之外再抢一代本机快照：stash 写坏/被误清时仍有恢复手段
+  writePreOperationLocalBackup()
   const stash = stringifyRatioBackup(buildRatioBackup())
   appStorage.setItem(DEMO_STASH_KEY, stash)
   restoreRatioBackup(buildDemoBackup(now))

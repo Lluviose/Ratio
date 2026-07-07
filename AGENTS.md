@@ -31,7 +31,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 数据与隐私：
 
 - 核心存储键都以 `ratio.` 开头；备份包含多数 `ratio.*`，但排除 `ratio.cloudSync` 和 `ratio.aiPrivacyAcceptedServerUrl`。
-- 存储读写走 `storageKernel`/`appStorage`（IndexedDB 异步落盘），**写入后要整页刷新的路径必须先 `await storageKernel.flush()`**；新增此类路径时对照 `src/lib/storageKernel.ts` 文件头约定。
+- 存储读写走 `storageKernel`/`appStorage`（IndexedDB 异步落盘），**写入后要整页刷新的路径必须先 `await storageKernel.flush()` 并检查返回值——false 时中止刷新并提示**；覆盖式恢复（导入备份/云端恢复/进入演示）前先 `writePreOperationLocalBackup()` 抢一代本机快照。新增此类路径时对照 `src/lib/storageKernel.ts` 文件头约定。
 - 不要把云同步账号密码、AI API Key、AI Base URL 或模型配置写入前端备份和 AI 上下文。
 - `accountOps.adjust` 是期间净变动汇总，不是单笔交易；`accountOps.transfer` 是内部转移，不算收入/支出。
 - `ledger` 是可选明细，可能不完整；趋势和统计以 `snapshots` 为准。

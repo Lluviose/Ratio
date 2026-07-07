@@ -28,6 +28,7 @@ import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMo
 import { emitAppToast, queueToastAfterReload, useOverlay } from './lib/overlay'
 import { enterDemoMode, exitDemoMode } from './lib/demoData'
 import { isDemoModeActive } from './lib/demoMode'
+import { ensureDailyLocalBackup, importFallbackSessionSnapshot } from './lib/localBackups'
 import { storageKernel } from './lib/storageKernel'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
@@ -424,9 +425,13 @@ function DemoModeBadge() {
     if (!ok) return
     try {
       exitDemoMode()
-      queueToastAfterReload('已恢复你的数据', { tone: 'success' })
       // 恢复走的是 IDB 异步落盘，刷新前必须等挂起写入全部提交
-      await storageKernel.flush()
+      if (!(await storageKernel.flush())) {
+        // 内存已是真实数据（安全侧）；失败批次会随后续 flush 自动重试
+        toast('数据未能完全写入本机存储，已取消刷新；稍后会自动重试', { tone: 'danger' })
+        return
+      }
+      queueToastAfterReload('已恢复你的数据', { tone: 'success' })
       window.location.reload()
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Exit demo failed', { tone: 'danger' })
@@ -557,6 +562,12 @@ export default function App() {
   useEffect(() => {
     initCloudAutoSync()
     initTelemetry()
+    // 启动稍作让路后：抢救上次降级会话的数据 + 写当日本机滚动快照
+    const localBackupTimer = window.setTimeout(() => {
+      importFallbackSessionSnapshot()
+      ensureDailyLocalBackup()
+    }, 3500)
+    return () => window.clearTimeout(localBackupTimer)
   }, [])
 
   useEffect(() => {
@@ -647,8 +658,17 @@ export default function App() {
                     emitAppToast(err instanceof Error ? err.message : 'Enter demo failed', { tone: 'danger' })
                     return
                   }
+                  if (!(await storageKernel.flush())) {
+                    // 落盘失败：回滚内存态，避免「界面已演示、磁盘还是真实数据」的分裂
+                    try {
+                      exitDemoMode()
+                    } catch {
+                      // 回滚失败保持现状，可从设置手动退出
+                    }
+                    emitAppToast('数据未能写入本机存储，已取消进入演示，请稍后重试', { tone: 'danger' })
+                    return
+                  }
                   queueToastAfterReload('已进入演示模式，可在设置中退出', { tone: 'success' })
-                  await storageKernel.flush()
                   window.location.reload()
                 }}
               />

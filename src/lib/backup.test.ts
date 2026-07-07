@@ -6,6 +6,7 @@ import {
   RATIO_BACKUP_SCHEMA_V1,
   restoreRatioBackup,
   sameRatioBackupData,
+  summarizeRatioBackupContent,
   summarizeRatioBackupDiff,
 } from './backup'
 
@@ -319,5 +320,49 @@ describe('backup', () => {
       differentKeyCount: 3,
       sampleKeys: ['ratio.localOnly', 'ratio.remoteOnly', 'ratio.accounts'],
     })
+  })
+})
+
+describe('summarizeRatioBackupContent', () => {
+  const base = { schema: RATIO_BACKUP_SCHEMA_V1, createdAt: '2026-07-08T00:00:00.000Z' } as const
+
+  it('统计关键集合计数，健康备份不标空/损坏', () => {
+    const summary = summarizeRatioBackupContent({
+      ...base,
+      items: {
+        'ratio.accounts': JSON.stringify([{ id: 'a' }, { id: 'b' }]),
+        'ratio.snapshots': JSON.stringify([{ date: '2026-07-08' }]),
+        'ratio.accountOps': '[]',
+        'ratio.theme': '"miro"',
+      },
+    })
+    expect(summary).toEqual({
+      itemCount: 4,
+      accountCount: 2,
+      snapshotCount: 1,
+      opCount: 0,
+      corruptKeys: [],
+      looksEmpty: false,
+    })
+  })
+
+  it('关键集合全空/缺失 → looksEmpty（防「合法 JSON 但内容退化」静默清空）', () => {
+    const summary = summarizeRatioBackupContent({ ...base, items: { 'ratio.theme': '"miro"' } })
+    expect(summary.looksEmpty).toBe(true)
+    expect(summary.accountCount).toBeNull()
+    expect(summary.corruptKeys).toEqual([])
+  })
+
+  it('存在但解析失败（非 JSON / 非数组）的关键键记入 corruptKeys', () => {
+    const summary = summarizeRatioBackupContent({
+      ...base,
+      items: {
+        'ratio.accounts': '{"not":"an array"}',
+        'ratio.snapshots': 'not-json',
+        'ratio.accountOps': '[]',
+      },
+    })
+    expect(summary.corruptKeys).toEqual(['ratio.accounts', 'ratio.snapshots'])
+    expect(summary.looksEmpty).toBe(false)
   })
 })
