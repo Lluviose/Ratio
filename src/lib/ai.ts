@@ -1,5 +1,6 @@
 import { accountGroups, getAccountTypeOption, getGroupIdByAccountType, type Account, type AccountGroupId, type AccountTypeId } from './accounts'
 import { coerceStoredAccountOps } from './accountOpsStorage'
+import { isAbortError } from './abortError'
 import { fetchCloudAiChat, fetchCloudAiChatStream, getCloudSyncSettings, hasCloudCredentials } from './cloud'
 import { coerceStoredTransactions } from './ledgerStorage'
 import { addMoney, normalizeMoney, subtractMoney } from './money'
@@ -733,10 +734,6 @@ export function readResponseContent(value: unknown): string | undefined {
   }
   if (typeof value.text === 'string') return value.text
   return undefined
-}
-
-function isAbortError(err: unknown) {
-  return err instanceof DOMException && err.name === 'AbortError'
 }
 
 function readStreamDelta(value: unknown) {

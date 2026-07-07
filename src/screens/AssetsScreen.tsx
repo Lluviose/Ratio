@@ -920,19 +920,19 @@ export function AssetsScreen(props: {
 
   useEffect(() => scheduleMeasure(), [expandedGroup, scheduleMeasure])
 
-  // 计算负债上方的白色填充块（负债比例低于100%时）
+  // 计算负债上方的底色填充块（负债比例低于100%时）
   const debtFillerRect = useMemo(
     () => (blocks.debt ? computeDebtFillerRect(ratioLayout, RATIO_CHART_TOP) : null),
     [blocks.debt, ratioLayout],
   )
 
-  // 计算资产底部的白色填充块（负债比例超过100%时）
+  // 计算资产底部的底色填充块（负债比例超过100%时）
   const assetFillerRect = useMemo(
     () => (blocks.debt ? computeAssetFillerRect(ratioLayout, viewport.w, viewport.h, RATIO_CHART_TOP) : null),
     [blocks.debt, ratioLayout, viewport.h, viewport.w],
   )
 
-  // 负债上方白色填充块的动画值
+  // 负债上方底色填充块的动画值
   const debtFillerLeft = useTransform(scrollIdx, (idx) => {
     if (!debtFillerRect) return 0
     if (idx < 2) return 0
@@ -953,10 +953,10 @@ export function AssetsScreen(props: {
     if (idx < 2) return lerp(0, debtFillerRect.h, Math.max(0, idx - 1))
     return lerp(debtFillerRect.h, 0, Math.max(0, idx - 2))
   })
-  // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
+  // 底色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
   const debtFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
-  // 资产底部白色填充块的动画值
+  // 资产底部底色填充块的动画值
   const assetFillerLeft = useTransform(scrollIdx, (idx) => {
     if (!assetFillerRect) return 0
     if (idx < 2) return lerp(0, assetFillerRect.x, Math.max(0, idx - 1))
@@ -977,7 +977,7 @@ export function AssetsScreen(props: {
     if (idx < 2) return lerp(0, assetFillerRect.h, Math.max(0, idx - 1))
     return lerp(assetFillerRect.h, 0, Math.max(0, idx - 2))
   })
-  // 白色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
+  // 底色填充块只在 ratio 页面（page 1）显示，在 list 页面（page 2）完全隐藏
   const assetFillerOpacity = useTransform(scrollIdx, [0.8, 1, 1.8, 2], [0, 1, 0.5, 0])
 
   const selectedThemeColor = useMemo(() => {
@@ -1054,7 +1054,7 @@ export function AssetsScreen(props: {
       {/* 只有初始化完成后才显示 overlay 块，带启动动画 */}
       {initialized ? (
         <div className="absolute inset-0 z-0 pointer-events-none">
-          {/* 负债上方的白色填充块（负债比例低于100%时） */}
+          {/* 负债上方的底色填充块（负债比例低于100%时） */}
           {debtFillerRect ? (
           <motion.div
             className="absolute left-0 top-0 pointer-events-none"
@@ -1063,7 +1063,7 @@ export function AssetsScreen(props: {
               y: debtFillerTop,
               width: debtFillerWidth,
               height: debtFillerHeight,
-              background: 'white',
+              background: 'var(--card)',
               borderTopLeftRadius: chartRadius,
               borderTopRightRadius: chartRadius,
               opacity: debtFillerOpacity,
@@ -1075,7 +1075,7 @@ export function AssetsScreen(props: {
           />
         ) : null}
 
-        {/* 资产底部的白色填充块（负债比例超过100%时） */}
+        {/* 资产底部的底色填充块（负债比例超过100%时） */}
         {assetFillerRect ? (
           <motion.div
             className="absolute left-0 top-0 pointer-events-none"
@@ -1084,7 +1084,7 @@ export function AssetsScreen(props: {
               y: assetFillerTop,
               width: assetFillerWidth,
               height: assetFillerHeight,
-              background: 'white',
+              background: 'var(--card)',
               borderTopRightRadius: chartRadius,
               borderBottomRightRadius: chartRadius,
               opacity: assetFillerOpacity,

@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, beforeEach } from 'vitest'
 import { getAccountTypeOption } from './accounts'
 import { applyAccountFlow } from './accountBalance'
 import { addMoney, moneyEquals } from './money'
-import { buildDemoAccounts, buildDemoBackup, buildDemoOps, buildDemoSnapshots } from './demoData'
+import { buildDemoAccounts, buildDemoBackup, buildDemoOps, buildDemoSnapshots, enterDemoMode, exitDemoMode } from './demoData'
+import { DEMO_STASH_KEY, isDemoModeActive } from './demoMode'
 
 const NOW = new Date('2026-07-05T12:00:00.000Z')
 
@@ -97,5 +98,54 @@ describe('buildDemoBackup', () => {
     // 每个条目都是合法 JSON 或原始字符串（与 localStorage 存储格式一致）
     expect(() => JSON.parse(backup.items['ratio.accounts'])).not.toThrow()
     expect(backup.items['ratio.theme']).toBe('"macke"')
+  })
+})
+
+describe('enterDemoMode / exitDemoMode', () => {
+  // jsdom 无 indexedDB：appStorage 运行在 localStorage 回退模式，直接读写 localStorage
+  const realAccounts = JSON.stringify([
+    { id: 'real-1', type: 'cash', name: '现金', balance: 88.5, updatedAt: NOW.toISOString() },
+  ])
+
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('round-trips real data byte-identically through enter → exit', () => {
+    localStorage.setItem('ratio.accounts', realAccounts)
+    localStorage.setItem('ratio.tourSeen', 'true')
+
+    enterDemoMode(NOW)
+    expect(isDemoModeActive()).toBe(true)
+    expect(localStorage.getItem(DEMO_STASH_KEY)).toBeTruthy()
+    // 演示数据已生效（不再是真实账户）
+    expect(localStorage.getItem('ratio.accounts')).not.toBe(realAccounts)
+
+    exitDemoMode()
+    expect(isDemoModeActive()).toBe(false)
+    expect(localStorage.getItem('ratio.accounts')).toBe(realAccounts)
+    expect(localStorage.getItem(DEMO_STASH_KEY)).toBeNull()
+  })
+
+  it('refuses to re-enter while demo is active, keeping the original stash intact', () => {
+    // 跨标签场景：另一标签已进入演示、本标签的按钮还是旧状态。
+    // 再次进入若不拒绝，stash 会被演示数据覆盖 → 真实数据永久丢失
+    localStorage.setItem('ratio.accounts', realAccounts)
+    enterDemoMode(NOW)
+    const stash = localStorage.getItem(DEMO_STASH_KEY)
+
+    expect(() => enterDemoMode(NOW)).toThrow()
+    expect(localStorage.getItem(DEMO_STASH_KEY)).toBe(stash)
+
+    exitDemoMode()
+    expect(localStorage.getItem('ratio.accounts')).toBe(realAccounts)
+  })
+
+  it('exit is a no-op when demo is not active (already exited in another tab)', () => {
+    // stash 已被消费的退出重放绝不能落入 clearRatioStorage 分支
+    localStorage.setItem('ratio.accounts', realAccounts)
+    exitDemoMode()
+    expect(localStorage.getItem('ratio.accounts')).toBe(realAccounts)
+    expect(isDemoModeActive()).toBe(false)
   })
 })

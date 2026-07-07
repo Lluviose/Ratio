@@ -1,7 +1,12 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
+  # 门禁：只有 CI（lint+单测+构建+e2e）在 main 上全绿后才部署。
+  # 此前直接监听 push 会与 CI 并行赛跑，测试失败的提交照样发布。
+  # workflow_dispatch 保留为手动部署的逃生通道（不经 CI 检查）。
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -16,10 +21,14 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 部署 CI 实际验证过的那个提交（手动触发时为默认分支头）
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node
         uses: actions/setup-node@v4

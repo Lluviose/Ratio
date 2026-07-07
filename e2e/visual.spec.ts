@@ -150,6 +150,12 @@ test('dark mode: home list', async ({ page }) => {
   await expect(page).toHaveScreenshot('dark-home.png', SHOT)
 })
 
+test('dark mode: ratio page', async ({ page }) => {
+  await prepare(page, { theme: 'matisse2', colorMode: 'dark' })
+  await gotoRatioPage(page)
+  await expect(page).toHaveScreenshot('dark-ratio.png', SHOT)
+})
+
 test('dark mode: stats', async ({ page }) => {
   await prepare(page, { theme: 'matisse2', colorMode: 'dark' })
   await gotoStats(page)

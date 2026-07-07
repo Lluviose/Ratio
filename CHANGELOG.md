@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-08 - 止血批次：StrictMode 挂载守卫失效、演示模式重入防护、部署门禁、暗色底色块
+
+- 修复 mountedRef 模式在 StrictMode 下永久失效（dev/prod 行为分裂）：`useRef(true)` 只在 cleanup 置 false、effect body 不复位，dev 环境（main.tsx 开启 StrictMode）首次模拟卸载后 ref 恒为 false——AI 助手的流式回填/错误提示/发送态复位与设置页全部云操作的结果处理（toast、busy 翻转、设置写回）在 dev 下实际失效；生产构建无 StrictMode 不受影响。两处 effect body 补复位；顺带把三份实现不一致的 `isAbortError` 收敛为 `lib/abortError.ts` 单一实现（按 name 判定，是 `instanceof DOMException` 的更宽安全集合）。
+- 演示模式重入守卫（多标签数据丢失风险）：`enterDemoMode` 在演示已激活时拒绝执行——此前另一标签已进入演示、本标签旧按钮再点会用**演示数据**覆盖真实数据暂存 stash，真实数据永久丢失；`exitDemoMode` 在非演示态时 no-op——此前 stash 已被另一标签消费的重放退出会落入 `clearRatioStorage()` 分支清掉刚恢复的真实数据。UI 挂载时读一次标记的行为不变（进出必然整页刷新），守卫在编排层以实时存储态兜底。新增 3 例进出编排测试（roundtrip 逐字节一致 / 重入拒绝且 stash 完好 / 非演示态退出 no-op），此前该路径零测试。
+- 部署门禁：deploy-pages 从「push main 直接触发」（与 CI 并行赛跑，测试失败的提交照样发布）改为 `workflow_run` 监听 CI 成功后触发，并 checkout CI 实际验证过的 `head_sha`；`workflow_dispatch` 保留为手动逃生通道。
+- 暗色残留：资产首页占比页的负债上方/资产底部填充块此前是字面 `'white'`（暗色下是刺眼纯白块），改为 `var(--card)`——浅色 `--card` 恰为 `#ffffff`，六主题浅色基线逐像素不变；视觉回归补录 `dark-ratio` 基线（此前暗色抽样恰好漏掉该屏，共 22 张）。
+- 依赖卫生：删除 `tailwind-merge`（全库零引用）与 `autoprefixer`（postcss 链未引用，Tailwind 4 内建前缀处理）；`@tailwindcss/postcss` 移至 devDependencies（纯构建期依赖）；browserslist 数据更新。
+- 死代码：删除 `useAccounts` 的 `liquidAccounts`（零消费者，每次账户变化空算一次 memo）。
+- 已通过 `npm run lint`、`npm test`（31 文件 258 项）、`npm run build` 和 `npx playwright test`（功能 18 项全矩阵 + 视觉 22 项，含新基线复跑）验证。
+
 ## 2026-07-06 - 存储层全量迁移 IndexedDB（storageKernel 内核）
 
 - 新增存储内核 `src/lib/storageKernel.ts`（文件头注释是改动前必读的约定清单），接管全部应用数据持久化：IndexedDB 为权威存储（配额远大于 localStorage 的 ~5MB，且启动即申请 `navigator.storage.persist()` 豁免驱逐），启动时全量水合进内存，之后同步读内存、写走 `setTimeout(0)` 合批异步落盘；IndexedDB 不可用（隐私模式禁开/老浏览器/jsdom）时整体回退 localStorage 直读直写，读写异常向上透传，语义与迁移前逐项对齐。`main.tsx` await `storageKernel.ready` 后才挂载 React，组件树内的同步读保证命中权威数据，没有读写空窗。

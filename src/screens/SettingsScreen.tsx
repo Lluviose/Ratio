@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { queueToastAfterReload, useOverlay } from '../lib/overlay'
+import { isAbortError } from '../lib/abortError'
 import {
   buildRatioBackup,
   parseRatioBackup,
@@ -60,10 +61,6 @@ function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function isAbortError(err: unknown) {
-  return typeof err === 'object' && err !== null && 'name' in err && Reflect.get(err, 'name') === 'AbortError'
-}
-
 function cloudSyncTelemetryPayload(settings: CloudSyncSettings) {
   return {
     autoSync: settings.autoSync,
@@ -117,6 +114,9 @@ export function SettingsScreen(props: {
   }, [cloudSync])
 
   useEffect(() => {
+    // StrictMode 下 effect 会 setup→cleanup→setup：必须在 body 里复位，
+    // 否则首次模拟卸载后 mountedRef 永远为 false，云操作结果全被丢弃
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
       cloudAbortRef.current?.abort()

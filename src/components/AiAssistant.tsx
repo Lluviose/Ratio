@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { buildAiSystemMessage, fetchAiChatCompletion, getAiEndpointIssue, getAiTransportLabel, type AiChatMessage } from '../lib/ai'
+import { isAbortError } from '../lib/abortError'
 import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSettings } from '../lib/cloud'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 
@@ -112,10 +113,6 @@ function writeSessionMessages(messages: UiMessage[]) {
   }
 }
 
-function isAbortError(err: unknown) {
-  return err instanceof DOMException && err.name === 'AbortError'
-}
-
 export function AiAssistant(props: { initialOpen?: boolean } = {}) {
   const { initialOpen = false } = props
   const [open, setOpen] = useState(() => initialOpen)
@@ -183,6 +180,9 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
   }, [open, privacyAccepted, transportIssue])
 
   useEffect(() => {
+    // StrictMode 下 effect 会 setup→cleanup→setup：必须在 body 里复位，
+    // 否则首次模拟卸载后 mountedRef 永远为 false，流式回填/错误提示全被丢弃
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
       abortRef.current?.abort()

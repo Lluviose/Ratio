@@ -8,7 +8,7 @@ import {
   type RatioBackupFile,
 } from './backup'
 import { cancelPendingCloudAutoSync, markCloudSyncClean } from './cloudSync'
-import { DEMO_STASH_KEY, setDemoModeActive } from './demoMode'
+import { DEMO_STASH_KEY, isDemoModeActive, setDemoModeActive } from './demoMode'
 import { appStorage } from './storageKernel'
 import { addMoney, normalizeMoney } from './money'
 import type { Account, AccountTypeId } from './accounts'
@@ -225,6 +225,9 @@ export function buildDemoBackup(now: Date, storage: Storage = appStorage): Ratio
 // 进入演示：现有数据整体暂存 → 写入演示数据 → 打演示标记。
 // 调用方随后应整页刷新（与导入备份同一模式）。
 export function enterDemoMode(now = new Date()) {
+  // 重入守卫：另一标签可能已进入演示（本标签 UI 读一次标记后不再刷新），
+  // 此时 buildRatioBackup() 读到的是演示数据，再暂存会覆盖真实数据的 stash
+  if (isDemoModeActive()) throw new Error('已处于演示模式，请刷新页面后再操作')
   const stash = stringifyRatioBackup(buildRatioBackup())
   appStorage.setItem(DEMO_STASH_KEY, stash)
   restoreRatioBackup(buildDemoBackup(now))
@@ -235,6 +238,9 @@ export function enterDemoMode(now = new Date()) {
 // 退出演示：恢复暂存并清理标记。恢复的数据与进入前逐字节一致，
 // 因此可以直接标记云同步为干净。
 export function exitDemoMode() {
+  // 非演示态下 no-op：另一标签可能已完成退出并消费掉 stash（本标签 UI 未刷新），
+  // 此时绝不能落入 clearRatioStorage 分支清掉刚恢复的真实数据
+  if (!isDemoModeActive()) return
   const raw = appStorage.getItem(DEMO_STASH_KEY)
   if (raw) {
     restoreRatioBackup(parseRatioBackup(raw))
