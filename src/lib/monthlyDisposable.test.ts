@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildDisposableEstimate,
+  coerceMonthlyEstimatedExpense,
   coerceMonthlyEstimatedIncome,
   type DisposableEstimateInput,
 } from './monthlyDisposable'
@@ -96,6 +97,7 @@ function build(input: Partial<DisposableEstimateInput>): ReturnType<typeof build
     monthStartDay: input.monthStartDay ?? 1,
     paceAlgorithm: input.paceAlgorithm,
     manualIncome: input.manualIncome ?? 0,
+    manualExpense: input.manualExpense ?? 0,
     latestSnapshot: input.latestSnapshot,
     pace: input.pace,
   })
@@ -108,6 +110,15 @@ describe('coerceMonthlyEstimatedIncome', () => {
     expect(coerceMonthlyEstimatedIncome(-1)).toBe(0)
     expect(coerceMonthlyEstimatedIncome(Number.NaN)).toBe(0)
     expect(coerceMonthlyEstimatedIncome('12000')).toBe(0)
+  })
+})
+
+describe('coerceMonthlyEstimatedExpense', () => {
+  it('coerces to positive normalized money', () => {
+    expect(coerceMonthlyEstimatedExpense(8000.505)).toBe(8000.51)
+    expect(coerceMonthlyEstimatedExpense(-500)).toBe(0)
+    expect(coerceMonthlyEstimatedExpense(Number.POSITIVE_INFINITY)).toBe(0)
+    expect(coerceMonthlyEstimatedExpense('8000')).toBe(0)
   })
 })
 
@@ -165,7 +176,13 @@ describe('buildDisposableEstimate', () => {
     expect(result.estimatedIncome).toBe(8000)
     expect(result.estimatedExpense).toBe(4000)
     expect(result.monthsSampled).toBe(3)
-    expect(result.disposable).toBe(6065.93)
+    // The current month already recorded a ¥50000 inflow ≥ the ¥8000 income
+    // estimate, so the income counts as fully received: nothing remains to be
+    // added on top of the realized net-worth position — the headline follows
+    // the period gap instead of re-adding income the net worth already holds.
+    expect(result.recognizedIncome).toBe(8000)
+    expect(result.remainingExpectedIncome).toBe(0)
+    expect(result.disposable).toBe(-1934.07)
     expect(result.confidence).toBe('high')
   })
 
@@ -458,5 +475,123 @@ describe('buildDisposableEstimate', () => {
     expect(result.currentPeriodDelta).toBeNull()
     expect(result.remainingExpectedIncome).toBe(6000)
     expect(result.disposable).toBe(1500)
+  })
+
+  it('does not double count a salary that landed early in the period', () => {
+    // Salary arrives and is recorded on day 1: the net worth already holds it
+    // (currentPeriodDelta jumped by the full income), so the recorded inflow
+    // marks the income as received. The old calendar-linear formula would have
+    // kept ~30/31 of the income "still expected" and produced ≈ ¥21678 —
+    // roughly 2×income − target — for the rest of the month.
+    const result = build({
+      snapshots: [snap('2026-07-01', 109000), snap('2026-07-02', 121000, 62000)],
+      summary: summary({
+        latestDate: '2026-07-02',
+        currentNetWorth: 121000,
+        currentPeriodActual: 12000,
+        currentPeriodRemaining: 0,
+        currentPeriodDelta: 10065.93,
+      }),
+      manualIncome: 12000,
+      accountOps: [adjust('2026-07-02T09:00:00.000Z', 'bank_card', 12000)],
+    })
+
+    expect(result.recognizedIncome).toBe(12000)
+    expect(result.remainingExpectedIncome).toBe(0)
+    expect(result.disposable).toBe(10065.93)
+    expect(result.disposable).toBeLessThanOrEqual(result.estimatedIncome ?? 0)
+  })
+
+  it('recognizes partially received income and keeps the rest as forecast', () => {
+    // ¥5000 of a ¥12000 income recorded so far: the remaining ¥7000 stays in
+    // the forecast on top of the realized position. The elapsed-fraction floor
+    // (12000 × 1/31 ≈ 387) is below the recorded inflow and does not apply.
+    const result = build({
+      snapshots: [snap('2026-07-01', 109000), snap('2026-07-02', 114000, 55000)],
+      summary: summary({
+        latestDate: '2026-07-02',
+        currentNetWorth: 114000,
+        currentPeriodActual: 5000,
+        currentPeriodRemaining: 0,
+        currentPeriodDelta: 3065.93,
+      }),
+      manualIncome: 12000,
+      accountOps: [adjust('2026-07-02T09:00:00.000Z', 'bank_card', 5000)],
+    })
+
+    expect(result.recognizedIncome).toBe(5000)
+    expect(result.remainingExpectedIncome).toBe(7000)
+    expect(result.disposable).toBe(10065.93)
+  })
+
+  it('keeps the calendar-elapsed floor for snapshot-only users with no flow records', () => {
+    // No recorded inflows: recognition falls back to the elapsed fraction so
+    // the estimate still converges on the realized gap by period end.
+    const result = build({
+      snapshots: [snap('2026-07-01', 109000), snap('2026-07-17', 109400)],
+      summary: summary({
+        latestDate: '2026-07-17',
+        currentNetWorth: 109400,
+        currentPeriodActual: 400,
+        currentPeriodRemaining: 1534.07,
+        currentPeriodDelta: -1534.07,
+      }),
+      manualIncome: 12000,
+    })
+
+    const elapsed = 16 / 31
+    expect(result.recognizedIncome).toBeCloseTo(normalizeMoney(12000 * elapsed), 2)
+    expect(result.remainingExpectedIncome).toBeCloseTo(normalizeMoney(12000 * (1 - elapsed)), 2)
+  })
+
+  it('prefers a manual expense override over the ops median', () => {
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: null,
+      manualExpense: 6000,
+      accountOps: [
+        adjust('2026-04-15T12:00:00.000Z', 'bank_card', -3000),
+        adjust('2026-05-15T12:00:00.000Z', 'bank_card', -5000),
+        adjust('2026-06-15T12:00:00.000Z', 'bank_card', -4000),
+      ],
+    })
+
+    expect(result.expenseSource).toBe('manual')
+    expect(result.estimatedExpense).toBe(6000)
+    // Downstream consumers follow the override: cash runway and the
+    // surplus-based income reconstruction.
+    expect(result.monthsOfExpenseCovered).toBe(8.3) // 50000 / 6000
+    expect(result.incomeSource).toBe('surplus')
+    expect(result.estimatedIncome).toBeCloseTo((result.monthlySurplus ?? 0) + 6000, 2)
+
+    const fromOps = build({
+      snapshots: monthlySnapshots,
+      summary: null,
+      accountOps: [
+        adjust('2026-04-15T12:00:00.000Z', 'bank_card', -3000),
+        adjust('2026-05-15T12:00:00.000Z', 'bank_card', -5000),
+        adjust('2026-06-15T12:00:00.000Z', 'bank_card', -4000),
+      ],
+    })
+    expect(fromOps.expenseSource).toBe('ops')
+    expect(fromOps.estimatedExpense).toBe(4000)
+  })
+
+  it('ignores receivable adjusts in flow inference (lending is not income)', () => {
+    // A growing receivable means cash lent out — counting it as inflow would
+    // invert the direction; the liquid side of a collection still counts.
+    const result = build({
+      snapshots: monthlySnapshots,
+      summary: summary(),
+      accountOps: [
+        adjust('2026-04-15T12:00:00.000Z', 'receivable', 5000),
+        adjust('2026-05-15T12:00:00.000Z', 'receivable', -2000),
+        adjust('2026-05-15T12:30:00.000Z', 'bank_card', 2000),
+      ],
+    })
+
+    expect(result.flowOpsUsed).toBe(1)
+    expect(result.estimatedIncome).toBe(2000)
+    expect(result.estimatedExpense).toBeNull()
   })
 })

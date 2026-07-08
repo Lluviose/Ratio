@@ -14,7 +14,7 @@ import {
   type SavingsPaceAlgorithm,
 } from '../lib/savingsGoal'
 import { DEFAULT_MONTH_START_DAY, MONTH_START_DAY_KEY, clampMonthStartDay } from '../lib/monthStart'
-import { MONTHLY_ESTIMATED_INCOME_KEY, coerceMonthlyEstimatedIncome } from '../lib/monthlyDisposable'
+import { MONTHLY_ESTIMATED_EXPENSE_KEY, MONTHLY_ESTIMATED_INCOME_KEY, coerceMonthlyEstimatedExpense, coerceMonthlyEstimatedIncome } from '../lib/monthlyDisposable'
 import {
   buildCurrentSnapshotStats,
   buildStatsRangeView,
@@ -65,6 +65,9 @@ export function StatsScreen(props: { snapshots: Snapshot[]; accountOps: AccountO
   const [monthlyEstimatedIncome, setMonthlyEstimatedIncome] = useLocalStorageState<number>(MONTHLY_ESTIMATED_INCOME_KEY, 0, {
     coerce: coerceMonthlyEstimatedIncome,
   })
+  const [monthlyEstimatedExpense, setMonthlyEstimatedExpense] = useLocalStorageState<number>(MONTHLY_ESTIMATED_EXPENSE_KEY, 0, {
+    coerce: coerceMonthlyEstimatedExpense,
+  })
   const [goalSheetOpen, setGoalSheetOpen] = useState(false)
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
@@ -114,9 +117,11 @@ export function StatsScreen(props: { snapshots: Snapshot[]; accountOps: AccountO
               monthStartDay={monthStartDay}
               paceAlgorithm={paceAlgorithm}
               manualIncome={monthlyEstimatedIncome}
+              manualExpense={monthlyEstimatedExpense}
               pace={pace}
               color={colors.invest}
               onChangeIncome={setMonthlyEstimatedIncome}
+              onChangeExpense={setMonthlyEstimatedExpense}
             />
           </motion.div>
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-08 - 月度可支配修正：发薪后收入双计、手动月支出、口径统一
+
+- 修复可支配头图的收入双重计入：对账公式此前假设收入随日历线性到账（`剩余预期收入 = 收入 × 未过天数比`），发薪日落账并记录后净值差额已含全额收入、剩余预期却仍近乎全额——把统计月起始日设为发薪日的用户整个上半月头图 ≈ 2×收入 − 目标。改为**收入确认制**：本期已记录的流动账户流入优先确认收入（工资一记录、剩余预期立刻归零），无流水记录时保留日历比例作下界（快照型用户月末仍收敛到与储蓄目标卡一致的缺口）。期初纯预测、期末对齐缺口这两个端点行为不变，只修正中段。
+- 流量分类收窄到 liquid 组：对应收款账户的正向 adjust（应收增加 = 钱借出去了）此前被计为收入流入，方向反了；回款的流动侧照常计入，信号不丢。
+- 新增手动月支出（`ratio.monthlyEstimatedExpense`）：支出阶梯变为手动 → 近月净流出中位数，卡片折叠表单扩为收入/支出两栏「收支基准」；手动支出同步作用于现金覆盖月数与净值反推收入。只对账不记明细的用户（收支都会被净额化低估）从此有校准入口。
+- 口径与文案：surplus 模式头图标签「本月净结余」→「月均结余」（值本就是净资产月均增速）；说明面板第一条改为面向用户的表述，并补充净额化对账会低估收支的提示。
+- 测试：`monthlyDisposable.test.ts` 17 → 25 例（发薪双计回归、部分到账确认、快照型用户日历下界、手动支出阶梯与下游联动、receivable 剔除、支出 coerce 边界；原「本期已有大额流入」用例改为断言确认制新语义）。
+- 已通过 `npm run lint`、`npm test`、`npm run build` 和 `npx playwright test` 验证。
+
 ## 2026-07-08 - 分包修复与图表瘦身：vendor 分包在 rolldown 下失效、recharts → 自绘 SVG
 
 - 修复 vendor 分包静默失效：rolldown 把函数式 `manualChunks` 转成 `includeDependenciesRecursively: true` 的 advancedChunks——被匹配模块的整棵依赖树并入该组，vendor 组永远抢不到已被屏幕组吞掉的 recharts/markdown，`vendor-charts`/`vendor-markdown` 分包名义存在实际为空（recharts 全量坐在 screen-trend 里 105KB gzip、markdown 全家桶坐在 ai-assistant 里 111KB，两者一起随屏幕代码每次发版重新下载）。改为显式 `advancedChunks` groups 且 vendor 组 priority 高于屏幕组（先抢依赖树），分包恢复、首包逐字节不变。

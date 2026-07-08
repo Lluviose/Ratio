@@ -191,7 +191,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - `src/lib/savingsGoal.ts`：目标、目标日期、进度、多算法速度估算（recent-window / monthly-close / monthly-smoothed / long-window，`smart` 自动选择）。
 - `src/lib/savingsGoalSimulation.ts`：目标模拟。
 - `src/lib/snapshotDerived.ts`：从快照派生统计区间、增长、覆盖率。
-- `src/lib/monthStart.ts`：统计月起始日；`src/lib/monthlyDisposable.ts`：月可支配估算。
+- `src/lib/monthStart.ts`：统计月起始日；`src/lib/monthlyDisposable.ts`：月可支配估算（收入阶梯：手动 → 流水中位数 → 净值反推；支出阶梯：手动 → 流水中位数；对账采用收入确认制——本期已记录流入优先、日历比例兜底，避免发薪落账后被双重计入）。
 - `src/lib/robustStats.ts`：稳健统计工具。
 
 ## 本地存储：内核与键
@@ -218,6 +218,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 | `ratio.savingsPaceAlgorithm` | 储蓄目标预测算法 |
 | `ratio.monthStartDay` | 统计月起始日 |
 | `ratio.monthlyEstimatedIncome` | 月收入估算 |
+| `ratio.monthlyEstimatedExpense` | 月支出估算（手动收支基准，0 = 未设置） |
 | `ratio.theme` | 当前主题（`matisse`/`matisse2`/`macke`/`mondrian`/`kandinsky`/`miro`/`random`） |
 | `ratio.tourSeen` | 是否看过引导 |
 | `ratio.hideAmounts` | 是否隐藏金额 |

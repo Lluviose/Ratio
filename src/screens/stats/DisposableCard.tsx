@@ -7,6 +7,7 @@ import type { Snapshot } from '../../lib/snapshots'
 import type { NetChangePace, SavingsGoalSummary, SavingsPaceAlgorithm } from '../../lib/savingsGoal'
 import {
   buildDisposableEstimate,
+  coerceMonthlyEstimatedExpense,
   coerceMonthlyEstimatedIncome,
   type DisposableConfidence,
   type DisposableEstimate,
@@ -48,6 +49,17 @@ function incomeSourceTag(source: DisposableEstimate['incomeSource']) {
   }
 }
 
+function expenseSourceTag(source: DisposableEstimate['expenseSource']) {
+  switch (source) {
+    case 'manual':
+      return '手动设定'
+    case 'ops':
+      return '近月净流出中位'
+    default:
+      return '变动记录不足'
+  }
+}
+
 function disposableHeroSub(estimate: DisposableEstimate) {
   if (estimate.headlineMode === 'empty') return '记录更多余额变化后开始估算'
   if (estimate.headlineMode === 'surplus') {
@@ -77,11 +89,13 @@ export function DisposableCard(props: {
   monthStartDay: number
   paceAlgorithm: SavingsPaceAlgorithm
   manualIncome: number
+  manualExpense: number
   pace: NetChangePace | null
   color: string
   onChangeIncome: (value: number) => void
+  onChangeExpense: (value: number) => void
 }) {
-  const { snapshots, accountOps, summary, latestSnapshot, monthStartDay, paceAlgorithm, manualIncome, pace, color, onChangeIncome } = props
+  const { snapshots, accountOps, summary, latestSnapshot, monthStartDay, paceAlgorithm, manualIncome, manualExpense, pace, color, onChangeIncome, onChangeExpense } = props
   const estimate = useMemo(
     () =>
       buildDisposableEstimate({
@@ -91,15 +105,17 @@ export function DisposableCard(props: {
         monthStartDay,
         paceAlgorithm,
         manualIncome,
+        manualExpense,
         latestSnapshot,
         pace,
       }),
-    [snapshots, accountOps, summary, monthStartDay, paceAlgorithm, manualIncome, latestSnapshot, pace],
+    [snapshots, accountOps, summary, monthStartDay, paceAlgorithm, manualIncome, manualExpense, latestSnapshot, pace],
   )
 
   const [explainOpen, setExplainOpen] = useState(false)
   const [editIncome, setEditIncome] = useState(false)
   const [inputValue, setInputValue] = useState(() => formatMonthlyIncomeInput(manualIncome))
+  const [expenseValue, setExpenseValue] = useState(() => formatMonthlyIncomeInput(manualExpense))
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -107,20 +123,33 @@ export function DisposableCard(props: {
     setError(null)
   }, [manualIncome])
 
+  useEffect(() => {
+    setExpenseValue(formatMonthlyIncomeInput(manualExpense))
+    setError(null)
+  }, [manualExpense])
+
   const saveIncome = () => {
-    const parsed = inputValue.trim() ? parseMoneyInput(inputValue) : 0
-    if (parsed == null || parsed < 0) {
+    const parsedIncome = inputValue.trim() ? parseMoneyInput(inputValue) : 0
+    if (parsedIncome == null || parsedIncome < 0) {
       setError('请输入不小于 0 的收入金额')
       return
     }
-    onChangeIncome(coerceMonthlyEstimatedIncome(parsed))
+    const parsedExpense = expenseValue.trim() ? parseMoneyInput(expenseValue) : 0
+    if (parsedExpense == null || parsedExpense < 0) {
+      setError('请输入不小于 0 的支出金额')
+      return
+    }
+    onChangeIncome(coerceMonthlyEstimatedIncome(parsedIncome))
+    onChangeExpense(coerceMonthlyEstimatedExpense(parsedExpense))
     setError(null)
     setEditIncome(false)
   }
 
   const clearIncome = () => {
     onChangeIncome(0)
+    onChangeExpense(0)
     setInputValue('')
+    setExpenseValue('')
     setError(null)
   }
 
@@ -128,7 +157,7 @@ export function DisposableCard(props: {
   const isEmpty = estimate.headlineMode === 'empty'
   const isSurplus = estimate.headlineMode === 'surplus'
 
-  const heroLabel = isSurplus ? '本月净结余' : '本月可支配'
+  const heroLabel = isSurplus ? '月均结余' : '本月可支配'
   const heroValueRaw = isSurplus ? estimate.monthlySurplus : estimate.disposable
   const heroValue = isEmpty
     ? '—'
@@ -208,12 +237,12 @@ export function DisposableCard(props: {
       </div>
 
       <ExplainPanel id="disposable-explain" open={explainOpen}>
-        <div><ExplainTerm>可支配</ExplainTerm> = 本期尚需收入 + 已实现净值对本期目标的差额。月初是“预估收入−目标”的预测；月末收入到账后与储蓄目标卡的本期缺口一致。</div>
+        <div><ExplainTerm>可支配</ExplainTerm> ≈ 本期还没到手的收入 + 目前净资产相对本期目标的盈亏。发工资前主要是预测；工资到账并记录后会自动转为按实际进度计算，月末与储蓄目标卡的本期缺口一致。</div>
         <div><ExplainTerm>预估月收入</ExplainTerm>：优先用你手动设置的金额；否则按流动账户的变动记录估算（已排除转账和投资估值波动）；记录不足时用净资产增长反推。</div>
-        <div><ExplainTerm>预估月支出</ExplainTerm>：取近几个月流动账户净流出的中位数，抗单月波动。</div>
+        <div><ExplainTerm>预估月支出</ExplainTerm>：优先用你手动设置的金额；否则取近几个月流动账户净流出的中位数，抗单月波动。</div>
         <div><ExplainTerm>月度结余</ExplainTerm>：净资产的月均增长，代表你实际存下的钱。</div>
         <div><ExplainTerm>本期应存</ExplainTerm>：储蓄目标路径在本月要求增加的净值；月末用它和已实现净值对账，避免预算停在期初预测。</div>
-        <div>收入/支出来自现金流量，结余来自净资产，口径不同、不一定相等；记录越多越准。</div>
+        <div>收入/支出来自现金流量，结余来自净资产，口径不同、不一定相等。如果你习惯只改余额、不记明细，收入和支出都会按净变化估算而偏低——可在下方手动设置收支基准。</div>
       </ExplainPanel>
 
       <div style={{ marginTop: 12 }}>
@@ -286,7 +315,7 @@ export function DisposableCard(props: {
           compact
           label="预估月支出"
           value={formatNullableCny(estimate.estimatedExpense)}
-          sub={estimate.estimatedExpense != null ? '近月净流出中位' : '变动记录不足'}
+          sub={expenseSourceTag(estimate.expenseSource)}
         />
         <MetricTile
           compact
@@ -314,7 +343,9 @@ export function DisposableCard(props: {
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
             <Pencil size={15} strokeWidth={2.5} />
             <span style={{ overflowWrap: 'anywhere' }}>
-              {manualIncome > 0 ? `已手动设置月收入 ${formatCny(manualIncome)}` : '手动设置月收入（可选）'}
+              {manualIncome > 0 || manualExpense > 0
+                ? `已手动设置${manualIncome > 0 ? ` 收入 ${formatCny(manualIncome)}` : ''}${manualExpense > 0 ? ` 支出 ${formatCny(manualExpense)}` : ''}`
+                : '手动设置收支基准（可选）'}
             </span>
           </span>
           <ChevronDown
@@ -336,7 +367,7 @@ export function DisposableCard(props: {
               }}
               style={{ overflow: 'hidden', display: 'grid', gap: 8, marginTop: 8 }}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto', gap: 8, alignItems: 'end', paddingTop: 2 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, paddingTop: 2 }}>
                 <label className="field" style={{ minWidth: 0 }}>
                   <div className="fieldLabel">预估月收入</div>
                   <input
@@ -350,14 +381,29 @@ export function DisposableCard(props: {
                     }}
                   />
                 </label>
-                <button type="submit" className="iconBtn iconBtnPrimary" aria-label="保存预估月收入" title="保存预估月收入" style={{ width: 48, height: 48, alignSelf: 'end' }}>
+                <label className="field" style={{ minWidth: 0 }}>
+                  <div className="fieldLabel">预估月支出</div>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="例如 8000"
+                    value={expenseValue}
+                    onChange={(e) => {
+                      setExpenseValue(e.target.value)
+                      setError(null)
+                    }}
+                  />
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="submit" className="iconBtn iconBtnPrimary" aria-label="保存收支基准" title="保存收支基准" style={{ width: 48, height: 48 }}>
                   <Save size={18} strokeWidth={2.6} />
                 </button>
-                <button type="button" className="iconBtn" aria-label="清空预估月收入" title="清空预估月收入" onClick={clearIncome} style={{ width: 48, height: 48, alignSelf: 'end' }}>
+                <button type="button" className="iconBtn" aria-label="清空收支基准" title="清空收支基准" onClick={clearIncome} style={{ width: 48, height: 48 }}>
                   <X size={18} strokeWidth={2.6} />
                 </button>
               </div>
-              <div className="muted" style={{ fontSize: 11, fontWeight: 600 }}>设置后将作为收入基准；留空则完全由记录估算。</div>
+              <div className="muted" style={{ fontSize: 11, fontWeight: 600 }}>设置后将作为收支基准；留空则完全由记录估算。</div>
               {error ? <div style={{ color: TONE.bad, fontSize: 12, fontWeight: 650 }}>{error}</div> : null}
             </motion.form>
           ) : null}

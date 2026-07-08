@@ -16,6 +16,7 @@ import {
 import type { Snapshot } from './snapshots'
 
 export const MONTHLY_ESTIMATED_INCOME_KEY = 'ratio.monthlyEstimatedIncome'
+export const MONTHLY_ESTIMATED_EXPENSE_KEY = 'ratio.monthlyEstimatedExpense'
 
 /** Trailing window for flow inference; ~6 months of account operations. */
 const FLOW_WINDOW_DAYS = 183
@@ -26,6 +27,8 @@ const MIN_FLOW_MONTHS = 2
 export type DisposableConfidence = 'high' | 'medium' | 'low' | 'none'
 /** Where the headline income figure came from. */
 export type DisposableIncomeSource = 'manual' | 'ops' | 'surplus' | 'none'
+/** Where the expense figure came from. */
+export type DisposableExpenseSource = 'manual' | 'ops' | 'none'
 /** Which goal signal produced the savings reservation. */
 export type DisposableTargetSource =
   | 'none'
@@ -56,6 +59,7 @@ export type DisposableEstimate = {
   estimatedIncome: number | null
   incomeSource: DisposableIncomeSource
   estimatedExpense: number | null
+  expenseSource: DisposableExpenseSource
   monthlySurplus: number | null
 
   // goal reservation
@@ -68,7 +72,15 @@ export type DisposableEstimate = {
   // period reconciliation (blends the income forecast with the realized net-worth
   // position so the headline tracks the savings status toward month-end instead of
   // staying pinned to a period-start forecast)
-  /** Income still expected this period = estimatedIncome × (1 − elapsed fraction). */
+  /**
+   * Income treated as already received this period: the larger of the recorded
+   * inflows this period and the calendar-elapsed fraction of estimatedIncome,
+   * capped at estimatedIncome. Recorded inflows keep a day-1 salary from being
+   * counted twice (once here, once in the net-worth delta); the elapsed-fraction
+   * floor keeps snapshot-only users converging by period end.
+   */
+  recognizedIncome: number | null
+  /** Income still expected this period = estimatedIncome − recognizedIncome. */
   remainingExpectedIncome: number | null
   /** currentNetWorth − path target at period end; null when not reconciling. */
   currentPeriodDelta: number | null
@@ -102,6 +114,8 @@ export type DisposableEstimateInput = {
   paceAlgorithm?: SavingsPaceAlgorithm
   /** Optional manual override stored at MONTHLY_ESTIMATED_INCOME_KEY; 0 = unset. */
   manualIncome?: number
+  /** Optional manual override stored at MONTHLY_ESTIMATED_EXPENSE_KEY; 0 = unset. */
+  manualExpense?: number
   latestSnapshot?: Snapshot | null
   /**
    * Precomputed net-change pace to reuse (shared with the goal summary when
@@ -112,6 +126,14 @@ export type DisposableEstimateInput = {
 }
 
 export function coerceMonthlyEstimatedIncome(value: unknown) {
+  return coerceMonthlyMoneySetting(value)
+}
+
+export function coerceMonthlyEstimatedExpense(value: unknown) {
+  return coerceMonthlyMoneySetting(value)
+}
+
+function coerceMonthlyMoneySetting(value: unknown) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0
   const normalized = normalizeMoney(value)
   return normalized > 0 ? normalized : 0
@@ -136,10 +158,13 @@ type MonthlyFlow = { monthKey: string; inflow: number; outflow: number }
 
 /**
  * Classify recorded account operations into per-month inflow / outflow on
- * spendable accounts. adjust deltas are the most transaction-like signal;
- * liquid set_balance net deltas are treated as reconciled cash flow. transfers
- * (internal) and rename are ignored, and set_balance on invest/fixed is dropped
- * because it usually reflects market revaluation rather than a real flow.
+ * spendable (liquid) accounts. adjust deltas are the most transaction-like
+ * signal; liquid set_balance net deltas are treated as reconciled cash flow.
+ * transfers (internal) and rename are ignored; set_balance on invest/fixed is
+ * dropped because it usually reflects market revaluation rather than a real
+ * flow; receivable adjusts are dropped because a growing receivable means cash
+ * lent out, not income received — counting it as inflow inverts the direction
+ * (collections still show up on the liquid side).
  */
 function classifyMonthlyFlows(
   accountOps: readonly AccountOp[],
@@ -158,7 +183,7 @@ function classifyMonthlyFlows(
     if (days == null || days > referenceDays || referenceDays - days > FLOW_WINDOW_DAYS) continue
 
     const groupId = getGroupIdByAccountType(op.accountType)
-    if (groupId !== 'liquid' && groupId !== 'receivable') continue
+    if (groupId !== 'liquid') continue
 
     let flow = 0
     if (op.kind === 'adjust') {
@@ -167,7 +192,7 @@ function classifyMonthlyFlows(
       // A reconciled liquid balance ≈ net cash flow since the last update. Skip
       // seeding entries (before === 0, e.g. recording an account's opening
       // balance), which are pre-existing money rather than new income.
-      if (groupId !== 'liquid' || op.before === 0) continue
+      if (op.before === 0) continue
       flow = subtractMoney(op.after, op.before)
     }
     if (flow === 0) continue
@@ -253,6 +278,7 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
   const monthStartDay = clampMonthStartDay(input.monthStartDay)
   const paceAlgorithm = input.paceAlgorithm ?? 'smart'
   const manual = coerceMonthlyEstimatedIncome(input.manualIncome ?? 0)
+  const manualExpense = coerceMonthlyEstimatedExpense(input.manualExpense ?? 0)
 
   // 1. Realized monthly surplus (net-worth velocity) via the shared pace engine.
   // A pace precomputed by the caller (and shared with the goal summary) is
@@ -283,9 +309,20 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
   const outflows = sample.map((m) => m.outflow).filter((v) => v > 0)
   const inflows = sample.map((m) => m.inflow).filter((v) => v > 0)
   const expenseMedian = outflows.length > 0 ? median(outflows) : null
-  const estimatedExpense = expenseMedian == null ? null : normalizeMoney(expenseMedian)
+  const opsExpense = expenseMedian == null ? null : normalizeMoney(expenseMedian)
   const incomeMedian = inflows.length > 0 ? median(inflows) : null
   const opsIncome = incomeMedian == null ? null : normalizeMoney(incomeMedian)
+
+  // Expense ladder: manual → ops outflow median → none.
+  let estimatedExpense: number | null = null
+  let expenseSource: DisposableExpenseSource = 'none'
+  if (manualExpense > 0) {
+    estimatedExpense = manualExpense
+    expenseSource = 'manual'
+  } else if (opsExpense != null) {
+    estimatedExpense = opsExpense
+    expenseSource = 'ops'
+  }
 
   // 4. Income fallback ladder: manual → ops inflow → surplus + expense → none.
   let estimatedIncome: number | null = null
@@ -329,8 +366,25 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
   const currentPeriodActual = summary ? summary.currentPeriodActual : null
   const currentPeriodTarget = canReconcile && summary ? summary.currentPeriodTarget : null
   const currentPeriodRemaining = canReconcile && summary ? summary.currentPeriodRemaining : null
-  const remainingExpectedIncome = estimatedIncome != null
-    ? normalizeMoney(estimatedIncome * (1 - periodElapsedFraction))
+
+  // Income recognition: once a salary lands and is recorded, the net-worth delta
+  // already reflects it — keeping the full income "still expected" would count it
+  // twice (headline ≈ 2×income − target for the rest of the period). Recorded
+  // inflows this period mark income as received; the calendar-elapsed fraction
+  // stays as a floor so snapshot-only users (no flow records) still converge to
+  // the savings-status gap by period end. Both share the monthStartDay bucketing,
+  // so the current flow month lines up with the goal's current period (the rare
+  // period clamped to the goal's own start date is an accepted approximation).
+  // Limitation: income visible in net worth but never recorded as an operation
+  // is still double counted until the elapsed-fraction floor catches up.
+  const currentPeriodInflow = currentMonthKey
+    ? flows.months.find((m) => m.monthKey === currentMonthKey)?.inflow ?? 0
+    : 0
+  const recognizedIncome = estimatedIncome != null
+    ? Math.min(estimatedIncome, Math.max(currentPeriodInflow, normalizeMoney(estimatedIncome * periodElapsedFraction)))
+    : null
+  const remainingExpectedIncome = estimatedIncome != null && recognizedIncome != null
+    ? Math.max(0, subtractMoney(estimatedIncome, recognizedIncome))
     : null
 
   // 6. Headline disposable.
@@ -381,11 +435,13 @@ export function buildDisposableEstimate(input: DisposableEstimateInput): Disposa
     estimatedIncome,
     incomeSource,
     estimatedExpense,
+    expenseSource,
     monthlySurplus,
     hasGoal: summary != null,
     requiredSavings,
     targetSource,
     savingsCovered,
+    recognizedIncome,
     remainingExpectedIncome,
     currentPeriodDelta,
     currentPeriodActual,
