@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
+import { TrendChart, type TrendChartSeries } from './TrendChart'
 import { PillTabs } from '../components/PillTabs'
 import { SegmentedControl } from '../components/SegmentedControl'
 import { EmptyState } from '../components/EmptyState'
@@ -42,7 +42,6 @@ type TrendMode = 'netDebt' | 'cashInvest'
 const DAYS_PER_MONTH = 30.4375
 const CHART_HEIGHT = 252
 const FORECAST_STROKE = '#059669'
-const FORECAST_AREA_FILL = '#64748b'
 
 const trendPageInitial = {
   opacity: 0,
@@ -144,7 +143,6 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
   const monthStartDay = clampMonthStartDay(monthStartDayRaw)
 
   const chartRef = useRef<HTMLDivElement | null>(null)
-  const activePointRef = useRef<TrendPoint | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
   const [selectedPointKey, setSelectedPointKey] = useState<string | null>(null)
 
@@ -197,9 +195,6 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     goalDateContext,
   } = chartDerived
   const xAxisDomainStart = view.domainStartDate ? dateKeyToUtcDays(view.domainStartDate) : null
-  const xAxisDomain: [number | 'dataMin', 'dataMax'] = xAxisDomainStart == null
-    ? ['dataMin', 'dataMax']
-    : [xAxisDomainStart, 'dataMax']
   const goalPaceText = !goalSummary
     ? ''
     : goalSummary.isComplete
@@ -405,21 +400,91 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
     )
   }
 
-  const getActivePointFromChartState = (state: unknown) => {
-    const activePayload = (state as { activePayload?: readonly unknown[] } | null)?.activePayload
-    return (activePayload?.[0] as { payload?: TrendPoint } | undefined)?.payload ?? null
-  }
+  const series = useMemo<TrendChartSeries[]>(() => {
+    if (mode === 'netDebt') {
+      const list: TrendChartSeries[] = []
+      if (goalSummary) {
+        list.push(
+          {
+            key: 'goalComparison',
+            getValue: (p) => p.goalComparison,
+            stroke: 'rgb(var(--ink-rgb) / 0.42)',
+            strokeWidth: 2.25,
+            strokeDasharray: '6 7',
+            curve: 'monotone',
+            connectNulls: false,
+            activeDot: false,
+          },
+          {
+            key: 'projectedBridgeNet',
+            getValue: (p) => p.projectedBridgeNet,
+            stroke: 'rgb(var(--ink-rgb) / 0.28)',
+            strokeWidth: 2,
+            strokeDasharray: '3 7',
+            curve: 'linear',
+            connectNulls: false,
+            activeDot: false,
+          },
+        )
+      }
+      list.push(
+        {
+          key: 'net',
+          getValue: (p) => p.net,
+          stroke: 'var(--primary)',
+          strokeWidth: 3.75,
+          curve: 'monotone',
+          connectNulls: true,
+          activeDot: { r: 6 },
+        },
+        {
+          key: 'debt',
+          getValue: (p) => p.debt,
+          stroke: colors.debt,
+          strokeWidth: 2.75,
+          curve: 'monotone',
+          connectNulls: true,
+          activeDot: { r: 5 },
+        },
+      )
+      if (goalSummary) {
+        list.push({
+          key: 'projectedNet',
+          getValue: (p) => p.projectedNet,
+          stroke: FORECAST_STROKE,
+          strokeWidth: 3,
+          strokeDasharray: '7 8',
+          curve: 'linear',
+          connectNulls: false,
+          activeDot: { r: 5, fill: FORECAST_STROKE },
+        })
+      }
+      return list
+    }
+    return [
+      {
+        key: 'cash',
+        getValue: (p) => p.cash,
+        stroke: colors.liquid,
+        strokeWidth: 3.75,
+        curve: 'monotone',
+        connectNulls: true,
+        activeDot: { r: 6 },
+      },
+      {
+        key: 'invest',
+        getValue: (p) => p.invest,
+        stroke: colors.invest,
+        strokeWidth: 3.75,
+        curve: 'monotone',
+        connectNulls: true,
+        activeDot: { r: 6 },
+      },
+    ]
+  }, [mode, goalSummary, colors.debt, colors.liquid, colors.invest])
 
-  const captureActivePoint = (props: unknown) => {
-    const payload = (props as { payload?: readonly unknown[] } | null)?.payload
-    activePointRef.current = (payload?.[0] as { payload?: TrendPoint } | undefined)?.payload ?? null
-    return null
-  }
-
-  const handleChartClick = (state: unknown) => {
-    const point = getActivePointFromChartState(state) ?? activePointRef.current
-    if (!point) return
-    setSelectedPointKey((current) => current === point.dateKey ? null : point.dateKey)
+  const handleSelectPoint = (point: TrendPoint) => {
+    setSelectedPointKey((current) => (current === point.dateKey ? null : point.dateKey))
   }
 
   return (
@@ -451,151 +516,20 @@ export function TrendScreen(props: { snapshots: Snapshot[]; colors: ThemeColors 
           transition={chartEntranceTransition}
         >
           {chartWidth > 0 && data.length > 0 ? (
-            <LineChart width={chartWidth} height={CHART_HEIGHT} data={data} margin={{ top: 22, right: 12, bottom: 10, left: -2 }} onClick={handleChartClick}>
-              <CartesianGrid vertical={false} stroke="rgba(100, 116, 139, 0.16)" strokeDasharray="2 10" />
-              {forecastArea ? (
-                <ReferenceArea x1={forecastArea.start} x2={forecastArea.end} fill={FORECAST_AREA_FILL} fillOpacity={0.055} strokeOpacity={0} />
-              ) : null}
-              {forecastStartValue != null ? (
-                <ReferenceLine x={forecastStartValue} stroke="rgba(100, 116, 139, 0.34)" strokeWidth={1.5} strokeDasharray="4 7" />
-              ) : null}
-              <XAxis
-                dataKey="dateValue"
-                type="number"
-                domain={xAxisDomain}
-                tickFormatter={(value) => getDateTickLabel(value, data, showYearInData)}
-                tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
-                axisLine={false}
-                tickLine={false}
-                dy={10}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: 'var(--muted-text)', fontWeight: 600 }}
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={(v) => `${Math.round(Number(v) / 10000)}w`}
-                dx={-6}
-              />
-              <Tooltip
-                content={captureActivePoint}
-                wrapperStyle={{ opacity: 0, visibility: 'hidden', pointerEvents: 'none' }}
-                cursor={{ stroke: 'rgb(var(--ink-rgb) / 0.16)', strokeWidth: 2, strokeDasharray: '4 6' }}
-              />
-              {mode === 'netDebt' ? (
-                <>
-                  {goalSummary ? (
-                    <>
-                      <Line
-                        type="monotone"
-                        dataKey="goalComparison"
-                        stroke="rgb(var(--ink-rgb) / 0.42)"
-                        strokeWidth={2.25}
-                        strokeDasharray="6 7"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        dot={false}
-                        activeDot={false}
-                        connectNulls={false}
-                        animationDuration={900}
-                        animationBegin={80}
-                        animationEasing="ease-out"
-                      />
-                      <Line
-                        type="linear"
-                        dataKey="projectedBridgeNet"
-                        stroke="rgb(var(--ink-rgb) / 0.28)"
-                        strokeWidth={2}
-                        strokeDasharray="3 7"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        dot={false}
-                        activeDot={false}
-                        connectNulls={false}
-                        animationDuration={700}
-                        animationBegin={160}
-                        animationEasing="ease-out"
-                      />
-                    </>
-                  ) : null}
-                  <Line
-                    type="monotone"
-                    dataKey="net"
-                    stroke="var(--primary)"
-                    strokeWidth={3.75}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    dot={{ r: 0, strokeWidth: 0, fill: 'var(--primary)' }}
-                    activeDot={{ r: 6, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
-                    connectNulls={true}
-                    animationDuration={1500}
-                    animationBegin={80}
-                    animationEasing="ease-out"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="debt"
-                    stroke={colors.debt}
-                    strokeWidth={2.75}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    dot={false}
-                    activeDot={{ r: 5, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
-                    connectNulls={true}
-                    animationDuration={1500}
-                    animationBegin={180}
-                    animationEasing="ease-out"
-                  />
-                  {goalSummary ? (
-                    <Line
-                      type="linear"
-                      dataKey="projectedNet"
-                      stroke={FORECAST_STROKE}
-                      strokeWidth={3}
-                      strokeDasharray="7 8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      dot={false}
-                      activeDot={{ r: 5, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)', fill: FORECAST_STROKE }}
-                      connectNulls={false}
-                      animationDuration={900}
-                      animationBegin={260}
-                      animationEasing="ease-out"
-                    />
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <Line
-                    type="monotone"
-                    dataKey="cash"
-                    stroke={colors.liquid}
-                    strokeWidth={3.75}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    dot={false}
-                    activeDot={{ r: 6, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
-                    connectNulls={true}
-                    animationDuration={1500}
-                    animationBegin={80}
-                    animationEasing="ease-out"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="invest"
-                    stroke={colors.invest}
-                    strokeWidth={3.75}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    dot={false}
-                    activeDot={{ r: 6, strokeWidth: 4, stroke: 'rgba(255, 255, 255, 0.95)' }}
-                    connectNulls={true}
-                    animationDuration={1500}
-                    animationBegin={180}
-                    animationEasing="ease-out"
-                  />
-                </>
-              )}
-            </LineChart>
+            <TrendChart
+              width={chartWidth}
+              height={CHART_HEIGHT}
+              data={data}
+              series={series}
+              xDomainStart={xAxisDomainStart}
+              forecastArea={forecastArea}
+              forecastStartValue={forecastStartValue}
+              formatXTick={(value) => getDateTickLabel(value, data, showYearInData)}
+              formatYTick={(v) => `${Math.round(v / 10000)}w`}
+              selectedPointKey={selectedPointKey}
+              onSelectPoint={handleSelectPoint}
+              animKey={`${mode}-${range}`}
+            />
           ) : (
             <EmptyState
               variant="trend"

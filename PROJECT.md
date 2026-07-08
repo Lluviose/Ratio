@@ -22,7 +22,7 @@ Ratio 是一个本地优先的个人资产/负债管理 PWA。核心数据保存
 ## 技术栈
 
 - 前端：React 19、TypeScript、Vite/Rolldown、Tailwind CSS 4、Framer Motion 12、lucide-react。
-- 图表/可视化：Recharts（趋势/统计）、Matter.js 0.20（气泡物理）。
+- 图表/可视化：自绘 SVG 折线图（趋势页，`src/screens/TrendChart.tsx` + `trendChartMath.ts`）、Matter.js 0.20（气泡物理）。
 - AI 聊天渲染：react-markdown、remark-gfm。
 - 测试：Vitest + jsdom + Testing Library；Playwright 端到端（chromium / mobile-chrome / mobile-safari 三项目）。
 - 后端：Node.js 20 原生 `http` 服务，无框架依赖。
@@ -137,11 +137,11 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 ### 懒加载与分包（vite.config.ts）
 
-- manualChunks：`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-charts`（recharts）、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载）。
+- 分包用显式 `advancedChunks` groups（`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载））。**不要改回函数式 manualChunks**：rolldown 会把它转成 `includeDependenciesRecursively: true` 的 advancedChunks，vendor 组的模块被屏幕组的依赖树抢走、分包名义存在实际为空；显式分组里 vendor 组 priority 高于屏幕组就是为了先抢依赖树。改动分包后核对构建输出的各分块体积（首包 index 不应明显变化）。
 - SW 更新采用 prompt 模式（`registerType: 'prompt'`，`skipWaiting: false`，`clientsClaim: true`）：新版本先 waiting，`src/pwa.ts` 弹「新版本已就绪」toast，用户点「立即更新」才接管并刷新；忽略则下次冷启动自然生效。更新检查在回到前台时触发（5 分钟节流 + 30 分钟兜底定时器），没有固定轮询。**不要改回 autoUpdate/skipWaiting**——那会在部署瞬间强刷正在输入的用户，也会复活首装 controllerchange 一类缺陷（见 TROUBLESHOOTING）。
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。
 - 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
-- **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 recharts/react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
+- **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
 
 ### React Compiler（作用域限定）
 
@@ -302,7 +302,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 | 金额计算 | `src/lib/money.ts`、`accountBalance.ts`、`format.ts`、`moneyExpression.ts` |
 | 资产页视图 | `src/screens/AssetsScreen.tsx`、`AssetsRatioPage.tsx`、`AssetsListPage.tsx`、`AssetsTypeDetailPage.tsx`、`BubbleChartPage.tsx` |
 | 账户详情/操作历史 | `src/components/AccountDetailSheet.tsx`（回滚语义在这里） |
-| 趋势/统计 | `src/screens/TrendScreen.tsx`、`StatsScreen.tsx`、`src/screens/stats/`、`src/lib/snapshotDerived.ts`、`savingsGoal.ts` |
+| 趋势/统计 | `src/screens/TrendScreen.tsx`、`TrendChart.tsx`（自绘 SVG 图表）、`StatsScreen.tsx`、`src/screens/stats/`、`src/lib/snapshotDerived.ts`、`savingsGoal.ts` |
 | 全局动效/手感 | `src/lib/motionPresets.ts`、`src/index.css`、`src/lib/useReducedMotion.ts`，规范见「动效系统」 |
 | 气泡物理 | `src/components/BubbleChartPhysics.tsx`、`src/screens/BubbleChartPage.tsx` |
 | 设置/备份 | `src/screens/SettingsScreen.tsx`、`src/lib/backup.ts`、`src/lib/cloud.ts` |
@@ -322,7 +322,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 3. `adjust` ≠ 单笔交易；`transfer` ≠ 收入/支出；统计与 AI 口径以快照为准。
 4. 金额写入前经 `money.ts` 规范化；任何路径都不允许产生负余额（`accountBalance.ts` 校验）。
 5. `localStorage` 读写保留 coerce/迁移；修改共享数据结构时同步更新备份、AI 上下文、统计和测试。
-6. 懒加载分包纪律：不把 trend/stats/settings/AI/recharts/markdown 拉回首包。
+6. 懒加载分包纪律：不把 trend/stats/settings/AI/markdown 拉回首包；分包配置是显式 advancedChunks（见「懒加载与分包」），不要改回函数式 manualChunks。
 7. 动效规范：只动 transform/opacity、离场快于入场、`layoutId` 按实例唯一、无限动画受减弱动态约束（三层机制见「动效系统」）。
 8. 几何敏感：`AssetsScreen` 插值链与 `AssetsRatioPage` 标签复刻是逐像素咬合的，微调前先读「前端架构」对应小节；`RatioExpandedPanel` 的 650ms 兜底定时器不可移除。
 9. 测试兼容：可见文本、role/aria、`data-testid` 是测试 API 的一部分。

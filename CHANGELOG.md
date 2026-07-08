@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-08 - 分包修复与图表瘦身：vendor 分包在 rolldown 下失效、recharts → 自绘 SVG
+
+- 修复 vendor 分包静默失效：rolldown 把函数式 `manualChunks` 转成 `includeDependenciesRecursively: true` 的 advancedChunks——被匹配模块的整棵依赖树并入该组，vendor 组永远抢不到已被屏幕组吞掉的 recharts/markdown，`vendor-charts`/`vendor-markdown` 分包名义存在实际为空（recharts 全量坐在 screen-trend 里 105KB gzip、markdown 全家桶坐在 ai-assistant 里 111KB，两者一起随屏幕代码每次发版重新下载）。改为显式 `advancedChunks` groups 且 vendor 组 priority 高于屏幕组（先抢依赖树），分包恢复、首包逐字节不变。
+- recharts → 自绘 SVG（新 `src/screens/TrendChart.tsx` + 纯几何模块 `trendChartMath.ts`）：趋势页是 recharts 唯一消费者，整库（含 d3 依赖树，~99KB gzip）只画一张折线图。自绘实现对齐原视觉语汇——d3 curveMonotoneX 同款 Fritsch–Carlson 单调插值（曲线不过冲出数据外的鼓包）、1/2/2.5/5×10ᵏ 整步长 y 刻度、横向虚线网格、预测参考区/分界线、按 x 最近点点选 + 虚线 cursor + 系列高亮点、描线入场动画（clipPath 揭示，减弱动态偏好下跳过）。x 轴刻度按绘图区宽度自适应数量，首尾标签锚点内收不再溢出。`recharts` 依赖删除，screen-trend 分包 105.34 → 12.32KB gzip（−88%），趋势页冷加载体积降一个量级；recharts accessibilityLayer 的焦点环 CSS 补丁一并移除（结构性消失）。
+- 测试：新增 `TrendChart.test.tsx` 8 例（y 刻度步长/覆盖域/退化、monotone 路径过点与不过冲、connectNulls 不断线、点选最近点回调、cursor/高亮点/网格/参考区渲染、0 基线刻度）；`TrendScreen.render.test.tsx` 从 mock recharts 改为 mock TrendChart，原语义断言（目标路径起点、connectNulls 约定）不变；视觉回归新增 trend 基线 2 张（matisse2 浅色 + 暗色，共 24 张），录制后逐张目检。
+- 文档：PROJECT.md 技术栈/「懒加载与分包」（显式 advancedChunks 纪律与 rolldown 递归吸附陷阱）/变更导航/不变量更新，AGENTS.md 体积纪律同步。
+- 已通过 `npm run lint`、`npm test`（33 文件 280 项）、`npm run build` 和 `npx playwright test`（功能 18 项全矩阵 + 视觉 24 项）验证；mobile-safari 的占比页 scrim 用例首跑抖动、单独复跑通过（TROUBLESHOOTING 已知项）。
+
 ## 2026-07-08 - 数据可靠性批次：落盘失败不再静默、本机滚动快照、iOS 连接防护、恢复预检
 
 - 存储内核落盘可靠性重做（`storageKernel.ts`）：失败的写入批次不再被丢弃——此前 `runFlush` 在事务提交前就清空队列、错误被吞、`flush()` 恒成功，「恢复备份/退出演示」可以假成功（刷新后读回旧数据且成功 toast 照常显示）。现在条目在提交成功前留在队列、由后续任意 flush 自动重试；写失败先重开一次连接再试；`flush()` 返回布尔，六处「写入后整页刷新」路径（导入备份/云端恢复/本机快照恢复/设置页进出演示/引导页进演示/演示徽章退出）在 false 时中止刷新并明确提示，进演示失败还会回滚内存态避免「界面演示、磁盘真实」分裂。

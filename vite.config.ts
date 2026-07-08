@@ -9,8 +9,8 @@ export default defineConfig(() => {
   const isUserOrOrgPagesRepo = Boolean(owner && repo && repo.toLowerCase() === `${owner.toLowerCase()}.github.io`)
   const base = repo && !isUserOrOrgPagesRepo ? `/${repo}/` : '/'
   const buildId = process.env.GITHUB_SHA?.slice(0, 7) ?? new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
-  const lazyChunkFilePattern = /(?:^|\/)(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown|vendor-matter)-.*\.js$/i
-  const lazyChunkPattern = /\/assets\/(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-charts|vendor-markdown|vendor-matter)-.*\.js$/i
+  const lazyChunkFilePattern = /(?:^|\/)(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-markdown|vendor-matter)-.*\.js$/i
+  const lazyChunkPattern = /\/assets\/(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-markdown|vendor-matter)-.*\.js$/i
 
   return {
     base,
@@ -25,29 +25,23 @@ export default defineConfig(() => {
       },
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            const normalized = id.replace(/\\/g, '/')
-
-            if (normalized.includes('/src/components/AiAssistant.tsx')) return 'ai-assistant'
-            if (normalized.includes('/src/screens/TrendScreen.tsx')) return 'screen-trend'
-            if (normalized.includes('/src/screens/StatsScreen.tsx') || normalized.includes('/src/screens/stats/')) return 'screen-stats'
-            if (normalized.includes('/src/screens/SettingsScreen.tsx')) return 'screen-settings'
-
-            if (normalized.includes('/node_modules/recharts/')) return 'vendor-charts'
-            if (normalized.includes('/node_modules/matter-js/')) return 'vendor-matter'
-            if (
-              normalized.includes('/node_modules/react-markdown/') ||
-              normalized.includes('/node_modules/remark-gfm/') ||
-              normalized.includes('/node_modules/micromark') ||
-              normalized.includes('/node_modules/mdast-util') ||
-              normalized.includes('/node_modules/unist-util') ||
-              normalized.includes('/node_modules/hast-util') ||
-              normalized.includes('/node_modules/property-information/') ||
-              normalized.includes('/node_modules/space-separated-tokens/') ||
-              normalized.includes('/node_modules/comma-separated-tokens/')
-            ) {
-              return 'vendor-markdown'
-            }
+          // rolldown 会把函数式 manualChunks 转成 includeDependenciesRecursively: true 的
+          // advancedChunks——被匹配模块的依赖树整体并入该组，vendor 组永远抢不到 recharts/markdown
+          // （它们已随屏幕组被吞），分包名义存在实际为空。这里显式声明并关掉递归吸附，
+          // 恢复「只有被 test 命中的模块进组」的旧 manualChunks 语义。
+          advancedChunks: {
+            groups: [
+              { name: 'vendor-matter', test: /[\\/]node_modules[\\/]matter-js[\\/]/, priority: 10 },
+              {
+                name: 'vendor-markdown',
+                test: /[\\/]node_modules[\\/](?:react-markdown[\\/]|remark-gfm[\\/]|micromark|mdast-util|unist-util|hast-util|property-information[\\/]|space-separated-tokens[\\/]|comma-separated-tokens[\\/])/,
+                priority: 10,
+              },
+              { name: 'ai-assistant', test: /[\\/]src[\\/]components[\\/]AiAssistant\.tsx/, priority: 1 },
+              { name: 'screen-trend', test: /[\\/]src[\\/]screens[\\/]TrendScreen\.tsx/, priority: 1 },
+              { name: 'screen-stats', test: /[\\/]src[\\/]screens[\\/](?:StatsScreen\.tsx|stats[\\/])/, priority: 1 },
+              { name: 'screen-settings', test: /[\\/]src[\\/]screens[\\/]SettingsScreen\.tsx/, priority: 1 },
+            ],
           },
         },
       },
@@ -80,7 +74,6 @@ export default defineConfig(() => {
             '**/screen-trend-*.js',
             '**/screen-stats-*.js',
             '**/screen-settings-*.js',
-            '**/vendor-charts-*.js',
             '**/vendor-markdown-*.js',
             '**/vendor-matter-*.js',
           ],

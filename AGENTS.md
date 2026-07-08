@@ -39,7 +39,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 
 体积与性能：
 
-- 趋势、统计、设置、AI 助手是懒加载分包（`vite.config.ts` manualChunks），不要从首包代码新增对它们的静态 import。
+- 趋势、统计、设置、AI 助手是懒加载分包（`vite.config.ts` 的显式 `advancedChunks` groups，不要改回函数式 manualChunks——rolldown 下 vendor 分包会失效，原因见 PROJECT.md「懒加载与分包」），不要从首包代码新增对它们或 react-markdown/matter-js 的静态 import。
 - React Compiler 只编译懒屏幕树，范围集中在 `react-compiler.shared.ts`（vite 与 vitest 共用，不要在两处分别改）；审计工具 `node scripts/compiler-report.mjs`。详见 PROJECT.md「React Compiler」。
 - 动画只动 transform/opacity；离场要快于入场；`layoutId` 必须按实例/条目唯一。规范见 PROJECT.md「动效系统」。
 

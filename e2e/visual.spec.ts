@@ -124,6 +124,13 @@ async function gotoStats(page: Page) {
   await page.waitForTimeout(1400)
 }
 
+async function gotoTrend(page: Page) {
+  await page.getByRole('button', { name: 'trend' }).dispatchEvent('click')
+  await expect(page.locator('.iosTrendPage').first()).toBeVisible({ timeout: 10_000 })
+  // 等自绘 SVG 图表测宽渲染 + 入场动画（reduced motion 下跳过描线）
+  await page.waitForTimeout(1400)
+}
+
 const SHOT = { maxDiffPixelRatio: 0.02 } as const
 
 for (const theme of THEMES) {
@@ -160,6 +167,18 @@ test('dark mode: stats', async ({ page }) => {
   await prepare(page, { theme: 'matisse2', colorMode: 'dark' })
   await gotoStats(page)
   await expect(page).toHaveScreenshot('dark-stats.png', SHOT)
+})
+
+test('theme matisse2: trend', async ({ page }) => {
+  await prepare(page, { theme: 'matisse2' })
+  await gotoTrend(page)
+  await expect(page).toHaveScreenshot('matisse2-trend.png', SHOT)
+})
+
+test('dark mode: trend', async ({ page }) => {
+  await prepare(page, { theme: 'matisse2', colorMode: 'dark' })
+  await gotoTrend(page)
+  await expect(page).toHaveScreenshot('dark-trend.png', SHOT)
 })
 
 test('dark mode: settings', async ({ page }) => {

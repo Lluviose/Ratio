@@ -85,7 +85,7 @@ test('returns to assets when backing out of stats before it finishes loading', a
   await expectAssetsHomeVisible(page)
 
   // The stats screen loads via a StatsScreen-* facade that pulls in the
-  // screen-stats chunk (vite.config.ts manualChunks); delay either file so
+  // screen-stats chunk (vite.config.ts advancedChunks); delay either file so
   // backing out mid-load is actually exercised.
   await page.route(/\/assets\/(?:StatsScreen|screen-stats)-.*\.js$/, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 900))

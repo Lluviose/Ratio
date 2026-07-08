@@ -612,16 +612,10 @@ a {
     linear-gradient(90deg, rgba(148, 163, 184, 0.08), rgb(var(--glass-rgb) / 0) 58%);
 }
 
-.iosTrendChartCard .recharts-wrapper {
+.iosTrendChartCard .trendChartSvg {
   position: relative;
   z-index: 1;
-}
-
-/* recharts v3 的 accessibilityLayer 让图表元素可聚焦：鼠标点选数据点时，
-   浏览器默认焦点环会框住 ReferenceArea/Surface（暗色 color-scheme 下是
-   一圈亮白矩形）。只消鼠标路径的焦点环，键盘 :focus-visible 保留。 */
-.iosTrendChartCard :focus:not(:focus-visible) {
-  outline: none;
+  display: block;
 }
 
 .iosTrendDetailPanel {

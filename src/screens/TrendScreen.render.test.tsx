@@ -1,40 +1,27 @@
-import type { ReactNode } from 'react'
 import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MONTH_START_DAY_KEY } from '../lib/monthStart'
 import { SAVINGS_GOAL_KEY, type SavingsGoal } from '../lib/savingsGoal'
 import type { Snapshot } from '../lib/snapshots'
 import { realThemeOptions } from '../lib/themes'
+import type { TrendChartSeries } from './TrendChart'
+import type { TrendPoint } from './trendGoalLines'
 import { TrendScreen } from './TrendScreen'
 
-type MockRechartsProps = {
-  children?: ReactNode
-  data?: Array<Record<string, unknown>>
-  dataKey?: string
-  connectNulls?: boolean
-}
-
-const rechartsState = vi.hoisted(() => ({
-  charts: [] as Array<{ data: Array<Record<string, unknown>> }>,
-  lines: [] as MockRechartsProps[],
+const chartState = vi.hoisted(() => ({
+  charts: [] as Array<{ data: TrendPoint[]; series: TrendChartSeries[] }>,
 }))
 
-vi.mock('recharts', () => ({
-  CartesianGrid: () => null,
-  LineChart: (props: MockRechartsProps) => {
-    rechartsState.charts.push({ data: props.data ?? [] })
-    return <div data-testid="line-chart">{props.children}</div>
-  },
-  ReferenceArea: () => null,
-  ReferenceLine: () => null,
-  Tooltip: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-  Line: (props: MockRechartsProps) => {
-    rechartsState.lines.push(props)
-    return <div data-testid={`line-${props.dataKey}`} />
-  },
-}))
+vi.mock('./TrendChart', async (importOriginal) => {
+  const original = await importOriginal<typeof import('./TrendChart')>()
+  return {
+    ...original,
+    TrendChart: (props: { data: TrendPoint[]; series: TrendChartSeries[] }) => {
+      chartState.charts.push({ data: props.data, series: props.series })
+      return <div data-testid="trend-chart" />
+    },
+  }
+})
 
 const goal: SavingsGoal = {
   targetAmount: 200000,
@@ -58,8 +45,7 @@ function snapshot(date: string, net: number): Snapshot {
 
 describe('TrendScreen rendering', () => {
   beforeEach(() => {
-    rechartsState.charts.length = 0
-    rechartsState.lines.length = 0
+    chartState.charts.length = 0
     window.localStorage.clear()
     window.localStorage.setItem(SAVINGS_GOAL_KEY, JSON.stringify(goal))
     window.localStorage.setItem(MONTH_START_DAY_KEY, JSON.stringify(8))
@@ -106,9 +92,12 @@ describe('TrendScreen rendering', () => {
       await Promise.resolve()
     })
 
-    expect(rechartsState.lines.some((line) => line.dataKey === 'net')).toBe(true)
+    const chart = chartState.charts.at(-1)
+    expect(chart).toBeDefined()
+    const series = chart!.series
+    expect(series.some((s) => s.key === 'net')).toBe(true)
 
-    const chartData = rechartsState.charts.at(-1)?.data ?? []
+    const chartData = chart!.data
     const latestPoint = chartData.find((point) => point.dateKey === '2026-06-05')
     expect(chartData.find((point) => point.dateKey === '2026-05-07')?.net).toBe(110000)
     expect(latestPoint?.net).toBe(120000)
@@ -117,8 +106,8 @@ describe('TrendScreen rendering', () => {
     // 目标路径线从最新记录日出发，起点对齐实际净值
     expect(latestPoint?.goalComparison).toBe(120000)
 
-    expect(rechartsState.lines.find((line) => line.dataKey === 'net')?.connectNulls).toBe(true)
-    expect(rechartsState.lines.find((line) => line.dataKey === 'debt')?.connectNulls).toBe(true)
-    expect(rechartsState.lines.find((line) => line.dataKey === 'goalComparison')?.connectNulls).toBe(false)
+    expect(series.find((s) => s.key === 'net')?.connectNulls).toBe(true)
+    expect(series.find((s) => s.key === 'debt')?.connectNulls).toBe(true)
+    expect(series.find((s) => s.key === 'goalComparison')?.connectNulls).toBe(false)
   })
 })
