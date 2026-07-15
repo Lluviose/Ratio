@@ -17,8 +17,10 @@ Ratio 是本地优先的个人资产/负债管理 PWA。前端核心数据在浏
 
 ```bash
 npm run build      # tsc -b + vite build，约 5-10s，产物分包见 PROJECT.md「懒加载与分包」
-npm test           # Vitest 单测，当前 25 个文件 / 187 个用例，约 40-50s（jsdom 环境启动占大头）
+npm run check:bundle # build 后检查真实懒加载边界与 gzip 体积预算
+npm test           # Vitest 单测，当前 33 个文件 / 286 个用例；固定 2 workers，约 2-3 分钟
 npm run lint       # eslint .，应零输出通过
+npm --prefix server run check # 服务端语法检查 + 真实 HTTP 集成测试
 npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约 2 分钟；首次运行会 build + preview
 ```
 
@@ -39,7 +41,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 
 体积与性能：
 
-- 趋势、统计、设置、AI 助手是懒加载分包（`vite.config.ts` 的显式 `advancedChunks` groups，不要改回函数式 manualChunks——rolldown 下 vendor 分包会失效，原因见 PROJECT.md「懒加载与分包」），不要从首包代码新增对它们或 react-markdown/matter-js 的静态 import。
+- 趋势、统计、设置、AI 助手是懒加载分包（`vite.config.ts` 的显式 `advancedChunks` groups，且 `includeDependenciesRecursively` 必须保持 `false`；不要改回函数式 manualChunks），不要从首包代码新增对它们或 react-markdown/matter-js 的静态 import。改分包后必须 `npm run build && npm run check:bundle`。
 - React Compiler 只编译懒屏幕树，范围集中在 `react-compiler.shared.ts`（vite 与 vitest 共用，不要在两处分别改）；审计工具 `node scripts/compiler-report.mjs`。详见 PROJECT.md「React Compiler」。
 - 动画只动 transform/opacity；离场要快于入场；`layoutId` 必须按实例/条目唯一。规范见 PROJECT.md「动效系统」。
 

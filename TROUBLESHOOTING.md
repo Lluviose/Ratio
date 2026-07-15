@@ -71,8 +71,8 @@
 
 处理：
 
-- 负载高时用 `npx vitest --run --no-file-parallelism` 串行验证（环境启动占大头，总时长 ~7 分钟）；CI 双核机器 worker 数少，不受影响。
-- 长期缓解：跑全量单测前关掉模拟器等大户，或 `--maxWorkers=2` 降低并发。
+- `vitest.config.ts` 已固定 `maxWorkers: 2`，默认 `npm test` 直接走稳定配置；当前全量约 2-3 分钟。
+- 若极端高负载下仍冻结，用 `npx vitest --run --no-file-parallelism` 串行验证（环境启动占大头，总时长会明显增加），并先关闭模拟器等大户。
 
 ## E2E 不稳定：Windows 无头 WebKit 下 `toBeHidden` 偶发超时
 

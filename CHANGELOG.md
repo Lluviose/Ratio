@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-07-15 - 工程门禁升级：服务端集成测试、真实懒加载审计、移动 CI、依赖清零
+
+- 服务端建立可测试入口：`server/src/server.js` 新增 `createServer()` / `startServer()`，被测试导入时不再自动占用端口，`node src/server.js` 的生产启动行为保持不变。新增 Node `node:test` 真实 HTTP 集成测试，使用临时数据目录和随机端口覆盖健康检查、注册/认证、备份上传下载、`expectedUpdatedAt` 冲突、缺失凭据与损坏 JSON；`npm --prefix server run check` 同时执行语法检查和 4 项集成测试。
+- ESLint 扩展到 `server/**/*.js` 与 `scripts/**/*.mjs`（Node ESM globals），服务端不再处于零规则状态。CI 新增服务端检查、`npm audit --audit-level=high`、构建分包门禁，并把 Playwright 从仅 desktop chromium 扩为 desktop chromium + mobile-chrome；Windows WebKit 继续按已知节流问题留在本地全矩阵。
+- 依赖安全升级：Vitest `4.0.16 → 4.1.10`、PostCSS `8.5.6 → 8.5.19`，并刷新可安全升级的传递依赖；`npm audit` 从 18 项（1 critical / 10 high / 6 moderate / 1 low）降为 0。新增每周 Dependabot，minor/patch 合并分组以控制 PR 噪音。
+- 新增 `scripts/check-bundle-budget.mjs`：从 `dist/index.html` 精确定位入口，校验 AI/趋势/统计/设置/markdown/matter 六类懒块存在且非空，检查各块 gzip 预算，并拒绝入口对懒块的静态 import。
+- 门禁在建立基线时发现一个真实分包回归：`advancedChunks` 注释声称关闭递归吸附，但实际遗漏 `includeDependenciesRecursively: false`；Rolldown 默认值为 true，导致入口静态 import AI/趋势/统计/设置/markdown 五个“懒块”，首开实际下载约 276 KiB gzip。补上显式 false 后入口只静态依赖 0.4 KiB runtime，真实首开闭包约 159 KiB gzip，六类懒块恢复按需加载；构建预算以修正后的真实依赖边界为基线。
+- Vitest 默认限制为 2 workers，并排除独立的 `server/` Node 测试，避免 Windows 高负载下 fork worker 启动超时。验证通过：`npm run lint`、`npm --prefix server run check`、`npm test`（33 文件 / 286 项）、`npm run build && npm run check:bundle`、Playwright desktop/mobile Chromium 12 项与 mobile-safari 6 项。
+
 ## 2026-07-08 - 月度可支配修正：发薪后收入双计、手动月支出、口径统一
 
 - 修复可支配头图的收入双重计入：对账公式此前假设收入随日历线性到账（`剩余预期收入 = 收入 × 未过天数比`），发薪日落账并记录后净值差额已含全额收入、剩余预期却仍近乎全额——把统计月起始日设为发薪日的用户整个上半月头图 ≈ 2×收入 − 目标。改为**收入确认制**：本期已记录的流动账户流入优先确认收入（工资一记录、剩余预期立刻归零），无流水记录时保留日历比例作下界（快照型用户月末仍收敛到与储蓄目标卡一致的缺口）。期初纯预测、期末对齐缺口这两个端点行为不变，只修正中段。

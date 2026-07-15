@@ -2,6 +2,7 @@ import http from 'node:http'
 import { mkdir, readFile, rename, stat, writeFile, appendFile, unlink, open, readdir, rm } from 'node:fs/promises'
 import { createHash, pbkdf2, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { adminCss, adminDisabledHtml, adminHtml, adminJs } from './adminConsole.js'
 
@@ -2159,9 +2160,7 @@ async function route(req, res) {
   fail(res, 404, 'Not found', 'not_found')
 }
 
-await ensureDataDir()
-
-const server = http.createServer((req, res) => {
+function requestHandler(req, res) {
   route(req, res).catch((error) => {
     // 兜底处理器自身绝不能再抛：这里抛出会成为 unhandled rejection 并终止进程。
     try {
@@ -2174,8 +2173,38 @@ const server = http.createServer((req, res) => {
       res.destroy()
     }
   })
-})
+}
 
-server.listen(PORT, HOST, () => {
-  console.log(`ratio-server listening on ${HOST}:${PORT}`)
-})
+/** Create an HTTP server without binding a port. Useful for integration tests. */
+export async function createServer() {
+  await ensureDataDir()
+  return http.createServer(requestHandler)
+}
+
+/** Start the production server and return the bound instance for graceful shutdown. */
+export async function startServer({ port = PORT, host = HOST } = {}) {
+  const server = await createServer()
+  await new Promise((resolve, reject) => {
+    const onError = (error) => {
+      server.off('listening', onListening)
+      reject(error)
+    }
+    const onListening = () => {
+      server.off('error', onError)
+      console.log(`ratio-server listening on ${host}:${port}`)
+      resolve()
+    }
+    server.once('error', onError)
+    server.once('listening', onListening)
+    server.listen(port, host)
+  })
+  return server
+}
+
+const isMain = process.argv[1] && pathToFileURL(fileURLToPath(import.meta.url)).href === pathToFileURL(process.argv[1]).href
+if (isMain) {
+  startServer().catch((error) => {
+    console.error('[ratio-server] failed to start', error)
+    process.exitCode = 1
+  })
+}

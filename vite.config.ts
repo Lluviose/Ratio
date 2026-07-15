@@ -18,6 +18,9 @@ export default defineConfig(() => {
       __APP_BUILD__: JSON.stringify(buildId),
     },
     build: {
+      // Gzip budgets and lazy-boundary checks are enforced by scripts/check-bundle-budget.mjs.
+      // The eager entry is intentionally just over Rolldown's generic 500 kB raw warning.
+      chunkSizeWarningLimit: 550,
       modulePreload: {
         resolveDependencies(_filename, deps) {
           return deps.filter((dep) => !lazyChunkFilePattern.test(dep))
@@ -30,6 +33,12 @@ export default defineConfig(() => {
           // （它们已随屏幕组被吞），分包名义存在实际为空。这里显式声明并关掉递归吸附，
           // 恢复「只有被 test 命中的模块进组」的旧 manualChunks 语义。
           advancedChunks: {
+            // Rolldown defaults this to true, which recursively pulls each matched screen's
+            // dependencies into that group. Shared modules can then be owned by a lazy group,
+            // forcing the entry chunk to statically import the very chunks we meant to defer.
+            // Keep matching exact: vendor groups claim vendor modules, screen groups claim only
+            // their screen modules, and the normal chunk graph preserves the lazy boundaries.
+            includeDependenciesRecursively: false,
             groups: [
               { name: 'vendor-matter', test: /[\\/]node_modules[\\/]matter-js[\\/]/, priority: 10 },
               {

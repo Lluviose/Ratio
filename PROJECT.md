@@ -35,8 +35,10 @@ Ratio 是一个本地优先的个人资产/负债管理 PWA。核心数据保存
 npm ci
 npm run dev        # http://localhost:5173
 npm run build      # tsc -b && vite build
-npm test           # Vitest --run（25 文件 / 187 用例；数字随开发漂移，量级异常时警惕环境问题）
+npm run check:bundle # build 后检查真实懒加载边界与 gzip 预算
+npm test           # Vitest --run（33 文件 / 286 用例；固定 2 workers，约 2-3 分钟）
 npm run lint       # eslint .
+npm --prefix server run check # 服务端语法检查 + 真实 HTTP 集成测试
 npm run test:e2e   # Playwright（会自行 build + preview 在 127.0.0.1:4173）
 ```
 
@@ -137,7 +139,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 ### 懒加载与分包（vite.config.ts）
 
-- 分包用显式 `advancedChunks` groups（`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载））。**不要改回函数式 manualChunks**：rolldown 会把它转成 `includeDependenciesRecursively: true` 的 advancedChunks，vendor 组的模块被屏幕组的依赖树抢走、分包名义存在实际为空；显式分组里 vendor 组 priority 高于屏幕组就是为了先抢依赖树。改动分包后核对构建输出的各分块体积（首包 index 不应明显变化）。
+- 分包用显式 `advancedChunks` groups（`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载））。**不要改回函数式 manualChunks，并保持 `includeDependenciesRecursively: false`**：rolldown 默认递归吸附依赖；若未显式关闭，入口会反向静态 import 名义上的懒块，浏览器首开实际把 AI/趋势/统计/设置/markdown 全部下载。vendor 组 priority 高于屏幕组，确保 vendor 先认领依赖。`npm run check:bundle` 会检查六个懒块存在、gzip 预算及入口无静态反向引用；改分包后必须先 build 再跑该门禁。
 - SW 更新采用 prompt 模式（`registerType: 'prompt'`，`skipWaiting: false`，`clientsClaim: true`）：新版本先 waiting，`src/pwa.ts` 弹「新版本已就绪」toast，用户点「立即更新」才接管并刷新；忽略则下次冷启动自然生效。更新检查在回到前台时触发（5 分钟节流 + 30 分钟兜底定时器），没有固定轮询。**不要改回 autoUpdate/skipWaiting**——那会在部署瞬间强刷正在输入的用户，也会复活首装 controllerchange 一类缺陷（见 TROUBLESHOOTING）。
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。
 - 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
@@ -276,11 +278,11 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 单元/组件测试（Vitest + jsdom）：
 
-- 与源码同目录，命名 `*.test.ts(x)`；全局 setup 在 `src/test/setup.ts`；`vitest.config.ts` 排除 `e2e/`。
+- 与源码同目录，命名 `*.test.ts(x)`；全局 setup 在 `src/test/setup.ts`；`vitest.config.ts` 排除 `e2e/` 与独立的 `server/` Node 测试，并固定 `maxWorkers: 2` 避免 Windows 高负载 fork 冻结。
 - 组件测试通过可见文本、role/aria 查询 DOM——改文案或语义属性会直接打破测试。
 - 纯函数不变量用 fast-check 性质测试（`percent`、`money`、`ratioBreakdown` 已有首批），新增分配/金额类算法时优先补性质而非枚举用例。
 
-持续集成（`.github/workflows/ci.yml`）：PR 与 main push 上跑 lint + 单测 + 构建 + Playwright chromium 项目；mobile-safari 只在本地跑（原因见 TROUBLESHOOTING.md）。
+持续集成（`.github/workflows/ci.yml`）：PR 与 main push 上跑依赖高危审计、前后端 lint/测试、构建、分包体积门禁，以及 Playwright desktop chromium + mobile-chrome；mobile-safari 只在本地跑（原因见 TROUBLESHOOTING.md）。Dependabot 每周把 npm minor/patch 更新分组提 PR。
 
 端到端（Playwright）：
 
