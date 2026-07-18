@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-07-19 - P1-6 快照管线速效修复：消除三重规范化写放大
+
+- 每次记账的快照管线此前对全部历史快照做三遍完整规范化：coerce 读取一遍（必要，保留）、`useSnapshots` 的 `normalized` useMemo 再 map 一遍（纯冗余，已删除）、`upsertSnapshot` 对历史逐条 normalize 第三遍（已改为信任输入只规范化新条目，保留轻量日期过滤兜底）。生产两个调用方（useSnapshots 状态、App `liveSnapshots`）的输入恒为 coerce 后的规范化数据，语义不变；4 年日更 × 20 账户规模下每次记账从约 9 万次字段规范化降为单条。
+- 新增契约测试：`withAccountSnapshot` 未涉及的历史条目保持引用不变（`toBe` 断言），防止未来无意恢复全量重建。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（33 文件 288 项）验证。
+
+## 2026-07-19 - P0 止血批次：Docker 数据卷兜底、云同步 fast-forward、原型链用户名、反代自检
+
+- 全维度体检产出 `IMPROVEMENT.md` 改进计划（前端质量/数据层/性能/后端安全/测试工程化五路并行分析汇总），本批为其中 P0 四项。
+- Docker 数据卷兜底（`server/Dockerfile`）：镜像内显式 `ENV RATIO_DATA_DIR=/data RATIO_HOST=0.0.0.0` + `VOLUME /data`——此前这两项只在 docker-compose.yml 配置，绕过 compose 直接 `docker run` 时数据默认写进容器可写层（`/app/data`），容器重建即丢全部用户云备份，且 `127.0.0.1` 监听导致端口映射后不可达。
+- 云同步 fast-forward（`cloudSync.ts`）：本地 clean（无脏标记）而云端有更新时——换设备的正常场景——自动应用远端备份，不再标 conflict 停摆自动同步逼用户手动「从云端恢复」。安全约束：仅 probe 路径（本地确认 clean）允许；应用前二查脏标记（网络往返期间用户写入即放弃）、内容预检（空/损坏远端不静默覆盖，与手动恢复同口径）、先抢一代 pre 本机快照；恢复写入以 `suppressDirtyMarking` 抑制自家监听器标脏，避免刚下载的数据被回传上传。应用后 toast 告知「已同步来自其他设备的云端更新」。首次连接（无 `lastBackupAt`）与真冲突（双方都有修改）维持原人工流程。
+- 服务端原型链用户名（`server.js`）：用户名正则放行 `__proto__`/`toString` 等 `Object.prototype` 属性名，认证读 `users.users[username]` 命中继承属性后 `verifyPassword` 抛 TypeError → 500，注册路径存在 `__proto__` 原型赋值隐患。用户表读取统一走 `getUserRecord()`（`Object.hasOwn` 只认自有属性，覆盖认证/重哈希/注册/管理台查改删 9 处），注册与管理台建号额外拉黑 `__proto__`/`constructor`/`prototype`。
+- 反代自检（`server.js`）：未开 `RATIO_TRUST_PROXY` 时若发现来自 loopback 的请求携带 `x-forwarded-for`（反代部署特征），console.warn 一次性提示「全部客户端共享同一限流/锁定桶」；启动日志追加 `trustProxy` 状态。
+- 测试：`cloudSync.test.ts` 12 → 13 例（原「clean 设备遇远端更新 → conflict」改为断言 fast-forward 语义 + 恢复写入不标脏不回传；新增空备份拒绝 fast-forward 维持冲突流程）；server 集成测试 4 → 5 例（原型链用户名注册 400、认证 401 而非 500、正常用户不受影响）。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（33 文件 287 项）、`npm --prefix server run check`（5 项）验证。
+
 ## 2026-07-15 - 工程门禁升级：服务端集成测试、真实懒加载审计、移动 CI、依赖清零
 
 - 服务端建立可测试入口：`server/src/server.js` 新增 `createServer()` / `startServer()`，被测试导入时不再自动占用端口，`node src/server.js` 的生产启动行为保持不变。新增 Node `node:test` 真实 HTTP 集成测试，使用临时数据目录和随机端口覆盖健康检查、注册/认证、备份上传下载、`expectedUpdatedAt` 冲突、缺失凭据与损坏 JSON；`npm --prefix server run check` 同时执行语法检查和 4 项集成测试。

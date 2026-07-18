@@ -134,11 +134,16 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
   }
 }
 
+/**
+ * 按日期覆盖插入一条快照并保持升序。
+ * 历史数组不逐条 normalize：生产调用方（useSnapshots 状态、App liveSnapshots）
+ * 的输入都来自 coerceSnapshots 之后的已规范化状态——此前每次记账都会对全部
+ * 历史快照（含每条内嵌的账户明细）重做一遍完整规范化，是快照按年增长后
+ * 主线程写放大的主要来源。这里只保留轻量的日期合法性过滤兜底；新条目照常规范化。
+ */
 export function upsertSnapshot(snapshots: readonly Snapshot[], next: Snapshot): Snapshot[] {
   const normalizedNext = normalizeSnapshot(next)
-  const copy = snapshots
-    .map((s) => normalizeSnapshot(s))
-    .filter((s) => isSnapshotDateKey(s.date) && s.date !== normalizedNext.date)
+  const copy = snapshots.filter((s) => isSnapshotDateKey(s.date) && s.date !== normalizedNext.date)
   if (!isSnapshotDateKey(normalizedNext.date)) return copy
   copy.push(normalizedNext)
   copy.sort((a, b) => a.date.localeCompare(b.date))

@@ -13,7 +13,9 @@ export function useSnapshots() {
     coerce: coerceSnapshots,
   })
 
-  const normalized = useMemo(() => snapshots.map((s) => normalizeSnapshot(s)).filter((s) => isSnapshotDateKey(s.date)), [snapshots])
+  // 状态里的数组恒为规范化数据：读取/跨标签同步经 coerceSnapshots，写入经
+  // upsertSnapshot（规范化新条目）。此前这里还对整个数组再 map 一遍
+  // normalizeSnapshot，属于纯冗余的第二次全量规范化，已删除。
 
   const upsertFromAccounts = useCallback(
     (accounts: Account[], date: string = todayDateKey()) => {
@@ -26,12 +28,12 @@ export function useSnapshots() {
   )
 
   const latest = useMemo(() => {
-    if (normalized.length === 0) return null
-    return normalized.reduce<Snapshot | null>((best, s) => {
+    if (snapshots.length === 0) return null
+    return snapshots.reduce<Snapshot | null>((best, s) => {
       if (!best) return s
       return s.date > best.date ? s : best
     }, null)
-  }, [normalized])
+  }, [snapshots])
 
-  return { snapshots: normalized, latest, storageReady: storageMeta.canPersist, upsertFromAccounts }
+  return { snapshots, latest, storageReady: storageMeta.canPersist, upsertFromAccounts }
 }

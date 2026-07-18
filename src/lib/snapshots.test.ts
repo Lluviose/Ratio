@@ -109,4 +109,18 @@ describe('normalizeSnapshot', () => {
 
     expect(merged.map((s) => s.date)).toEqual(['2026-06-02', '2026-06-03'])
   })
+
+  it('keeps untouched history entries by reference instead of re-normalizing them', () => {
+    // 写放大契约：调用方传入的历史数组已是规范化数据（coerceSnapshots 之后），
+    // upsert 不得对未涉及的历史条目重建对象——否则每次记账都会对全部历史
+    // （含内嵌账户明细）重做一遍规范化，数据按年增长后拖垮主线程。
+    const older: Snapshot = { date: '2026-06-01', net: 100, debt: 0, cash: 100, invest: 0, fixed: 0, receivable: 0 }
+    const newer: Snapshot = { date: '2026-06-02', net: 200, debt: 0, cash: 200, invest: 0, fixed: 0, receivable: 0 }
+
+    const merged = withAccountSnapshot([older, newer], [], '2026-06-03')
+
+    expect(merged).toHaveLength(3)
+    expect(merged[0]).toBe(older)
+    expect(merged[1]).toBe(newer)
+  })
 })
