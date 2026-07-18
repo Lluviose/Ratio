@@ -66,7 +66,7 @@
   4 用例守 3100 行后端；`adminConsole.js`（899 行）零测试。同批：管理员登录加失败锁定与失败审计（`server.js:208-227`，当前防暴破弱于普通用户）、账号锁定 DoS 缓解（锁定键加 IP 维度或对 authCache 命中豁免，`server.js:466-477, 609`）、`/api/health` 限流或缓存探测结果（`server.js:2133-2141`，未认证却每次触发磁盘写）。
 - [ ] **P4-22 版本化发布**（部分完成 2026-07-19：package.json 0.0.0 → 1.0.0；本地 buildId 从时间戳改为 git 短 SHA（脏工作区 `-dirty`），零改动构建 hash 恒定；git tag 流程待定）
   package.json 0.0.0、git 无 tag，部署产物无法对应 CHANGELOG 批次；本地构建 buildId 用时间戳（`vite.config.ts:11`）导致零改动也变 hash，改为 git describe 或固定值。
-- [ ] **P4-23 工程化小项**
+- [ ] **P4-23 工程化小项**（2026-07-19 部分：PROJECT.md 已补记视觉回归套件与写路径 e2e）
   独立 `typecheck` 脚本（从 build 拆出）；Prettier + lint-staged pre-commit；视觉回归基线迁 Linux 容器进 CI；README:89 的 Pages 部署说明已过时（实际经 `workflow_run` 门禁）；PROJECT.md 漏记视觉回归套件（`test:visual`、24 张基线）。
 
 ## 功能能力缺口（按需排期，依赖 P1-8 版本框架）

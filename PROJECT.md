@@ -36,7 +36,7 @@ npm ci
 npm run dev        # http://localhost:5173
 npm run build      # tsc -b && vite build
 npm run check:bundle # build 后检查真实懒加载边界与 gzip 预算
-npm test           # Vitest --run（33 文件 / 286 用例；固定 2 workers，约 2-3 分钟）
+npm test           # Vitest --run（35 文件 / 304 用例；固定 2 workers，约 2-3 分钟）
 npm run lint       # eslint .
 npm --prefix server run check # 服务端语法检查 + 真实 HTTP 集成测试
 npm run test:e2e   # Playwright（会自行 build + preview 在 127.0.0.1:4173）
@@ -288,7 +288,8 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 端到端（Playwright）：
 
-- `e2e/app-smoke.spec.ts` 主路径冒烟；`e2e/ratio-breakdown.spec.ts` 占比页展开面板全流程。
+- `e2e/app-smoke.spec.ts` 主路径冒烟；`e2e/ratio-breakdown.spec.ts` 占比页展开面板全流程；`e2e/write-paths.spec.ts` 写路径（建账户→转账→期间增减→刷新持久性、备份导出→导入回滚、演示模式进出）。
+- 视觉回归：`e2e/visual.spec.ts`（`npm run test:visual`，仅本地跑，24 张基线含六主题浅色 + 暗色抽样；令牌类改动重录基线需 `--update-snapshots=all`，changed 模式不会重录容差内的真实变化）。
 - 3 个项目（chromium / mobile-chrome / mobile-safari）× 全部用例；数据种子通过 `addInitScript` 直写 `localStorage`，并阻止 Service Worker 注册（其激活自刷新会打断动画断言）。
 - webServer：`npm run build && npm run preview`，端口 4173，`reuseExistingServer` 本地开启——**残留的 preview 进程会让新代码跑旧产物**，结果可疑先清端口。
 - Windows 无头 WebKit 会节流空闲页面，`toBeHidden()` 的页内 rAF 轮询会被饿死；等待卸载一律用 `expect.poll(() => locator.count()).toBe(0)`。完整分析见 `TROUBLESHOOTING.md`。
