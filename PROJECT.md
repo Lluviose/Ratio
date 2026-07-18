@@ -141,7 +141,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 - 分包用显式 `advancedChunks` groups（`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载））。**不要改回函数式 manualChunks，并保持 `includeDependenciesRecursively: false`**：rolldown 默认递归吸附依赖；若未显式关闭，入口会反向静态 import 名义上的懒块，浏览器首开实际把 AI/趋势/统计/设置/markdown 全部下载。vendor 组 priority 高于屏幕组，确保 vendor 先认领依赖。`npm run check:bundle` 会检查六个懒块存在、gzip 预算及入口无静态反向引用；改分包后必须先 build 再跑该门禁。
 - SW 更新采用 prompt 模式（`registerType: 'prompt'`，`skipWaiting: false`，`clientsClaim: true`）：新版本先 waiting，`src/pwa.ts` 弹「新版本已就绪」toast，用户点「立即更新」才接管并刷新；忽略则下次冷启动自然生效。更新检查在回到前台时触发（5 分钟节流 + 30 分钟兜底定时器），没有固定轮询。**不要改回 autoUpdate/skipWaiting**——那会在部署瞬间强刷正在输入的用户，也会复活首装 controllerchange 一类缺陷（见 TROUBLESHOOTING）。
-- `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。
+- `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。懒边界名单（`vite.config.ts` 的 `lazyChunkNames`）除六个显式分组外还包括只被懒屏幕共享的依赖 chunk（`TrendScreen-*`/`StatsScreen-*`/`SettingsScreen-*`/`AiAssistant-*`/`savingsGoal-*`）——预加载过滤、precache 排除、运行时缓存三处必须消费同一份名单；`check:bundle` 会校验 sw.js 的 precache 清单里没有任何懒边界 chunk（名单镜像在 `scripts/check-bundle-budget.mjs` 的 `PRECACHE_EXCLUDED_CHUNKS`，两处需同步改）。
 - 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
 - **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
 

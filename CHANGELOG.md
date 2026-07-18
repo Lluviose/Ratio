@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-19 - P2-13 vite-plugin-pwa 升级 1.3.0 与预缓存口径统一
+
+- vite-plugin-pwa `0.21 → 1.3.0`：0.21 的 peer 不含 Vite 7，此前靠 override 硬扛属未受支持组合；1.3.0 官方支持 Vite 7 + workbox 7.3。`registerSW` 回调式 API 与 prompt 模式语义不变（sw.js 产物结构与升级前同构：`SKIP_WAITING` 消息监听 + `clientsClaim` + precacheAndRoute），`src/pwa.ts` 零改动。
+- 预缓存口径统一：五个只被懒屏幕共享的依赖 chunk（`TrendScreen-*`/`StatsScreen-*`/`SettingsScreen-*`/`AiAssistant-*`/`savingsGoal-*`，由 rolldown 自动拆出）此前仍在 SW precache 里——安装 SW 时就预下载可能从不打开的屏幕依赖，且随每次发版重新下载。现在与六个显式懒分组同口径：`globIgnores` 排除预缓存 + 运行时 `CacheFirst` 按需缓存。懒边界名单收敛为 `vite.config.ts` 的单一 `lazyChunkNames` 数组，modulePreload 过滤 / precache 排除 / 运行时缓存三处消费同一份，运行时缓存 `maxEntries` 24 → 32（11 个懒块新旧版本并存的余量）。precache 从 23 项 661.71KiB 降为 18 项 598.90KiB。
+- 门禁升级（`scripts/check-bundle-budget.mjs`）：新增 sw.js precache 清单校验——任何懒边界 chunk 出现在预缓存里即失败（已用注入违规项做过反向验证），generateSW 输出格式变化导致解析不到清单同样报错，防止升级类改动静默破坏口径。
+- 已通过 `npm run lint`、`npm test`（35 文件 304 项）、`npm run build && npm run check:bundle`（entry 159.3/175 KiB）、`npx playwright test` 验证。
+
 ## 2026-07-19 - P2 小型性能双项：操作历史分页渲染、AI 流式合帧
 
 - 操作历史分页渲染（`OpsHistoryList.tsx`，P2-10）：每条操作记录都是 layout+drag motion 节点且此前无渲染上限，几百条历史时是账户详情页最先卡的部分。现在初始只渲染最近 40 条，「加载更多」按钮每次补 60 条并显示剩余条数；超过 60 条的列表关闭逐项 `layout` 重排动画（删除时其余条目瞬时补位），不再为每条维持布局测量。余额回推从当前余额沿倒序历史累计，只渲染前缀不影响任何已渲染条目的余额展示，分页揭示的条目接续之前的累计而非从头算。切换账户时分页量复位。

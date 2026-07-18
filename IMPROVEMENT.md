@@ -40,7 +40,7 @@
   渲染门控在 `storageKernel.ready`，WebKit IDB open 挂死时最坏 5 秒纯白屏。门控期先渲染静态 shell（可内联 index.html）；顺带把 `initCloudAutoSync`/`initTelemetry` 改为空闲期动态 import。
 - [ ] **P2-12 framer-motion 瘦身**
   全量进首包（估 40-50KB gz，entry 158KB 里最后一块大头）。`LazyMotion` + `m` 迁移，注意急加载路径用了 `Reorder`（AssetsListPage）、drag（OpsHistoryList）、layout（App），需 strict 模式逐个迁移，工程量不小；可与迁移 `motion` 包名同批。
-- [ ] **P2-13 升级 vite-plugin-pwa 0.21 → 1.x**
+- [x] **P2-13 升级 vite-plugin-pwa 0.21 → 1.x**（2026-07-19 完成：升 1.3.0（peer 含 Vite 7），五个懒屏幕依赖 chunk 进 `globIgnores` + 运行时 CacheFirst，check:bundle 新增「懒块不得进 precache」门禁）
   当前 peer 不含 Vite 7，靠 override 硬扛属未受支持组合。顺手把懒屏幕依赖 chunk（`TrendScreen-*`、`StatsScreen-*`、`SettingsScreen-*`、`AiAssistant-*`（13.6KB gz）、`savingsGoal-*`）加入 `globIgnores`，统一预缓存口径。升级后回归 prompt 更新全流程。
 - [x] **P2-14 AI 流式回复合帧**（`src/components/AiAssistant.tsx:291-295`）（2026-07-19 完成：delta 缓冲 + rAF 每帧一次提交，成功后以返回全文整体覆盖清残留）
   每个 SSE delta 一次 setState + react-markdown 全量重解析（O(len²) 累计），用 rAF/定时器合帧提交。

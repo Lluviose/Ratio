@@ -18,6 +18,17 @@ const LAZY_CHUNKS = [
   { name: 'vendor-markdown', budget: 55 * KIB },
   { name: 'vendor-matter', budget: 30 * KIB },
 ]
+// 懒边界上的全部 chunk 名（六个显式分组 + 懒屏幕共享依赖 chunk），必须与
+// vite.config.ts 的 lazyChunkNames 保持一致：它们都不允许出现在 SW precache
+// 清单里（预缓存会让它们随每次发版重新下载，运行时 CacheFirst 才是它们的口径）。
+const PRECACHE_EXCLUDED_CHUNKS = [
+  ...LAZY_CHUNKS.map((chunk) => chunk.name),
+  'AiAssistant',
+  'TrendScreen',
+  'StatsScreen',
+  'SettingsScreen',
+  'savingsGoal',
+]
 
 const distDir = path.resolve(process.argv[2] ?? 'dist')
 const assetsDir = path.join(distDir, 'assets')
@@ -127,6 +138,22 @@ if (entryFile) {
     const lazyBasename = path.basename(file)
     const imported = staticImports.some((specifier) => path.basename(specifier.split(/[?#]/, 1)[0]) === lazyBasename)
     if (imported) fail(`entry statically imports lazy chunk ${name} (${lazyBasename})`)
+  }
+}
+
+const swFile = path.join(distDir, 'sw.js')
+if (!existsSync(swFile)) {
+  fail('missing dist/sw.js; PWA service worker was not generated')
+} else {
+  const sw = readFileSync(swFile, 'utf8')
+  const excludedPattern = new RegExp(`(?:^|[\\\\/"'])(?:${PRECACHE_EXCLUDED_CHUNKS.map(escapeRegExp).join('|')})-[^\\\\/"']*\\.js`, 'i')
+  // 压缩后的 generateSW 产物里 precache 项形如 {url:"assets/xx.js",revision:null}，键名可能带或不带引号
+  const precacheUrls = [...sw.matchAll(/["']?url["']?\s*:\s*["']([^"']+)["']/g)].map((match) => match[1])
+  if (precacheUrls.length === 0) {
+    fail('sw.js has no precache manifest entries; generateSW output format may have changed')
+  }
+  for (const url of precacheUrls) {
+    if (excludedPattern.test(url)) fail(`sw precache includes lazy-boundary chunk: ${url}`)
   }
 }
 

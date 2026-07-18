@@ -9,8 +9,27 @@ export default defineConfig(() => {
   const isUserOrOrgPagesRepo = Boolean(owner && repo && repo.toLowerCase() === `${owner.toLowerCase()}.github.io`)
   const base = repo && !isUserOrOrgPagesRepo ? `/${repo}/` : '/'
   const buildId = process.env.GITHUB_SHA?.slice(0, 7) ?? new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
-  const lazyChunkFilePattern = /(?:^|\/)(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-markdown|vendor-matter)-.*\.js$/i
-  const lazyChunkPattern = /\/assets\/(?:ai-assistant|screen-trend|screen-stats|screen-settings|vendor-markdown|vendor-matter)-.*\.js$/i
+  // 懒加载边界上的全部 chunk：六个显式分组，加上只被懒屏幕共享的依赖 chunk
+  // （TrendScreen/StatsScreen/SettingsScreen/AiAssistant/savingsGoal，由 rolldown
+  // 按共享模块自动拆出）。三处消费必须同一份名单：modulePreload 过滤、SW
+  // precache 排除（globIgnores）、SW 运行时 CacheFirst——否则会出现「预缓存里
+  // 随每次发版重新下载」或「被排除又没有运行时缓存导致离线不可用」的口径分裂。
+  const lazyChunkNames = [
+    'ai-assistant',
+    'screen-trend',
+    'screen-stats',
+    'screen-settings',
+    'vendor-markdown',
+    'vendor-matter',
+    'AiAssistant',
+    'TrendScreen',
+    'StatsScreen',
+    'SettingsScreen',
+    'savingsGoal',
+  ]
+  const lazyChunkAlternation = lazyChunkNames.join('|')
+  const lazyChunkFilePattern = new RegExp(`(?:^|/)(?:${lazyChunkAlternation})-[^/]*\\.js$`, 'i')
+  const lazyChunkPattern = new RegExp(`/assets/(?:${lazyChunkAlternation})-[^/]*\\.js$`, 'i')
 
   return {
     base,
@@ -78,14 +97,7 @@ export default defineConfig(() => {
           navigateFallback: 'index.html',
           skipWaiting: false,
           clientsClaim: true,
-          globIgnores: [
-            '**/ai-assistant-*.js',
-            '**/screen-trend-*.js',
-            '**/screen-stats-*.js',
-            '**/screen-settings-*.js',
-            '**/vendor-markdown-*.js',
-            '**/vendor-matter-*.js',
-          ],
+          globIgnores: lazyChunkNames.map((name) => `**/${name}-*.js`),
           runtimeCaching: [
             {
               urlPattern: lazyChunkPattern,
@@ -96,7 +108,8 @@ export default defineConfig(() => {
                   statuses: [0, 200],
                 },
                 expiration: {
-                  maxEntries: 24,
+                  // 懒边界 chunk 现有 11 个，新旧版本交替期并存也不至于挤掉在用项
+                  maxEntries: 32,
                   maxAgeSeconds: 60 * 60 * 24 * 30,
                 },
               },
