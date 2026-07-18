@@ -1,4 +1,5 @@
 import type { RefObject } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Trash2 } from 'lucide-react'
 import { EmptyState } from '../EmptyState'
@@ -9,6 +10,13 @@ import { formatCny, formatSigned, formatTime } from './format'
 import { describeOpForAccount } from './opDisplay'
 
 const OP_DELETE_REVEAL_PX = 72
+// 初始只渲染最近一段历史：每条都是 layout+drag motion 节点，全量渲染在
+// 几百条时是详情页最先卡的部分；余下的经「加载更多」分页补齐。
+const OPS_INITIAL_COUNT = 40
+const OPS_LOAD_STEP = 60
+// 超过此规模后放弃逐项 layout 重排动画（删除时其余条目瞬时补位），
+// 换取长列表下不为每条维持布局测量。
+const OPS_ITEM_LAYOUT_MAX = 60
 
 // 账户操作历史列表：左滑露出删除、点击进入编辑。
 // 回滚/删除的业务决策在父组件（onDeleteOp 里确认并按 opRollback 计划回写）。
@@ -35,6 +43,17 @@ export function OpsHistoryList(props: {
     onDeleteOp,
   } = props
 
+  const [visibleCount, setVisibleCount] = useState(OPS_INITIAL_COUNT)
+  useEffect(() => {
+    setVisibleCount(OPS_INITIAL_COUNT)
+  }, [account.id])
+
+  // relatedOps 按时间倒序，runningAfter 从当前余额向过去回推——
+  // 只渲染前缀不影响任何已渲染条目的余额展示。
+  const visibleOps = relatedOps.slice(0, visibleCount)
+  const hiddenCount = relatedOps.length - visibleOps.length
+  const enableItemLayout = relatedOps.length <= OPS_ITEM_LAYOUT_MAX
+
   return (
     <div className="mt-3 rounded-[22px] bg-white/70 border border-white/70 overflow-hidden">
       {relatedOps.length === 0 ? (
@@ -47,7 +66,7 @@ export function OpsHistoryList(props: {
         <AnimatePresence initial={false}>
           {(() => {
             let runningAfter = account.balance
-            return relatedOps.map((op, i) => {
+            return visibleOps.map((op, i) => {
               const { title, delta } = describeOpForAccount(op, account.id, getAccountName)
 
               const deltaColor =
@@ -71,7 +90,7 @@ export function OpsHistoryList(props: {
               return (
                 <motion.div
                   key={op.id}
-                  layout
+                  layout={enableItemLayout}
                   initial={shouldStaggerOpsIntro ? { opacity: 0, y: 8 } : false}
                   animate={{
                     opacity: 1,
@@ -188,6 +207,15 @@ export function OpsHistoryList(props: {
           })()}
         </AnimatePresence>
       )}
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          className="w-full px-4 py-3 border-t border-black/5 bg-white text-[12px] font-extrabold text-slate-500 active:bg-slate-50"
+          onClick={() => setVisibleCount((count) => count + OPS_LOAD_STEP)}
+        >
+          加载更多（还有 {hiddenCount} 条）
+        </button>
+      ) : null}
     </div>
   )
 }

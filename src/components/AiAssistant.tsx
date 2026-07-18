@@ -281,7 +281,26 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    let receivedDelta = false
+
+    // 每个 SSE delta 直接 setState 会让 react-markdown 对越来越长的全文重解析
+    // （累计 O(len²)）；把同一帧内到达的 delta 合并成一次提交。
+    let pendingDelta = ''
+    let deltaFrame: number | null = null
+    const flushPendingDelta = () => {
+      deltaFrame = null
+      const chunk = pendingDelta
+      pendingDelta = ''
+      if (!chunk) return
+      if (!mountedRef.current || abortRef.current !== controller) return
+      setMessages((prev) =>
+        prev.map((m, i) => (i === assistantIndex && m.role === 'assistant' ? { ...m, content: m.content + chunk } : m)),
+      )
+    }
+    const cancelPendingDelta = () => {
+      if (deltaFrame != null) window.cancelAnimationFrame(deltaFrame)
+      deltaFrame = null
+      pendingDelta = ''
+    }
 
     try {
       const content = await fetchAiChatCompletion({
@@ -290,15 +309,17 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
         stream: true,
         onDelta: (delta) => {
           if (!mountedRef.current || abortRef.current !== controller) return
-          receivedDelta = true
-          setMessages((prev) =>
-            prev.map((m, i) => (i === assistantIndex && m.role === 'assistant' ? { ...m, content: m.content + delta } : m)),
-          )
+          pendingDelta += delta
+          if (deltaFrame == null) deltaFrame = window.requestAnimationFrame(flushPendingDelta)
         },
       })
+      // 成功返回值恒为全部 delta 之和（见 fetchAiChatCompletion），整体覆盖
+      // 一次即为最终帧，合帧中未提交的残留一并作废。
+      cancelPendingDelta()
       if (!mountedRef.current || abortRef.current !== controller) return
-      if (!receivedDelta) replaceAssistantAt(assistantIndex, content)
+      replaceAssistantAt(assistantIndex, content)
     } catch (err) {
+      cancelPendingDelta()
       if (isAbortError(err)) return
       if (!mountedRef.current || abortRef.current !== controller) return
       replaceAssistantAt(assistantIndex, `请求失败：${prettyError(err)}`)
