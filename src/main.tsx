@@ -5,6 +5,8 @@ import './longpress-guard.css'
 import App from './App.tsx'
 import { RootErrorBoundary } from './components/RootErrorBoundary.tsx'
 import { storageKernel } from './lib/storageKernel'
+import { runDataSchemaMigrations } from './lib/schemaVersion'
+import { emitAppToast } from './lib/overlay'
 import './pwa'
 
 const isCoarsePointer =
@@ -82,6 +84,15 @@ if (isCoarsePointer) {
 // 组件树里的所有同步读（useLocalStorageState 等）由此保证读到权威数据。
 // ready 永不 reject（IDB 不可用时内部回退 localStorage 后照常 resolve）。
 void storageKernel.ready.then(() => {
+  // 数据 schema 迁移在挂载前执行：组件树读到的一定是当前版本形状的数据。
+  // 失败/版本超前都不阻断启动（本地优先：coerce 兜底），只提示用户。
+  const migration = runDataSchemaMigrations()
+  if (migration.status === 'failed') {
+    emitAppToast('数据结构升级未完成，应用将以兼容模式运行；建议先导出一份备份', { tone: 'danger' })
+  } else if (migration.status === 'newer_data') {
+    emitAppToast('本机数据由更新版本的 Ratio 写入，建议先更新应用再修改数据', { tone: 'danger' })
+  }
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <RootErrorBoundary>

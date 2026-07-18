@@ -27,7 +27,7 @@
   每记一笔账对全部历史快照做三重规范化 + 全量 `JSON.stringify`（4 年数据 × 20 账户 ≈ 9 万次字段规范化，主线程）。速效：删 `useSnapshots.ts:16` 冗余二次 normalize；`upsertSnapshot` 只规范化新条目。唯一会随使用年限恶化到可感知卡顿的问题，性价比最高。
 - [ ] **P1-7 快照/流水降采样与归档**
   snapshots/accountOps/ledger 无限增长且无任何清理机制；>1 年快照收敛为周/月粒度并剥离内嵌 accounts 明细，流水按年分键。⚠ 与"云同步以 canonicalize 后字符串相等判冲突"（`backup.ts:129-133`）互相牵制，需一并设计。
-- [ ] **P1-8 显式 schema 版本与迁移框架**（`backup.ts:137`、`storageKernel.ts:38`）
+- [x] **P1-8 显式 schema 版本与迁移框架**（`backup.ts:137`、`storageKernel.ts:38`）（2026-07-19 完成：`src/lib/schemaVersion.ts`——`ratio.schemaVersion` 键随备份/云同步流动、挂载前跑迁移管道、恢复拒绝更新版本备份且旧版本备份恢复后就地迁移）
   目前仅 `ratio.backup.v1` + coerce 隐式兼容，做不了破坏性变更。降采样、多币种、账户归档都依赖它先落地。
 - [ ] **P1-9 配额耗尽主动处理**（`storageKernel.ts:297-330`）
   flush 持续失败只有 30s 节流 toast，无主动重试调度、无 `navigator.storage.estimate()` 检查、无引导清理路径。把"静默丢写"变成可操作告警。

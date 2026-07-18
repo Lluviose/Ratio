@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-07-19 - P1-8 显式数据 schema 版本与迁移框架
+
+- 新增 `src/lib/schemaVersion.ts`：整份 ratio.* 数据获得显式版本号（`ratio.schemaVersion` 键，当前 v1），为快照降采样、多币种、账户归档等破坏性数据形状变更预留安全通道。关键决策：版本号就是一个普通 ratio.* 键——自然进入备份文件与云端备份，备份版本协商因此**不需要改动 `ratio.backup.v1` 文件格式**（老备份缺键即视为 v1），服务端校验也无需变更。
+- 迁移管道：`runDataSchemaMigrations` 在 `main.tsx` 挂载 React 之前执行（storageKernel.ready 之后），组件树读到的一定是当前版本形状的数据。逐级推进（from 连续，每级成功立即落版本号）；任何一级失败停在已完成级、toast 提示并以 coerce 兼容模式继续运行——本地优先应用绝不因迁移失败白屏。数据被更新版本应用写过（版本超前）时不动数据不回写版本，仅提示建议升级。演示模式跳过（临时数据，退出后真实数据下次启动再迁移）。
+- 备份版本协商（`backup.ts`）：`restoreRatioBackup` 拒绝 schema 版本高于当前应用的备份（明确报错提示先升级，本机数据不被触碰），覆盖导入备份/云端恢复/本机快照/云同步 fast-forward 全部恢复路径（fast-forward 遇更新版本远端自动回落人工冲突流程）；恢复旧版本备份后就地跑迁移，覆盖不整页刷新的 fast-forward 路径。
+- 首次启动为存量数据补章版本号（一次性写入，随后随云同步流动）。
+- 测试：新增 `schemaVersion.test.ts` 9 例（空库=当前版本、缺键有数据=v1、非法值容错、补章、演示跳过、版本超前不触碰数据、乱序迁移列表按级执行、中途抛错停级、缺失步骤干净失败）；`backup.test.ts` +2 例（拒绝 v99 备份且本机数据不动、当前/缺失版本键正常恢复）。
+- 文档：PROJECT.md 键表、「备份」「本地存储」小节同步。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（34 文件 299 项）、`npm run build && npm run check:bundle`（entry 158.8/175 KiB）验证。
+
 ## 2026-07-19 - P1-6 快照管线速效修复：消除三重规范化写放大
 
 - 每次记账的快照管线此前对全部历史快照做三遍完整规范化：coerce 读取一遍（必要，保留）、`useSnapshots` 的 `normalized` useMemo 再 map 一遍（纯冗余，已删除）、`upsertSnapshot` 对历史逐条 normalize 第三遍（已改为信任输入只规范化新条目，保留轻量日期过滤兜底）。生产两个调用方（useSnapshots 状态、App `liveSnapshots`）的输入恒为 coerce 后的规范化数据，语义不变；4 年日更 × 20 账户规模下每次记账从约 9 万次字段规范化降为单条。

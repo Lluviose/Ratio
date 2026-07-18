@@ -81,6 +81,45 @@ describe('backup', () => {
     expect(localStorage.getItem('unrelated')).toBe('keep')
   })
 
+  it('restoreRatioBackup 拒绝来自更新 schema 版本的备份（版本协商）', () => {
+    localStorage.setItem('ratio.accounts', '["keep"]')
+
+    const backup = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: {
+          'ratio.accounts': '["future"]',
+          'ratio.schemaVersion': '99',
+        },
+      }),
+    )
+
+    expect(() => restoreRatioBackup(backup, localStorage)).toThrow(/newer app version/)
+    // 本机数据不被触碰
+    expect(localStorage.getItem('ratio.accounts')).toBe('["keep"]')
+  })
+
+  it('restoreRatioBackup 接受携带当前版本键或缺失版本键（旧备份 = v1）的备份', () => {
+    const withVersion = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: { 'ratio.accounts': '[]', 'ratio.schemaVersion': '1' },
+      }),
+    )
+    expect(() => restoreRatioBackup(withVersion, localStorage)).not.toThrow()
+
+    const legacy = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2025-01-01T00:00:00.000Z',
+        items: { 'ratio.accounts': '[]' },
+      }),
+    )
+    expect(() => restoreRatioBackup(legacy, localStorage)).not.toThrow()
+  })
+
   it('restoreRatioBackup rolls back if writing new state fails', () => {
     const store = new Map<string, string>([
       ['ratio.accounts', '["old"]'],

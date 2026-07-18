@@ -2,6 +2,7 @@ import { dispatchStorageWrite } from './storageEvents'
 import { appStorage } from './storageKernel'
 import { canonicalizeAccountOpsForBackup } from './accountOpsStorage'
 import { canonicalizeTransactionsForBackup } from './ledgerStorage'
+import { CURRENT_DATA_SCHEMA_VERSION, DATA_SCHEMA_VERSION_KEY, runDataSchemaMigrations } from './schemaVersion'
 
 export const RATIO_STORAGE_PREFIX = 'ratio.' as const
 export const RATIO_BACKUP_SCHEMA_V1 = 'ratio.backup.v1' as const
@@ -294,12 +295,32 @@ function notifyRatioStorageDiff(storage: Storage, previousItems: Record<string, 
   }
 }
 
+/**
+ * 备份数据的 schema 版本：读 items 里的 `ratio.schemaVersion` 键。
+ * 缺键或值非法 = 版本化之前导出的备份 = v1。文件格式（ratio.backup.v1）不变。
+ */
+export function backupDataSchemaVersion(backup: RatioBackupFile): number {
+  const raw = backup.items[DATA_SCHEMA_VERSION_KEY]
+  if (raw == null) return 1
+  const value = Number(raw)
+  return Number.isInteger(value) && value >= 1 ? value : 1
+}
+
 export function restoreRatioBackup(
   backup: RatioBackupFile,
   storage: Storage = appStorage,
   prefix: string = RATIO_STORAGE_PREFIX,
   excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
 ): RestoreResult {
+  // 版本协商：来自更新版本应用的备份可能包含当前版本无法理解的数据形状，
+  // 静默恢复会经 coerce 丢字段后再被写回，破坏在新版本设备上的数据。直接拒绝。
+  const backupVersion = backupDataSchemaVersion(backup)
+  if (backupVersion > CURRENT_DATA_SCHEMA_VERSION) {
+    throw new Error(
+      `Backup was created by a newer app version (data schema v${backupVersion} > v${CURRENT_DATA_SCHEMA_VERSION}); update Ratio first`,
+    )
+  }
+
   const previousItems = readRatioStorage(storage, prefix, excludeKeyPrefixes)
   const clearedKeys = Object.keys(previousItems).sort((left, right) => left.localeCompare(right))
   const { nextItems, skippedKeys } = buildRestorableItems(backup, prefix, excludeKeyPrefixes)
@@ -322,6 +343,10 @@ export function restoreRatioBackup(
   }
 
   notifyRatioStorageDiff(storage, previousItems, nextItems)
+
+  // 恢复的是旧版本 schema 的备份时就地迁移到当前版本：覆盖「恢复后不整页刷新」
+  // 的路径（云同步 fast-forward）；整页刷新的路径重复执行也无害（幂等）。
+  if (backupVersion < CURRENT_DATA_SCHEMA_VERSION) runDataSchemaMigrations(storage)
 
   return { restoredKeys, clearedKeys, skippedKeys }
 }
