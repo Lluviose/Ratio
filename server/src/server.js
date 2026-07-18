@@ -277,9 +277,30 @@ function forwardedClientAddress(req) {
   return first || ''
 }
 
+// 反代部署自检：未开 RATIO_TRUST_PROXY 时，来自 loopback 的请求携带
+// x-forwarded-for 几乎可以断定前面有反向代理——此时所有客户端都被记成
+// 代理 IP，限流/账号锁定共享同一个桶（任何用户刷请求即可让全站 429，
+// 按 IP 防暴破也失效）。只警告一次，避免刷日志。
+let warnedUntrustedProxy = false
+
+function maybeWarnUntrustedProxy(req, direct) {
+  if (TRUST_PROXY || warnedUntrustedProxy) return
+  if (!isTrustedProxyPeer(direct)) return
+  if (!req.headers['x-forwarded-for']) return
+  warnedUntrustedProxy = true
+  console.warn(
+    '[ratio-server] x-forwarded-for received from a loopback peer while RATIO_TRUST_PROXY is disabled: ' +
+      'behind a reverse proxy all clients share one rate-limit/lockout bucket. ' +
+      'Set RATIO_TRUST_PROXY=true if this server runs behind a local reverse proxy.',
+  )
+}
+
 function clientAddress(req) {
   const direct = directRemoteAddress(req)
-  if (!TRUST_PROXY || !isTrustedProxyPeer(direct)) return direct
+  if (!TRUST_PROXY || !isTrustedProxyPeer(direct)) {
+    maybeWarnUntrustedProxy(req, direct)
+    return direct
+  }
   return forwardedClientAddress(req) || direct
 }
 
@@ -376,6 +397,23 @@ function userId(username) {
   return createHash('sha256').update(username, 'utf8').digest('hex').slice(0, 24)
 }
 
+// 用户名正则（\w 系）会放行 __proto__/constructor/toString 等原型链属性名：
+// 直接 data.users[username] 读取会命中 Object.prototype 的继承属性（truthy），
+// 随后 verifyPassword 对着继承函数取 passwordHash 直接抛 TypeError → 500；
+// 写入 __proto__ 更会触发原型改写。用户表的读取一律走这里（只认自有属性），
+// 新建用户名再额外拉黑三个危险键。
+const FORBIDDEN_USERNAMES = new Set(['__proto__', 'constructor', 'prototype'])
+
+function isForbiddenUsername(username) {
+  return FORBIDDEN_USERNAMES.has(username)
+}
+
+function getUserRecord(table, username) {
+  if (typeof username !== 'string') return undefined
+  if (!table || typeof table !== 'object') return undefined
+  return Object.hasOwn(table, username) ? table[username] : undefined
+}
+
 async function hashPassword(password, salt = randomBytes(16).toString('base64'), iterations = PASSWORD_HASH_ITERATIONS) {
   const hash = (await pbkdf2Async(password, salt, iterations, 32, 'sha256')).toString('base64')
   return { salt, iterations, hash }
@@ -397,7 +435,7 @@ async function maybeUpgradePasswordHash(user, password) {
   try {
     const passwordInfo = await hashPassword(password)
     return await mutateUsers((data) => {
-      const record = data.users[user.username]
+      const record = getUserRecord(data.users, user.username)
       // 并发下记录可能已被改密/升级：仅在仍是刚校验过的那份哈希时替换，
       // 否则维持本次请求已校验的原记录语义
       if (!record || record.passwordHash !== user.passwordHash) return user
@@ -616,7 +654,7 @@ async function requireUser(req, res) {
   if (cachedUser) return cachedUser
 
   const users = await readUsers()
-  const user = users.users[auth.username]
+  const user = getUserRecord(users.users, auth.username)
   const valid = user ? await verifyPassword(auth.password, user) : await verifyPassword(auth.password, DUMMY_PASSWORD_USER)
   if (!user || !valid) {
     recordAuthFailure(auth.username)
@@ -758,7 +796,7 @@ async function handleRegister(req, res) {
   const username = typeof body.username === 'string' ? body.username.trim() : ''
   const password = typeof body.password === 'string' ? body.password : ''
   const inviteCode = typeof body.inviteCode === 'string' ? body.inviteCode.trim() : ''
-  if (!/^[\w.@-]{3,64}$/.test(username)) return fail(res, 400, 'Username must be 3-64 letters, numbers, dot, underscore or dash')
+  if (!/^[\w.@-]{3,64}$/.test(username) || isForbiddenUsername(username)) return fail(res, 400, 'Username must be 3-64 letters, numbers, dot, underscore or dash')
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters')
   if (password.length > MAX_PASSWORD_CHARS) return fail(res, 400, `Password must be at most ${MAX_PASSWORD_CHARS} characters`, 'password_too_long')
   if (!REGISTRATION_INVITE_CODE && !ALLOW_OPEN_REGISTRATION) {
@@ -774,9 +812,9 @@ async function handleRegister(req, res) {
   }
 
   const result = await mutateUsers(async (data) => {
-    if (data.users[username]) {
+    if (getUserRecord(data.users, username)) {
       await hashPassword(password)
-      return { exists: true, user: data.users[username] }
+      return { exists: true, user: getUserRecord(data.users, username) }
     }
 
     const passwordInfo = await hashPassword(password)
@@ -1447,7 +1485,7 @@ function decodePathSegment(value) {
 }
 
 function validateAdminUsername(username) {
-  if (!/^[\w.@-]{3,64}$/.test(username)) {
+  if (!/^[\w.@-]{3,64}$/.test(username) || isForbiddenUsername(username)) {
     throw httpError('Username must be 3-64 letters, numbers, dot, underscore or dash', 400, 'username_invalid')
   }
 }
@@ -1464,7 +1502,7 @@ function validateAdminPassword(password) {
 async function findUserByUsername(username) {
   validateAdminUsername(username)
   const data = await readUsers()
-  const user = data.users[username]
+  const user = getUserRecord(data.users, username)
   if (!user || typeof user !== 'object') throw httpError('User not found', 404, 'user_not_found')
   return user
 }
@@ -1896,7 +1934,7 @@ async function handleAdminUserCreate(req, res) {
     validateAdminUsername(username)
     validateAdminPassword(password)
     const mutation = await mutateUsers(async (data) => {
-      if (data.users[username]) throw httpError('User already exists', 409, 'user_exists')
+      if (getUserRecord(data.users, username)) throw httpError('User already exists', 409, 'user_exists')
       const passwordInfo = await hashPassword(password)
       const user = {
         id: userId(username),
@@ -1923,7 +1961,7 @@ async function handleAdminPasswordReset(req, res, username) {
     validateAdminUsername(username)
     validateAdminPassword(password)
     const user = await mutateUsers(async (data) => {
-      const current = data.users[username]
+      const current = getUserRecord(data.users, username)
       if (!current) throw httpError('User not found', 404, 'user_not_found')
       const passwordInfo = await hashPassword(password)
       current.passwordHash = passwordInfo.hash
@@ -1942,7 +1980,7 @@ async function handleAdminUserDelete(req, res, username) {
   const result = await auditAdminAction(req, 'user.delete', username, async () => {
     validateAdminUsername(username)
     const user = await mutateUsers(async (data) => {
-      const current = data.users[username]
+      const current = getUserRecord(data.users, username)
       if (!current) throw httpError('User not found', 404, 'user_not_found')
       delete data.users[username]
       return current
@@ -2191,7 +2229,7 @@ export async function startServer({ port = PORT, host = HOST } = {}) {
     }
     const onListening = () => {
       server.off('error', onError)
-      console.log(`ratio-server listening on ${host}:${port}`)
+      console.log(`ratio-server listening on ${host}:${port} (trustProxy=${TRUST_PROXY})`)
       resolve()
     }
     server.once('error', onError)

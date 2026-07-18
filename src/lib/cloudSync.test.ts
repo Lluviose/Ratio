@@ -187,9 +187,9 @@ describe('initCloudAutoSync', () => {
     expect(settings.lastSyncStatus).toBe('ok')
   })
 
-  it('marks a clean device as conflicted when remote metadata changed to different data', async () => {
+  it('fast-forwards a clean device when remote metadata changed to different data', async () => {
     const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
-    const { initCloudAutoSync } = await import('./cloudSync')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
 
     localStorage.setItem('ratio.accounts', '["local"]')
     const remoteMeta = {
@@ -231,6 +231,62 @@ describe('initCloudAutoSync', () => {
     expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
     expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
 
+    // 本地 clean + 远端更新：自动应用远端数据，不再要求人工介入
+    expect(localStorage.getItem('ratio.accounts')).toBe('["remote"]')
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+    expect(settings.lastSyncMessage).toContain('已自动同步云端更新')
+
+    // fast-forward 的恢复写入不得标脏，否则刚下载的数据会被回传上传
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+  })
+
+  it('keeps the conflict flow when the changed remote backup looks empty', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["local"]')
+    const remoteMeta = {
+      updatedAt: '2026-05-08T00:10:00.000Z',
+      clientCreatedAt: '2026-05-08T00:09:00.000Z',
+      itemCount: 1,
+      device: 'Mac',
+    }
+
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: {
+        schema: 'ratio.backup.v1',
+        createdAt: remoteMeta.clientCreatedAt,
+        // 空账本备份：不允许被 fast-forward 静默覆盖本机数据
+        items: {
+          'ratio.accounts': '[]',
+        },
+      },
+      meta: remoteMeta,
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+    expect(localStorage.getItem('ratio.accounts')).toBe('["local"]')
     const settings = getCloudSyncSettings()
     expect(settings.lastBackupAt).toBe('2026-04-29T13:03:54.267Z')
     expect(settings.lastSyncStatus).toBe('conflict')

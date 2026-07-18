@@ -85,3 +85,24 @@ test('rejects missing credentials and malformed JSON safely', async () => {
   assert.equal(malformed.response.status, 400)
   assert.equal(malformed.body.error.code, 'invalid_json')
 })
+
+test('prototype-property usernames cannot register and fail auth as 401, not 500', async () => {
+  // __proto__/constructor/prototype：注册直接 400
+  for (const username of ['__proto__', 'constructor', 'prototype']) {
+    const registration = await request('/api/users', { method: 'POST', ...jsonRequest({ username, password: 'correct horse battery staple' }) })
+    assert.equal(registration.response.status, 400, `register ${username}`)
+  }
+
+  // 认证读取用户表时命中 Object.prototype 继承属性（toString 等）必须走
+  // 「用户不存在」分支返回 401，而不是对着继承函数取 passwordHash 抛 500
+  for (const username of ['__proto__', 'toString', 'hasOwnProperty']) {
+    const header = `Basic ${Buffer.from(`${username}:whatever-password`).toString('base64')}`
+    const me = await request('/api/me', { headers: { authorization: header } })
+    assert.equal(me.response.status, 401, `auth ${username}`)
+    assert.equal(me.body.error.code, 'auth_invalid', `auth code ${username}`)
+  }
+
+  // 正常用户不受影响
+  const me = await request('/api/me', { headers: { authorization: auth } })
+  assert.equal(me.response.status, 200)
+})

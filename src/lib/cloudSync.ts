@@ -1,4 +1,12 @@
-import { buildRatioBackup, sameRatioBackupData, summarizeRatioBackupDiff, type RatioBackupFile } from './backup'
+import {
+  buildRatioBackup,
+  restoreRatioBackup,
+  sameRatioBackupData,
+  summarizeRatioBackupContent,
+  summarizeRatioBackupDiff,
+  type RatioBackupFile,
+  type RestoreResult,
+} from './backup'
 import {
   CLOUD_SYNC_SETTINGS_KEY,
   type CloudBackupMeta,
@@ -14,6 +22,8 @@ import {
 import { STORAGE_WRITE_EVENT, dispatchStorageWrite, type StorageWriteDetail } from './storageEvents'
 import { storageKernel } from './storageKernel'
 import { DEMO_KEY_PREFIX, isDemoModeActive } from './demoMode'
+import { writePreOperationLocalBackup } from './localBackups'
+import { emitAppToast } from './overlay'
 import { trackTelemetry } from './telemetry'
 
 const AUTO_SYNC_DELAY_MS = 2500
@@ -26,6 +36,9 @@ let lastAutoSyncAt = 0
 let syncInFlight = false
 let pendingReason: string | null = null
 let suppressSettingsSchedule = false
+// fast-forward 应用远端备份时，restoreRatioBackup 会对每个变更键广播写事件；
+// 这些写入来自云端而非用户，不能被自己的监听器标脏（否则刚下载的数据会被再上传一遍）
+let suppressDirtyMarking = false
 
 function getWriteDetail(event: Event): StorageWriteDetail | null {
   if (!(event instanceof CustomEvent)) return null
@@ -191,12 +204,84 @@ function writeAutoSyncConflict(
   return true
 }
 
+/**
+ * fast-forward：本地自上次同步后无任何修改（无脏标记）而云端有更新时，
+ * 自动把远端备份应用到本机。该场景下远端是唯一有新内容的一方（典型：换设备），
+ * 覆盖本机不会丢数据；其余场景一律维持人工冲突流程。
+ * 返回 false 表示不满足安全条件或应用失败，调用方回落到 conflict 分支。
+ */
+function tryAutoFastForward(
+  settings: CloudSyncSettings,
+  remote: { meta: CloudBackupMeta; backup: RatioBackupFile },
+  reason: string,
+): boolean {
+  if (isDemoModeActive()) return false
+  // 网络往返期间用户可能写入了新数据：此刻再查一次脏标记，非空即放弃
+  if (isCloudSyncDirty()) return false
+  if (!canApplyAutoSyncResult(settings, reason)) return false
+
+  // 与手动「从云端恢复」同等的内容预检：空/损坏的远端备份不允许静默覆盖本机
+  const summary = summarizeRatioBackupContent(remote.backup)
+  if (summary.looksEmpty || summary.corruptKeys.length > 0) {
+    trackTelemetry('cloud_sync_auto_fast_forward_rejected', {
+      reason,
+      looksEmpty: summary.looksEmpty,
+      corruptKeys: summary.corruptKeys.length,
+    })
+    return false
+  }
+
+  // 覆盖前抢一代本机快照（失败不阻断，与手动恢复口径一致）
+  writePreOperationLocalBackup()
+
+  let restore: RestoreResult
+  suppressDirtyMarking = true
+  try {
+    restore = restoreRatioBackup(remote.backup)
+  } catch (error) {
+    // restoreRatioBackup 内部已尝试回滚本地数据；这里放弃 fast-forward 走冲突流程
+    trackTelemetry('cloud_sync_auto_fast_forward_failed', {
+      reason,
+      message: error instanceof Error ? error.message : 'restore failed',
+    })
+    return false
+  } finally {
+    suppressDirtyMarking = false
+  }
+
+  const now = new Date().toISOString()
+  markCloudSyncClean()
+  writeAutoSyncSettingsPatch({
+    lastBackupAt: remote.meta.updatedAt,
+    lastRestoreAt: now,
+    lastSyncAt: now,
+    lastSyncStatus: 'ok',
+    lastSyncMessage: `已自动同步云端更新（${restore.restoredKeys.length} 项）`,
+  })
+  emitCloudSyncResult({
+    ok: true,
+    reason,
+    fastForward: true,
+    itemCount: remote.meta.itemCount,
+    remoteUpdatedAt: remote.meta.updatedAt,
+  })
+  emitAppToast('已同步来自其他设备的云端更新', { tone: 'success' })
+  trackTelemetry('cloud_sync_auto_fast_forward', {
+    reason,
+    itemCount: remote.meta.itemCount,
+    remoteUpdatedAt: remote.meta.updatedAt,
+    restoredKeys: restore.restoredKeys.length,
+  })
+  return true
+}
+
 async function reconcileRemoteBackup(
   settings: CloudSyncSettings,
   backup: RatioBackupFile,
   reason: string,
   dirtyToken: string | undefined,
-): Promise<'matched' | 'conflict' | 'missing' | 'stale'> {
+  options: { allowFastForward?: boolean } = {},
+): Promise<'matched' | 'fast_forwarded' | 'conflict' | 'missing' | 'stale'> {
   const remote = await downloadCloudBackup(settings)
   const localItemCount = Object.keys(backup.items).length
 
@@ -221,6 +306,10 @@ async function reconcileRemoteBackup(
     return applied ? 'matched' : 'stale'
   }
 
+  if (options.allowFastForward && tryAutoFastForward(settings, { meta: remote.meta, backup: remote.backup }, reason)) {
+    return 'fast_forwarded'
+  }
+
   const diff = summarizeRatioBackupDiff(backup, remote.backup)
   const applied = writeAutoSyncConflict(settings, reason, `云端备份已更新：${remote.meta.updatedAt}`, {
     expectedUpdatedAt: settings.lastBackupAt || '',
@@ -242,7 +331,7 @@ async function probeRemoteFreshness(
   backup: RatioBackupFile,
   reason: string,
   dirtyToken: string | undefined,
-): Promise<'current' | 'matched' | 'conflict' | 'missing' | 'stale'> {
+): Promise<'current' | 'matched' | 'fast_forwarded' | 'conflict' | 'missing' | 'stale'> {
   const localItemCount = Object.keys(backup.items).length
   const { meta } = await fetchCloudBackupMeta(settings)
 
@@ -296,7 +385,8 @@ async function probeRemoteFreshness(
     remoteItemCount: meta.itemCount,
   })
 
-  return reconcileRemoteBackup(settings, backup, reason, dirtyToken)
+  // probe 路径的前提是本地 clean（无脏标记）：远端更新时允许 fast-forward 自动应用
+  return reconcileRemoteBackup(settings, backup, reason, dirtyToken, { allowFastForward: true })
 }
 
 async function runAutoSync(reason: string) {
@@ -426,6 +516,7 @@ export function initCloudAutoSync() {
       return
     }
     if (!shouldAutoSyncKey(detail.key)) return
+    if (suppressDirtyMarking) return
     setCloudSyncDirty()
     scheduleAutoSync(`storage:${detail.key}`)
   })
