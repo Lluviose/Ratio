@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { BOOT_MIRROR_KEYS, createStorageKernel, FALLBACK_WRITES_MARKER_KEY } from './storageKernel'
+import { subscribeAppToasts, type ToastOptions } from './overlay'
 
 // 每个用例注入独立的 fake IDBFactory 与内存 Storage，互不串扰；
 // 全局单例 storageKernel 在 jsdom（无 indexedDB）下自动走 local 回退，
@@ -46,9 +47,10 @@ function makeKernel(options: {
 }
 
 // 包装 fake-indexeddb：state.failTransactions > 0 时 transaction() 同步抛
-// InvalidStateError（模拟 iOS 挂起后连接被系统单方面关闭的典型表现）
+// InvalidStateError（模拟 iOS 挂起后连接被系统单方面关闭的典型表现）；
+// state.errorName 可改为 QuotaExceededError 等模拟配额耗尽
 function makeFlakyFactory(base: IDBFactory) {
-  const state = { failTransactions: 0 }
+  const state = { failTransactions: 0, errorName: 'InvalidStateError' }
   const wrapped = new WeakMap<IDBDatabase, IDBDatabase>()
 
   function wrapDb(db: IDBDatabase): IDBDatabase {
@@ -59,7 +61,7 @@ function makeFlakyFactory(base: IDBFactory) {
         if (prop === 'transaction' && state.failTransactions > 0) {
           state.failTransactions -= 1
           return () => {
-            throw new DOMException('The database connection is closing.', 'InvalidStateError')
+            throw new DOMException('The database connection is closing.', state.errorName)
           }
         }
         const value = Reflect.get(target, prop)
@@ -246,6 +248,73 @@ describe('storageKernel (IDB 模式)', () => {
     const second = createStorageKernel({ indexedDBFactory: base, localStorageRef: null, enableBroadcast: false })
     await second.ready
     expect(second.get('ratio.accounts')).toBe('[1]')
+  })
+
+  it('落盘失败后按退避主动重试：无需新写入或显式 flush 即自动恢复', async () => {
+    const base = new IDBFactory()
+    const { factory, state } = makeFlakyFactory(base)
+    const kernel = createStorageKernel({
+      indexedDBFactory: factory,
+      localStorageRef: makeMemoryStorage(),
+      enableBroadcast: false,
+      flushRetryBaseMs: 5,
+    })
+    await kernel.ready
+
+    state.failTransactions = 99
+    kernel.set('ratio.accounts', '[2]')
+    await expect(kernel.flush()).resolves.toBe(false)
+
+    // 故障恢复后不再有任何调用方动作：失败退避定时器应自行完成落盘
+    state.failTransactions = 0
+    await new Promise((resolve) => setTimeout(resolve, 200))
+
+    const second = createStorageKernel({ indexedDBFactory: base, localStorageRef: null, enableBroadcast: false })
+    await second.ready
+    expect(second.get('ratio.accounts')).toBe('[2]')
+  })
+
+  it('配额错误升级为可操作提示：清理本机快照动作释放空间并重试成功', async () => {
+    const base = new IDBFactory()
+    const { factory, state } = makeFlakyFactory(base)
+    const kernel = createStorageKernel({
+      indexedDBFactory: factory,
+      localStorageRef: makeMemoryStorage(),
+      enableBroadcast: false,
+      flushRetryBaseMs: 5,
+    })
+    await kernel.ready
+
+    // 先落一代本机快照
+    kernel.set('__backup.daily.2026-01-01', '{"snapshot":true}')
+    await expect(kernel.flush()).resolves.toBe(true)
+
+    const toasts: Array<{ message: string; options?: ToastOptions }> = []
+    const unsubscribe = subscribeAppToasts((request) => void toasts.push(request))
+    try {
+      state.errorName = 'QuotaExceededError'
+      state.failTransactions = 99
+      kernel.set('ratio.accounts', '[1]')
+      await expect(kernel.flush()).resolves.toBe(false)
+
+      const quotaToast = toasts.find((t) => t.options?.action)
+      expect(quotaToast?.message).toContain('存储空间不足')
+      expect(quotaToast?.options?.action?.label).toBe('清理本机快照')
+
+      // 用户点击清理动作：__backup.* 代际被清空并立即重试落盘
+      state.failTransactions = 0
+      quotaToast?.options?.action?.onClick()
+      await expect(kernel.flush()).resolves.toBe(true)
+      expect(kernel.internalKeys('__backup.')).toEqual([])
+      expect(kernel.get('ratio.accounts')).toBe('[1]')
+
+      const second = createStorageKernel({ indexedDBFactory: base, localStorageRef: null, enableBroadcast: false })
+      await second.ready
+      expect(second.get('ratio.accounts')).toBe('[1]')
+      expect(second.internalKeys('__backup.')).toEqual([])
+    } finally {
+      unsubscribe()
+    }
   })
 
   it('连接失效时重开连接重试：单次瞬时失败对调用方透明', async () => {

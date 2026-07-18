@@ -17,8 +17,10 @@
 // - 跨标签同步走 BroadcastChannel（IDB 写不会触发 storage 事件），收到广播后
 //   更新内存并派发与本地写一致的 storageEvents 自定义事件，hooks 无感知。
 // - 落盘失败的批次不会被丢弃：条目留在待写队列里，由后续任意一次 flush
-//   自动重试；写失败会先重开一次连接再试（iOS 挂起恢复后 WebKit 可能单方面
-//   关闭连接，onclose 后由写入路径惰性重连）。
+//   自动重试，失败后还会按退避（1s 翻倍至 30s，成功即复位）主动重试；写失败
+//   会先重开一次连接再试（iOS 挂起恢复后 WebKit 可能单方面关闭连接，onclose
+//   后由写入路径惰性重连）。配额耗尽（QuotaExceededError）时提示升级为可操作
+//   引导：一键清理本机滚动快照（__backup.* 代际）释放空间并立即重试。
 // - `flush()` 返回是否全部落盘成功。写入后要整页刷新的路径（恢复备份、
 //   进出演示模式）必须 `await flush()` 并在 false 时中止刷新——否则刷新会
 //   丢弃内存态、读回旧数据，操作看似成功实际没发生。
@@ -42,6 +44,16 @@ const CHANNEL_NAME = 'ratio.storage.kernel'
 const WRITE_ERROR_TOAST_THROTTLE_MS = 30_000
 const DEFAULT_OPEN_TIMEOUT_MS = 5_000
 const MAX_FLUSH_ROUNDS = 8
+// 落盘失败后的主动重试退避：1s 起步、翻倍、封顶 30s；任何一次成功即复位。
+// 此前失败路径只被动等下一次写入触发 flush——用户停止操作后失败批次会一直悬着
+const FLUSH_RETRY_BASE_MS = 1_000
+const FLUSH_RETRY_MAX_MS = 30_000
+// 配额水位警告线（navigator.storage.estimate）；IDB 配额通常以 GB 计，
+// 超过 90% 属于真实告急而非噪音
+const QUOTA_WARN_RATIO = 0.9
+// 本机滚动快照的键前缀（常量归 localBackups 所有；kernel 不能反向 import，
+// 这里按契约复写——localBackups.ts 文件头注释即该契约）
+const LOCAL_BACKUP_KEY_PREFIX = '__backup.'
 
 export const BOOT_MIRROR_KEYS: readonly string[] = ['ratio.colorMode', 'ratio.theme']
 
@@ -76,6 +88,8 @@ type KernelOptions = {
   databaseName?: string
   /** IDB open 超时（毫秒），超时按不可用回退 local；测试可调小 */
   openTimeoutMs?: number
+  /** 落盘失败退避的起步延迟（毫秒）；测试可调小 */
+  flushRetryBaseMs?: number
 }
 
 export function createStorageKernel(options: KernelOptions = {}): StorageKernel {
@@ -93,6 +107,7 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
         : localStorage
   const dbName = options.databaseName ?? DB_NAME
   const openTimeoutMs = options.openTimeoutMs ?? DEFAULT_OPEN_TIMEOUT_MS
+  const flushRetryBaseMs = options.flushRetryBaseMs ?? FLUSH_RETRY_BASE_MS
 
   let backend: StorageKernelBackend = 'local'
   let db: IDBDatabase | null = null
@@ -105,6 +120,8 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
   const pendingWrites = new Map<string, string | null>()
   const preReadyWrites: Array<{ key: string; raw: string | null }> = []
   let flushTimer: ReturnType<typeof setTimeout> | null = null
+  let flushTimerDueAt = 0
+  let flushRetryDelayMs = flushRetryBaseMs
   let inflight: Promise<boolean> = Promise.resolve(true)
 
   function openDb(): Promise<IDBDatabase> {
@@ -237,10 +254,12 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
       let tx: IDBTransaction
       try {
         // 连接已被系统关闭时 transaction() 同步抛 InvalidStateError，
-        // 归一成 rejection 让重开重试路径接手
+        // 归一成 rejection 让重开重试路径接手。保留原始异常对象——
+        // DOMException 在部分环境不继承 Error，替换成泛型 Error 会丢失
+        // 配额错误（QuotaExceededError）的分类信息
         tx = database.transaction(KV_STORE, 'readwrite')
       } catch (error) {
-        reject(error instanceof Error ? error : new Error('indexedDB write failed'))
+        reject(error ?? new Error('indexedDB write failed'))
         return
       }
       const store = tx.objectStore(KV_STORE)
@@ -294,17 +313,49 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
     await writeBatch(database, entries)
   }
 
-  function reportWriteError(error: unknown) {
-    console.error('storageKernel: IndexedDB write failed', error)
-    const now = Date.now()
-    if (now - lastWriteErrorToastAt >= WRITE_ERROR_TOAST_THROTTLE_MS) {
-      lastWriteErrorToastAt = now
-      emitAppToast('数据落盘失败，最近的修改可能没有保存', { tone: 'danger', durationMs: 6000 })
+  function isQuotaError(error: unknown): boolean {
+    return error instanceof DOMException && (error.name === 'QuotaExceededError' || error.code === 22)
+  }
+
+  async function estimateUsageRatio(): Promise<number | null> {
+    try {
+      const estimate = await navigator.storage?.estimate?.()
+      if (!estimate || !estimate.quota) return null
+      return (estimate.usage ?? 0) / estimate.quota
+    } catch {
+      return null
     }
   }
 
+  // 配额告急的自救动作：清掉本机滚动快照代际（占用大头，最多 11 代全量副本）
+  // 后立即重试落盘。快照本身是安全网，但主数据落不了盘时优先保主数据。
+  function clearLocalBackupsAndRetry() {
+    for (const key of internalKeys(LOCAL_BACKUP_KEY_PREFIX)) remove(key)
+    void runFlush()
+  }
+
+  function reportWriteError(error: unknown) {
+    console.error('storageKernel: IndexedDB write failed', error)
+    const now = Date.now()
+    if (now - lastWriteErrorToastAt < WRITE_ERROR_TOAST_THROTTLE_MS) return
+    lastWriteErrorToastAt = now
+    if (isQuotaError(error)) {
+      // 配额耗尽有明确自救路径，提示升级为可操作引导
+      emitAppToast('本机存储空间不足，最近的修改可能没有保存；建议先导出一份备份', {
+        tone: 'danger',
+        durationMs: 10000,
+        action: { label: '清理本机快照', onClick: clearLocalBackupsAndRetry },
+      })
+      void estimateUsageRatio().then((ratio) => {
+        if (ratio != null) console.error(`storageKernel: storage usage at ${(ratio * 100).toFixed(1)}% of quota`)
+      })
+      return
+    }
+    emitAppToast('数据落盘失败，最近的修改可能没有保存', { tone: 'danger', durationMs: 6000 })
+  }
+
   // 提交成功之前绝不从 pendingWrites 移除条目：失败的批次留在队列里，
-  // 由后续任意一次 flush（定时/生命周期/显式）自动重试。永不 reject。
+  // 由后续任意一次 flush（定时/生命周期/显式/失败退避重试）自动重试。永不 reject。
   async function attemptFlush(): Promise<boolean> {
     for (let round = 0; round < MAX_FLUSH_ROUNDS && pendingWrites.size > 0; round++) {
       const entries = Array.from(pendingWrites.entries())
@@ -317,9 +368,13 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
           await writeBatch(await ensureDb(), entries)
         } catch {
           reportWriteError(firstError)
+          // 主动按退避重试：不再被动等下一次用户写入才碰运气
+          scheduleFlush(flushRetryDelayMs)
+          flushRetryDelayMs = Math.min(flushRetryDelayMs * 2, FLUSH_RETRY_MAX_MS)
           return false
         }
       }
+      flushRetryDelayMs = flushRetryBaseMs
       // 只清除仍等于已提交值的键；提交期间被覆盖的留给下一轮
       for (const [key, raw] of entries) {
         if (pendingWrites.get(key) === raw) pendingWrites.delete(key)
@@ -340,12 +395,18 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
     return inflight
   }
 
-  function scheduleFlush() {
-    if (flushTimer !== null) return
+  function scheduleFlush(delayMs = 0) {
+    const dueAt = Date.now() + delayMs
+    if (flushTimer !== null) {
+      // 已有更早（或同时）的调度在排队则不动；新写入的 0 延迟可以抢占失败退避的长延迟
+      if (flushTimerDueAt <= dueAt) return
+      clearTimeout(flushTimer)
+    }
+    flushTimerDueAt = dueAt
     flushTimer = setTimeout(() => {
       flushTimer = null
       void runFlush()
-    }, 0)
+    }, delayMs)
   }
 
   function syncBootMirror(key: string, raw: string | null) {
@@ -490,6 +551,20 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
     }
   }
 
+  // 启动水位检查：配额将满时提前告警，而不是等第一次写失败才发现。
+  // 火后不管，不阻塞 ready
+  function warnIfQuotaNearlyFull() {
+    if (typeof navigator === 'undefined') return
+    void estimateUsageRatio().then((ratio) => {
+      if (ratio == null || ratio < QUOTA_WARN_RATIO) return
+      emitAppToast(`本机存储空间即将用尽（已用 ${Math.round(ratio * 100)}%），建议导出一份备份`, {
+        tone: 'danger',
+        durationMs: 10000,
+        action: { label: '清理本机快照', onClick: clearLocalBackupsAndRetry },
+      })
+    })
+  }
+
   const ready = (async () => {
     if (!idbFactory) {
       readyResolved = true
@@ -518,6 +593,7 @@ export function createStorageKernel(options: KernelOptions = {}): StorageKernel 
         const raw = memory.get(key)
         if (raw != null) syncBootMirror(key, raw)
       }
+      warnIfQuotaNearlyFull()
     } catch (error) {
       console.error('storageKernel: IndexedDB unavailable, falling back to localStorage', error)
       db = null
