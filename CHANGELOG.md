@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-19 - P4-19 写路径 e2e 与构建可复现性
+
+- 新增 `e2e/write-paths.spec.ts` 3 例 × 3 项目（chromium / mobile-chrome / mobile-safari）：此前全部 e2e 用例只读不写，「曾真实丢过数据」的路径只有单测在守。覆盖：①新建账户→录初始余额→转账→期间增减→整页刷新后数据与操作历史完整（IndexedDB 落盘持久性的真浏览器验证）；②备份导出→改数据→导入导出文件，断言数据回滚到导出时点（含内容预检确认弹窗）；③演示模式进入→退出，断言真实数据完整回归。
+- e2e 经验沉淀进用例注释：`getByRole` name 默认子串匹配（「完成」会撞上设置页「连接配置 未完成」，需 `exact: true`）；动作页切换动画期间新旧两个「完成」并存（取 `.last()`）；首页 mini bar 及其弹出菜单在滚动层之下，真实 click 被拦截需 `dispatchEvent('click')`。
+- 构建可复现（P4-22 部分）：本地 buildId 从时间戳改为 git 短 SHA（工作区脏时 `-dirty` 后缀，无 git 时退 'dev'）——此前零改动重新构建也会因 `__APP_BUILD__` 注入值变化导致全部产物 hash 变化，产物 diff 与视觉回归基线失真。CI 继续用 GITHUB_SHA。package.json 版本号 0.0.0 → 1.0.0。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（35 文件 304 项）、`npx playwright test`（功能 27 项全矩阵 + 视觉 24 项）验证。
+
 ## 2026-07-19 - P2-13 vite-plugin-pwa 升级 1.3.0 与预缓存口径统一
 
 - vite-plugin-pwa `0.21 → 1.3.0`：0.21 的 peer 不含 Vite 7，此前靠 override 硬扛属未受支持组合；1.3.0 官方支持 Vite 7 + workbox 7.3。`registerSW` 回调式 API 与 prompt 模式语义不变（sw.js 产物结构与升级前同构：`SKIP_WAITING` 消息监听 + `clientsClaim` + precacheAndRoute），`src/pwa.ts` 零改动。

@@ -1,14 +1,30 @@
+import { execSync } from 'node:child_process'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import { reactCompilerBabelConfig } from './react-compiler.shared'
+
+// buildId 必须对同一份源码可复现：此前本地构建用时间戳，零改动重新 build 也会
+// 改变 define 注入值 → 入口内容变 → 全部 hash 变（视觉回归/产物 diff 全部失真）。
+// CI 用 GITHUB_SHA；本地用 git 短 SHA（工作区脏时加 -dirty）；无 git 时退 'dev'。
+function resolveBuildId(): string {
+  const ciSha = process.env.GITHUB_SHA?.slice(0, 7)
+  if (ciSha) return ciSha
+  try {
+    const sha = execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    const dirty = execSync('git status --porcelain', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim().length > 0
+    return dirty ? `${sha}-dirty` : sha
+  } catch {
+    return 'dev'
+  }
+}
 
 // https://vite.dev/config/
 export default defineConfig(() => {
   const [owner, repo] = process.env.GITHUB_REPOSITORY?.split('/') ?? []
   const isUserOrOrgPagesRepo = Boolean(owner && repo && repo.toLowerCase() === `${owner.toLowerCase()}.github.io`)
   const base = repo && !isUserOrOrgPagesRepo ? `/${repo}/` : '/'
-  const buildId = process.env.GITHUB_SHA?.slice(0, 7) ?? new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)
+  const buildId = resolveBuildId()
   // 懒加载边界上的全部 chunk：六个显式分组，加上只被懒屏幕共享的依赖 chunk
   // （TrendScreen/StatsScreen/SettingsScreen/AiAssistant/savingsGoal，由 rolldown
   // 按共享模块自动拆出）。三处消费必须同一份名单：modulePreload 过滤、SW
