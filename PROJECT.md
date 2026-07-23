@@ -74,7 +74,7 @@ docker compose up -d --build   # 后端地址 http://localhost:8787
 - 主题切换：`handleThemeChange` 创建全屏 bloom 过渡覆盖层（脉冲环 + 径向扩散 + 颜色 wash），用两个定时器编排「先播动画 → 中途应用 `data-theme` 与 CSS 变量 → 结束移除覆盖层」。`SettingsScreen` 通过 `onThemeChange(id, origin)` 上报点击坐标作为扩散原点——改主题流程时不要破坏这个坐标约定。
 - 账户详情 `AccountDetailSheet` 挂在 App 层：从资产列表行进入时走 `sheetMotion="morph"`（共享 `layoutId`，行卡片变形为抽屉），其他入口走 `slide`。
 - 每日快照同步（`useDailySnapshotSync`）、云自动同步、遥测都在这里初始化。
-- `main.tsx` 在 App 外层挂根级 `RootErrorBoundary`：渲染崩溃不再白屏，兜底界面提供「刷新 + 导出数据备份」（数据在 localStorage，渲染崩溃不伤数据）。`useLocalStorageState` 写入失败（配额满/隐私模式）默认经 `emitAppToast` 提示用户（30s 节流）；`lib/overlay.ts` 的 `emitAppToast` 是 React 树外发 toast 的统一入口（Provider 挂载前排队），toast 支持可选动作按钮。
+- `main.tsx` 在 App 外层挂根级 `RootErrorBoundary`：渲染崩溃不再白屏，兜底界面提供「刷新 + 导出数据备份」（数据在 localStorage，渲染崩溃不伤数据）。`useLocalStorageState` 写入失败（配额满/隐私模式）默认经 `emitAppToast` 提示用户（30s 节流）；`lib/overlay.ts` 的 `emitAppToast` 是 React 树外发 toast 的统一入口（Provider 挂载前排队），toast 支持可选动作按钮。`index.html` 内联启动骨架屏：`storageKernel.ready` 门控期间显示（配色跟随 `html[data-mode]`），React 挂载时整体替换——WebKit IDB open 挂死的最坏 5s 不再是纯白屏。
 
 ### 资产首页：滚动驱动的形态变换（src/screens/AssetsScreen.tsx）
 
@@ -312,7 +312,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 | 趋势/统计 | `src/screens/TrendScreen.tsx`、`TrendChart.tsx`（自绘 SVG 图表）、`StatsScreen.tsx`、`src/screens/stats/`、`src/lib/snapshotDerived.ts`、`savingsGoal.ts` |
 | 全局动效/手感 | `src/lib/motionPresets.ts`、`src/index.css`、`src/lib/useReducedMotion.ts`，规范见「动效系统」 |
 | 气泡物理 | `src/components/BubbleChartPhysics.tsx`、`src/screens/BubbleChartPage.tsx` |
-| 设置/备份 | `src/screens/SettingsScreen.tsx`、`src/lib/backup.ts`、`src/lib/cloud.ts` |
+| 设置/备份 | `src/screens/SettingsScreen.tsx`（编排层）、`src/screens/settings/`（卡片组件 + `useCloudSyncActions`/`runCloudUpload` 云动作）、`src/lib/backup.ts`、`src/lib/cloud.ts` |
 | 云同步 | `src/lib/cloudSync.ts`、`cloud.ts`、`server/src/server.js` |
 | AI 助手 | `src/lib/ai.ts`、`src/components/AiAssistant.tsx`、`server/src/server.js` |
 | PWA/构建/分包 | `vite.config.ts`、`src/pwa.ts`、`public/manifest.webmanifest` |

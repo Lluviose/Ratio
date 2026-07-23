@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-24 - P3-15 拆分 SettingsScreen 与 uploadCloud 可测化 + P2-11 启动骨架屏
+
+- SettingsScreen 1308 → 350 行（不改任何行为，可见文本/aria/弹窗文案逐字节保留）：新目录 `src/screens/settings/` 承载九个卡片组件（外观/演示/主题/账户排序/统计月起始/云同步/云端 AI/备份/本机快照）与 `localSnapshotFormat.ts` 共享格式化；SettingsScreen 保留为状态提升与组合的编排层。`react-compiler.shared.ts` 编译范围与 vite screen-settings 分包 test 同步纳入 `settings/` 目录（新卡片组件全部进入 React Compiler 编译，分包边界不变）。
+- `uploadCloud` 可测化（全库最需要单测却因耦合 UI 无法单测的代码）：147 行递归重试提炼为不依赖 React 的 `runCloudUpload(deps)`——云 API、设置写回、toast/confirm、遥测、busy 翻转全部经依赖注入；`useCloudSyncActions` hook 只做接线（mountedRef StrictMode 复位样板、abort、demo 守卫原样保留）。新增 `runCloudUpload.test.ts` 6 例：成功上传、409 冲突→确认覆盖→force 重试成功（busy 序列与 controller 收尾语义）、force 重试预算耗尽走 error 不再二次询问、远端与本地一致时 reconcile 不重传、用户取消覆盖、非冲突错误分支。
+- 启动骨架屏（P2-11）：React 挂载门控在 `storageKernel.ready` 上，WebKit IDB open 挂死时最坏 5s 纯白屏。骨架内联 index.html（脚本加载前即有内容），配色跟随 `color-mode-boot.js` 写入的 `html[data-mode]` 与应用首帧一致，`createRoot.render` 挂载时整体替换；减弱动态偏好下脉冲动画关闭。已核实并放弃原计划的「initCloudAutoSync/initTelemetry 空闲动态 import」半项：两者只是挂事件监听器（微秒级开销），延迟反而丢启动期错误遥测与早期写入的云同步脏标记。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（37 文件 317 项）、`npm run build && npm run check:bundle`（entry 160.1/175 KiB，screen-settings 11.5/17）、`npx playwright test`（功能 30 项全矩阵 + 视觉 24 项，设置页基线逐像素不变）验证。
+
 ## 2026-07-23 - P4-21 服务端安全三项：管理员失败锁定、锁定 DoS 缓解、health 写放大
 
 - 管理员失败锁定与审计（`requireAdmin`）：管理台此前只有宽松的 300/分请求限流，防暴破弱于普通用户。现在凭据错误按来源 IP 记失败（与普通用户同一套阈值：默认 15 分钟窗口 8 次、锁 5 分钟），锁定期间正确密码也 429；每次失败写入当日管理审计 ndjson（`admin.login_failed`，fire-and-forget 不阻塞响应）。浏览器 Basic 认证的首次无凭据挑战不计失败。

@@ -11,6 +11,7 @@ const COMPILED_PATHS = [
   'src/screens/TrendScreen.tsx',
   'src/screens/StatsScreen.tsx',
   'src/screens/SettingsScreen.tsx',
+  'src/screens/settings/',
   'src/screens/stats/',
   'src/components/AiAssistant.tsx',
 ]

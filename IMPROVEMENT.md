@@ -36,7 +36,7 @@
 
 - [x] **P2-10 OpsHistoryList 全量渲染**（`src/components/accountDetail/OpsHistoryList.tsx:47-188`）（2026-07-19 完成：初始 40 条 + 每次补 60 条的「加载更多」，>60 条时关闭逐项 `layout`，新增 3 例组件测试覆盖分页与余额回推连续性）
   每条都是 layout+drag motion 节点且无上限，几百条操作时最先卡的 UI。初始截断 30-50 条 + 加载更多；长列表下移除逐项 `layout`。
-- [ ] **P2-11 启动骨架屏**（`main.tsx:84`）
+- [x] **P2-11 启动骨架屏**（`main.tsx:84`）（2026-07-24 完成：骨架内联 index.html，配色跟随 `html[data-mode]`，React 挂载时整体替换。已核实放弃「initCloudAutoSync/initTelemetry 空闲动态 import」半项：两者只是挂监听器（微秒级），延迟初始化反而丢启动期错误遥测与早期写入的云同步脏标记）
   渲染门控在 `storageKernel.ready`，WebKit IDB open 挂死时最坏 5 秒纯白屏。门控期先渲染静态 shell（可内联 index.html）；顺带把 `initCloudAutoSync`/`initTelemetry` 改为空闲期动态 import。
 - [ ] **P2-12 framer-motion 瘦身**
   全量进首包（估 40-50KB gz，entry 158KB 里最后一块大头）。`LazyMotion` + `m` 迁移，注意急加载路径用了 `Reorder`（AssetsListPage）、drag（OpsHistoryList）、layout（App），需 strict 模式逐个迁移，工程量不小；可与迁移 `motion` 包名同批。
@@ -47,7 +47,7 @@
 
 ## P3 可维护性重构（不改行为）
 
-- [ ] **P3-15 拆 SettingsScreen.tsx（1308 行）**
+- [x] **P3-15 拆 SettingsScreen.tsx（1308 行）**（2026-07-24 完成：1308 → 350 行；`src/screens/settings/` 九个卡片组件 + `useCloudSyncActions` hook；`runCloudUpload` 提炼为依赖注入纯编排函数并补 6 例单测覆盖冲突重试/预算耗尽/reconcile/取消/错误分支）
   抽 `useCloudSyncActions()` hook + 每卡片一个组件（CloudSyncCard/ThemeCard/BackupCard/LocalSnapshotsCard…）。147 行的 `uploadCloud` 递归重试（L464-610）是全库最需要单测却因耦合 UI 无法单测的代码——拆完顺手补测。
 - [ ] **P3-16 拆 AssetsScreen.tsx（1400 行）**
   抽 `useHomeScrollSync`/`useDetailPageState`/`useListRectMeasure` 三个 hook + `HomeHeader`/`HomeMiniNav`/`CloudStatusBadge` 组件；互相"押韵"的 700/800/900ms 动画时长常量（`AssetsScreen.tsx:452,746`、`App.tsx:548`）收进 `motionPresets.ts` 统一命名；压缩 L1102-1150 的自辩式注释块。

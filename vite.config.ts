@@ -84,7 +84,7 @@ export default defineConfig(() => {
               { name: 'ai-assistant', test: /[\\/]src[\\/]components[\\/]AiAssistant\.tsx/, priority: 1 },
               { name: 'screen-trend', test: /[\\/]src[\\/]screens[\\/]TrendScreen\.tsx/, priority: 1 },
               { name: 'screen-stats', test: /[\\/]src[\\/]screens[\\/](?:StatsScreen\.tsx|stats[\\/])/, priority: 1 },
-              { name: 'screen-settings', test: /[\\/]src[\\/]screens[\\/]SettingsScreen\.tsx/, priority: 1 },
+              { name: 'screen-settings', test: /[\\/]src[\\/]screens[\\/](?:SettingsScreen\.tsx|settings[\\/])/, priority: 1 },
             ],
           },
         },
