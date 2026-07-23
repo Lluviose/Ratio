@@ -16,7 +16,7 @@
   用户名正则 `^[\w.@-]{3,64}$` 放行 `__proto__`/`constructor`/`toString`，认证时 `users.users['__proto__']` 命中原型链属性（truthy）→ `verifyPassword` 抛 TypeError → 500，注册路径有原型赋值隐患。用户表查找改 `Object.hasOwn`，承载容器改 `Object.create(null)` 或 Map。
 - [x] **P0-4 反代下限流失效**（`server/src/server.js:46, 280-284`）（2026-07-19 完成，loopback+XFF 运行时警告 + 启动日志 trustProxy 状态）
   `TRUST_PROXY` 默认关，部署在 Nginx/Caddy 后所有客户端的 `clientAddress` 都是反代 IP——全部用户共享同一个 60/分钟 auth 桶（任何人刷请求可让全站 429，防暴破意义归零）。启动日志/health 加自检提示。
-- [ ] **P0-5 跨标签并发写丢更新**（`src/lib/storageKernel.ts:455-470`）——*需先评估方案*
+- [x] **P0-5 跨标签并发写丢更新**（`src/lib/storageKernel.ts:455-470`）（2026-07-23 完成：Web Locks 单实例守卫 `src/lib/instanceGuard.ts`——后开标签拦截页 + steal 接管 + 被接管方落盘冻结；无 locks API 优雅降级为现状；结构性消灭并发而非合并并发）
   核心数据均为"整数组一个键"+ 键级 last-write-wins，双标签并发追加会静默丢记录。候选方案：Web Locks API 单写者选举；或广播消息带版本号、检测到并发修改同一键时从权威值 rebase 内存态。
 
 ## P1 长期可用性（数据增长治理）

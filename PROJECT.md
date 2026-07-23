@@ -200,7 +200,8 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 持久层是 `src/lib/storageKernel.ts`（**改存储行为前必读文件头注释**）：IndexedDB 为权威存储，启动时全量水合进内存、同步读写内存、异步批量落盘；IDB 不可用时整体回退为 localStorage 直读直写。要点：
 
-- `main.tsx` 等 `storageKernel.ready` 后才挂载 React，组件树内的同步读一定读到权威数据；挂载前还会执行数据 schema 迁移（`src/lib/schemaVersion.ts`，失败/版本超前不阻断启动，只提示用户并靠 coerce 兜底）。`openDb` 带超时（默认 5s）：IDB open 挂死（WebKit 已知缺陷）时按不可用回退 local，ready 不会悬挂白屏。
+- `main.tsx` 等 `storageKernel.ready` 后才挂载 React，组件树内的同步读一定读到权威数据；挂载前还会执行数据 schema 迁移（`src/lib/schemaVersion.ts`，失败/版本超前不阻断启动，只提示用户）。`openDb` 带超时（默认 5s）：IDB open 挂死（WebKit 已知缺陷）时按不可用回退 local，ready 不会悬挂白屏。
+- 单实例守卫（`src/lib/instanceGuard.ts`）：同一时间只允许一个标签页读写——首个标签持有永不释放的 Web Locks 排他锁，后开标签停在拦截页、可 steal 接管；被接管方 flush 后整页冻结。这是对「键级 last-write-wins 下跨标签并发写丢更新」的结构性防护；`navigator.locks` 不存在时降级为无守卫。锁按 origin 隔离，Playwright 独立 context 的既有 e2e 不受影响（双标签用例见 `e2e/instance-guard.spec.ts`）。
 - 首次以 IDB 模式启动时把 localStorage 的 `ratio.*` 全量导入 IDB 并写迁移标记；**localStorage 读取中途失败时整体放弃且不写标记（下次启动重试），绝不把空/半份数据盖章成已迁移**。localStorage 旧副本冻结保留（旧版本回滚可用），此后不再更新——例外是 `ratio.colorMode`/`ratio.theme`（`BOOT_MIRROR_KEYS`）持续镜像回 localStorage，供 `public/color-mode-boot.js` 首帧同步读取。
 - 跨标签同步走 BroadcastChannel（IDB 写不触发 `storage` 事件），收到广播后派发既有 storageEvents 自定义事件，hooks 无感知；localStorage 回退模式下仍靠原生 `storage` 事件。
 - 落盘可靠性：失败的写入批次**不会被丢弃**，条目留在待写队列由后续任意 flush 自动重试，且失败后按退避（1s 翻倍至 30s，成功复位）主动重试，不依赖下一次用户写入；写失败会先重开一次连接再试（iOS 挂起恢复后连接被系统关闭的场景，`onclose` 后由写入路径惰性重连）。配额耗尽（QuotaExceededError）时提示升级为可操作引导：一键清理本机快照代际释放空间并立即重试；启动时还会做配额水位检查（>90% 提前告警）。IDB 本应可用却回退的会话会警示用户，且写入会在 localStorage 打降级标记，下次正常启动由 `localBackups.importFallbackSessionSnapshot()` 把降级期间的数据另存为本机快照。

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-07-23 - P0-5 跨标签单实例守卫（Web Locks）
+
+- 消灭跨标签并发写丢更新：核心数据都是「整个数组存一个键」+ 键级 last-write-wins，两个标签页并发记账会静默丢记录（P0 最后一项遗留）。方案取「结构性消灭并发」而非「正确合并并发」——个人记账应用没有真实的多标签同时编辑需求，与版本号 + rebase 的复杂度相比，单实例是更小且更稳的答案。
+- 机制（`src/lib/instanceGuard.ts` + `main.tsx` 编排 + `InstanceGateScreens.tsx`）：首个标签页持有一把永不释放的 Web Locks 排他锁；后开标签拿不到锁停在拦截页（「Ratio 已在其他标签页打开」），点「在此标签页继续」以 steal 抢占接管；原持有者经 request promise 的 AbortError 感知被接管，抢跑 `storageKernel.flush()` 后整页冻结（独立 root 覆盖层阻断一切交互，提示已保存 + 可刷新回拦截页）。接管无需刷新：拦截期间内核照常经 BroadcastChannel 同步内存，挂载时数据已是最新。
+- 降级：`navigator.locks` 不存在（老浏览器/jsdom）按获得锁处理，行为与守卫之前完全一致；锁随页面关闭自动释放，无死锁面。Playwright 各测试用独立 context（Web Locks 按 origin + profile 隔离），既有 e2e 不受影响。
+- 测试：新增 `instanceGuard.test.ts` 7 例（获取/占用/steal 抢占回调恰一次/二次抢占链/无 API 降级/同步与异步失败容错，fake LockManager 模拟 AbortError 语义）；新增 `e2e/instance-guard.spec.ts` 双标签用例 × 3 浏览器项目（第二页被拦截→接管→第一页冻结→刷新回拦截页），mobile-safari 走真实 WebKit Web Locks。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（36 文件 311 项）、`npx playwright test`（功能 30 项全矩阵 + 视觉 24 项）验证。
+
 ## 2026-07-19 - P4-19 写路径 e2e 与构建可复现性
 
 - 新增 `e2e/write-paths.spec.ts` 3 例 × 3 项目（chromium / mobile-chrome / mobile-safari）：此前全部 e2e 用例只读不写，「曾真实丢过数据」的路径只有单测在守。覆盖：①新建账户→录初始余额→转账→期间增减→整页刷新后数据与操作历史完整（IndexedDB 落盘持久性的真浏览器验证）；②备份导出→改数据→导入导出文件，断言数据回滚到导出时点（含内容预检确认弹窗）；③演示模式进入→退出，断言真实数据完整回归。
