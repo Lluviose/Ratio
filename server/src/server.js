@@ -51,6 +51,8 @@ const AUTH_LOCKOUT_MS = readPositiveNumberEnv('RATIO_AUTH_LOCKOUT_MS', 5 * 60 * 
 const AUTH_CACHE_TTL_MS = readPositiveNumberEnv('RATIO_AUTH_CACHE_TTL_MS', 5 * 60 * 1000)
 const REGISTER_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_REGISTER_RATE_LIMIT_PER_MINUTE', 30)
 const ADMIN_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_ADMIN_RATE_LIMIT_PER_MINUTE', 300)
+const HEALTH_RATE_LIMIT_PER_MINUTE = readPositiveNumberEnv('RATIO_HEALTH_RATE_LIMIT_PER_MINUTE', 60)
+const HEALTH_CACHE_TTL_MS = readPositiveNumberEnv('RATIO_HEALTH_CACHE_TTL_MS', 15 * 1000)
 const MAX_PASSWORD_CHARS = readPositiveNumberEnv('RATIO_MAX_PASSWORD_CHARS', 256)
 const ADMIN_USERNAME = (process.env.RATIO_ADMIN_USERNAME || '').trim()
 const ADMIN_PASSWORD = process.env.RATIO_ADMIN_PASSWORD || ''
@@ -66,6 +68,7 @@ const aiDailyUsage = new Map()
 const failedAuthAccounts = new Map()
 const authCache = new Map()
 const telemetryPruneAt = new Map()
+let healthCache = { at: 0, writable: true }
 const pbkdf2Async = promisify(pbkdf2)
 // OWASP 对 PBKDF2-SHA256 的当前下限（~600k）；旧记录在下次登录成功时透明重哈希升级
 const PASSWORD_HASH_ITERATIONS = 600000
@@ -214,15 +217,34 @@ function requireAdmin(req, res, html = false) {
   if (!requestRateLimit(req, res, 'admin', ADMIN_RATE_LIMIT_PER_MINUTE)) return false
 
   const auth = readBasicAuth(req)
-  if (
-    !auth ||
-    !safeEqualConfiguredSecret(auth.username, ADMIN_USERNAME) ||
-    !safeEqualConfiguredSecret(auth.password, ADMIN_PASSWORD)
-  ) {
+  if (!auth) {
+    // 浏览器 Basic 认证的首次无凭据挑战：不计失败
     adminUnauthorized(res, html)
     return false
   }
 
+  // 管理员失败锁定（P4-21）：与普通用户同一套阈值，按来源 IP 锁定；
+  // 此前管理台只有宽松的请求数限流（300/分），防暴破弱于普通用户
+  const ip = clientAddress(req)
+  if (isAuthAccountLocked('admin', '', ip)) {
+    fail(res, 429, 'Too many failed admin attempts; try again later', 'admin_rate_limited')
+    return false
+  }
+
+  if (
+    !safeEqualConfiguredSecret(auth.username, ADMIN_USERNAME) ||
+    !safeEqualConfiguredSecret(auth.password, ADMIN_PASSWORD)
+  ) {
+    recordAuthFailure('admin', '', ip)
+    // 失败审计（fire-and-forget，不阻塞响应）：actor 记尝试的用户名
+    void writeAdminAudit(req, String(auth.username || '').slice(0, 64), 'admin.login_failed', '', 'error', {
+      code: 'admin_auth_invalid',
+    }).catch(() => undefined)
+    adminUnauthorized(res, html)
+    return false
+  }
+
+  clearAuthFailure('admin', '', ip)
   return true
 }
 
@@ -473,8 +495,11 @@ function writeAuthCache(key, user) {
   authCache.set(key, { user, expiresAt: nowMs + AUTH_CACHE_TTL_MS })
 }
 
-function authFailureKey(username) {
-  return createHash('sha256').update(username || '', 'utf8').digest('hex')
+// 失败锁定键带 IP 维度（P4-21 锁定 DoS 缓解）：只按用户名锁定时，任何人
+// 对着受害者用户名刷错误密码就能把真用户锁在门外；带上来源 IP 后攻击者
+// 只会锁住自己。仅进程内 Map，明文键便于按用户名前缀清理。
+function authFailureKey(scope, username, ip) {
+  return `${scope}\0${username || ''}\0${ip || ''}`
 }
 
 function pruneFailedAuthAccounts(nowMs = Date.now()) {
@@ -484,8 +509,8 @@ function pruneFailedAuthAccounts(nowMs = Date.now()) {
   }
 }
 
-function readFailedAuthState(username) {
-  const key = authFailureKey(username)
+function readFailedAuthState(scope, username, ip) {
+  const key = authFailureKey(scope, username, ip)
   const state = failedAuthAccounts.get(key)
   const nowMs = Date.now()
   if (!state) return { key, state: null }
@@ -496,15 +521,15 @@ function readFailedAuthState(username) {
   return { key, state }
 }
 
-function isAuthAccountLocked(username) {
-  const { state } = readFailedAuthState(username)
+function isAuthAccountLocked(scope, username, ip) {
+  const { state } = readFailedAuthState(scope, username, ip)
   return Boolean(state && state.lockedUntil > Date.now())
 }
 
-function recordAuthFailure(username) {
+function recordAuthFailure(scope, username, ip) {
   const nowMs = Date.now()
   pruneFailedAuthAccounts(nowMs)
-  const { key, state } = readFailedAuthState(username)
+  const { key, state } = readFailedAuthState(scope, username, ip)
   const current =
     state && state.windowResetAt > nowMs
       ? state
@@ -514,8 +539,8 @@ function recordAuthFailure(username) {
   failedAuthAccounts.set(key, current)
 }
 
-function clearAuthFailure(username) {
-  failedAuthAccounts.delete(authFailureKey(username))
+function clearAuthFailure(scope, username, ip) {
+  failedAuthAccounts.delete(authFailureKey(scope, username, ip))
 }
 
 async function ensureDataDir() {
@@ -644,25 +669,28 @@ async function requireUser(req, res) {
     return null
   }
 
-  if (isAuthAccountLocked(auth.username)) {
-    fail(res, 429, 'Too many failed attempts; try again later', 'auth_rate_limited')
-    return null
-  }
-
+  // 缓存命中（= 近期用正确密码认证过）先于锁定检查：攻击者对着受害者
+  // 用户名刷错误密码时，真用户带正确凭据的会话不被一并锁在门外
   const cacheKey = authCacheKey(auth)
   const cachedUser = readAuthCache(cacheKey)
   if (cachedUser) return cachedUser
+
+  const ip = clientAddress(req)
+  if (isAuthAccountLocked('user', auth.username, ip)) {
+    fail(res, 429, 'Too many failed attempts; try again later', 'auth_rate_limited')
+    return null
+  }
 
   const users = await readUsers()
   const user = getUserRecord(users.users, auth.username)
   const valid = user ? await verifyPassword(auth.password, user) : await verifyPassword(auth.password, DUMMY_PASSWORD_USER)
   if (!user || !valid) {
-    recordAuthFailure(auth.username)
+    recordAuthFailure('user', auth.username, ip)
     fail(res, 401, 'Invalid username or password', 'auth_invalid')
     return null
   }
 
-  clearAuthFailure(auth.username)
+  clearAuthFailure('user', auth.username, ip)
   const upgradedUser = await maybeUpgradePasswordHash(user, auth.password)
   writeAuthCache(cacheKey, upgradedUser)
   return upgradedUser
@@ -1508,7 +1536,10 @@ async function findUserByUsername(username) {
 }
 
 function clearUserAuthState(username) {
-  failedAuthAccounts.delete(authFailureKey(username))
+  const prefix = `user\0${username}\0`
+  for (const key of failedAuthAccounts.keys()) {
+    if (typeof key === 'string' && key.startsWith(prefix)) failedAuthAccounts.delete(key)
+  }
   for (const [cacheKey, cached] of authCache.entries()) {
     if (cached?.user?.username === username) authCache.delete(cacheKey)
   }
@@ -2169,13 +2200,25 @@ async function route(req, res) {
   const pathname = url.pathname.replace(/\/+$/, '') || '/'
 
   if (req.method === 'GET' && pathname === '/api/health') {
-    let writable = true
-    try {
-      await checkDataWritable()
-    } catch {
-      writable = false
+    // 未认证端点却每次探测都写盘（P4-21）：加 IP 限流 + 短 TTL 缓存探测
+    // 结果，刷 health 不再放大成磁盘写放大
+    if (!requestRateLimit(req, res, 'health', HEALTH_RATE_LIMIT_PER_MINUTE)) return
+    const nowMs = Date.now()
+    if (nowMs - healthCache.at >= HEALTH_CACHE_TTL_MS) {
+      let writable = true
+      try {
+        await checkDataWritable()
+      } catch {
+        writable = false
+      }
+      healthCache = { at: nowMs, writable }
     }
-    return jsonResponse(res, writable ? 200 : 503, { ok: writable, service: 'ratio-server', time: now(), writable })
+    return jsonResponse(res, healthCache.writable ? 200 : 503, {
+      ok: healthCache.writable,
+      service: 'ratio-server',
+      time: now(),
+      writable: healthCache.writable,
+    })
   }
 
   if (pathname === '/admin' || pathname.startsWith('/admin/')) return handleAdminAsset(req, res, pathname)

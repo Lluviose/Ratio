@@ -62,7 +62,7 @@
   现有 6 个功能用例未提交过任何写操作。优先：备份导出→导入 roundtrip、新建账户→转账→调整完整旅程、演示模式进出（CHANGELOG 记载曾有真实丢数据风险）。
 - [ ] **P4-20 Vitest coverage 进 CI**（`@vitest/coverage-v8`）
   先出报告再对 `src/lib` 设阈值；顺手给裸奔纯函数补测：`accountOps`/`accountOpsStorage`、`accountBalance`、`robustStats`、`accountDetail/opDisplay.ts`、`accountDetail/format.ts`。
-- [ ] **P4-21 补 server 测试 + 管理员失败锁定**
+- [ ] **P4-21 补 server 测试 + 管理员失败锁定**（安全三项完成 2026-07-23：管理员按 IP 失败锁定 + 失败审计、用户锁定 DoS 缓解（IP 维度锁定键 + 缓存命中豁免）、health 限流 + 探测缓存；集成测试 5 → 8 例。`adminConsole.js` 专项测试仍欠）
   4 用例守 3100 行后端；`adminConsole.js`（899 行）零测试。同批：管理员登录加失败锁定与失败审计（`server.js:208-227`，当前防暴破弱于普通用户）、账号锁定 DoS 缓解（锁定键加 IP 维度或对 authCache 命中豁免，`server.js:466-477, 609`）、`/api/health` 限流或缓存探测结果（`server.js:2133-2141`，未认证却每次触发磁盘写）。
 - [ ] **P4-22 版本化发布**（部分完成 2026-07-19：package.json 0.0.0 → 1.0.0；本地 buildId 从时间戳改为 git 短 SHA（脏工作区 `-dirty`），零改动构建 hash 恒定；git tag 流程待定）
   package.json 0.0.0、git 无 tag，部署产物无法对应 CHANGELOG 批次；本地构建 buildId 用时间戳（`vite.config.ts:11`）导致零改动也变 hash，改为 git describe 或固定值。
