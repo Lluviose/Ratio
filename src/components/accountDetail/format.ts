@@ -13,6 +13,13 @@ export function formatCny(value: number) {
   return formatCnyBase(value, { keepCents: true })
 }
 
+// datetime-local 输入框的取值格式（本地时区、分钟精度）
+export function toDatetimeLocalValue(date: Date) {
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 export function formatSigned(amount: number) {
   if (amount > 0) return `+${formatCny(amount)}`
   if (amount < 0) return `-${formatCny(Math.abs(amount))}`

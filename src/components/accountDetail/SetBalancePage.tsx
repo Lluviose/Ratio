@@ -10,6 +10,7 @@ import {
   type MoneyExpressionOperator,
 } from '../../lib/moneyExpression'
 import { MoneyExpressionKeypad, MoneyExpressionPreview } from './MoneyExpressionControls'
+import { RecordTimeRow } from './RecordTimeRow'
 import { formatCny, normalizeNoteValue } from './format'
 
 // 修改余额页：支持 +/- 表达式输入；校验/预览派生值在页内计算，提交时父组件独立复核
@@ -18,12 +19,16 @@ export function SetBalancePage(props: {
   editingOp: SetBalanceOp | null
   value: string
   note: string
-  // editingOp 存在时：该操作之后是否没有更晚的 set_balance 校准（可回写差额）
+  // editingOp 存在时：该操作之后是否没有更晚的 set_balance 校准（可回写差额）；
+  // 新建时：按当前所选记录时间预判（回溯到最近校准之前则仅记录、不改余额）
   canApplyDiff: boolean
+  recordTime: string
+  recordTimeMax: string
   expressionInputProps: ComponentPropsWithoutRef<'input'>
   inputRef: Ref<HTMLInputElement>
   onChangeValue: (value: string) => void
   onChangeNote: (value: string) => void
+  onChangeRecordTime: (value: string) => void
   onOperator: (operator: MoneyExpressionOperator) => void
   onClearExpression: () => void
   onSubmit: () => void
@@ -35,10 +40,13 @@ export function SetBalancePage(props: {
     value,
     note,
     canApplyDiff,
+    recordTime,
+    recordTimeMax,
     expressionInputProps,
     inputRef,
     onChangeValue,
     onChangeNote,
+    onChangeRecordTime,
     onOperator,
     onClearExpression,
     onSubmit,
@@ -109,11 +117,18 @@ export function SetBalancePage(props: {
         <div className="text-[13px] font-semibold text-slate-700">修改余额</div>
       </div>
 
+      <RecordTimeRow
+        editingAt={editingOp ? editingOp.at : null}
+        value={recordTime}
+        max={recordTimeMax}
+        onChange={onChangeRecordTime}
+      />
+
       <div className="mt-3 flex items-center justify-between text-[12px] font-medium text-slate-400">
         <div>当前余额</div>
         <div className="text-slate-500">{formatCny(account.balance)}</div>
       </div>
-      {editingOp && !canApplyDiff ? (
+      {!canApplyDiff ? (
         <div className="mt-1 text-[11px] font-semibold text-slate-400">
           余额不会变（已在后续校准中固定）
         </div>

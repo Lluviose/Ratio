@@ -15,7 +15,7 @@ import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from
 import { buildLatestSetBalanceAtMap, buildOpRollbackPlan, canRollbackBalance } from '../lib/opRollback'
 import { type ThemeColors } from '../lib/themes'
 import type { AccountOp, AccountOpInput } from '../lib/accountOps'
-import { formatCny, formatSigned, formatTime, normalizeNoteValue, toMoneyInputValue } from './accountDetail/format'
+import { formatCny, formatSigned, formatTime, normalizeNoteValue, toDatetimeLocalValue, toMoneyInputValue } from './accountDetail/format'
 import { pageTransition, pageVariants } from './accountDetail/pageMotion'
 import { OpsHistoryList } from './accountDetail/OpsHistoryList'
 import { AdjustPage, type AdjustDirection } from './accountDetail/AdjustPage'
@@ -90,6 +90,10 @@ export function AccountDetailSheet(props: {
   const [renameValue, setRenameValue] = useState('')
   const [balanceValue, setBalanceValue] = useState('')
   const [noteValue, setNoteValue] = useState('')
+  // 新建记录的「记录时间」（datetime-local 取值，本地时区分钟精度）。
+  // 初始值是打开动作页的时刻；提交时未改动则仍用精确的当前时刻（保持既有行为与排序精度）。
+  const [recordTimeValue, setRecordTimeValue] = useState('')
+  const [recordTimeInitValue, setRecordTimeInitValue] = useState('')
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
   const transferInputRef = useRef<HTMLInputElement | null>(null)
@@ -148,6 +152,12 @@ export function AccountDetailSheet(props: {
     }
   }, [])
 
+  const resetRecordTime = useCallback(() => {
+    const nowValue = toDatetimeLocalValue(new Date())
+    setRecordTimeInitValue(nowValue)
+    setRecordTimeValue(nowValue)
+  }, [])
+
   const handleClosePointerDown = (e: ReactPointerEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -182,6 +192,7 @@ export function AccountDetailSheet(props: {
       setNoteValue('')
       setAdjustDirection('plus')
       setAdjustAmount('')
+      resetRecordTime()
       transitionToAction('adjust')
     })
     focusAmountInput(adjustInputRef.current)
@@ -192,6 +203,7 @@ export function AccountDetailSheet(props: {
       setMoreOpen(false)
       setNoteValue('')
       setBalanceValue('')
+      resetRecordTime()
       transitionToAction('set_balance')
     })
     focusAmountInput(balanceInputRef.current)
@@ -229,6 +241,8 @@ export function AccountDetailSheet(props: {
       setBalanceValue('')
       setAdjustAmount('')
       setNoteValue('')
+      setRecordTimeInitValue('')
+      setRecordTimeValue('')
       suppressActionClickRef.current = false
       return
     }
@@ -247,12 +261,13 @@ export function AccountDetailSheet(props: {
     setRenameValue(account.name)
     setBalanceValue('')
     setNoteValue('')
+    resetRecordTime()
     setAdjustDirection('plus')
     setAdjustAmount('')
     setTransferDirection('out')
     setTransferPeerId('')
     setTransferAmount('')
-  }, [account, accountId, initialAction, open])
+  }, [account, accountId, initialAction, open, resetRecordTime])
 
   useEffect(() => {
     if (!open) {
@@ -363,8 +378,24 @@ export function AccountDetailSheet(props: {
   const editingAdjustOp = editingOp?.kind === 'adjust' ? editingOp : null
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
   const nextNote = normalizeNoteValue(noteValue)
-  const canApplySetBalanceDiff = editingSetBalanceOp ? canRollbackFor(editingSetBalanceOp.accountId, editingSetBalanceOp.at) : true
-  const canApplyAdjustDiff = editingAdjustOp ? canRollbackFor(editingAdjustOp.accountId, editingAdjustOp.at) : true
+
+  // 新建记录的记录时间预览：未改动/无效 → null（视为当前时刻）；改动 → 解析为 ISO
+  const customRecordAt = (() => {
+    const trimmed = recordTimeValue.trim()
+    if (!trimmed || trimmed === recordTimeInitValue) return null
+    const parsed = new Date(trimmed)
+    if (Number.isNaN(parsed.getTime())) return null
+    return parsed.toISOString()
+  })()
+  const recordTimeMax = toDatetimeLocalValue(new Date())
+  // 新建时按所选记录时间预判可否改余额：回溯到最近一次「修改余额」校准之前 → 仅记录
+  const canApplyNewRecord = canRollbackFor(account.id, customRecordAt ?? new Date().toISOString())
+  const canApplySetBalanceDiff = editingSetBalanceOp
+    ? canRollbackFor(editingSetBalanceOp.accountId, editingSetBalanceOp.at)
+    : canApplyNewRecord
+  const canApplyAdjustDiff = editingAdjustOp
+    ? canRollbackFor(editingAdjustOp.accountId, editingAdjustOp.at)
+    : canApplyNewRecord
 
   const refocusActiveInput = () => {
     const el =
@@ -448,6 +479,25 @@ export function AccountDetailSheet(props: {
     transitionToAction('none')
   }
 
+  // 提交时对记录时间独立复核（与金额校验同一模式）：无效或晚于现在拒绝；
+  // 未改动时间时仍用精确的当前时刻，保持与既有行为一致的排序精度
+  const resolveNewRecordAt = (): { at: string; isCustom: boolean } | null => {
+    const trimmed = recordTimeValue.trim()
+    if (!trimmed || trimmed === recordTimeInitValue) {
+      return { at: new Date().toISOString(), isCustom: false }
+    }
+    const parsed = new Date(trimmed)
+    if (Number.isNaN(parsed.getTime())) {
+      toast('记录时间无效', { tone: 'danger' })
+      return null
+    }
+    if (parsed.getTime() > Date.now()) {
+      toast('记录时间不能晚于现在', { tone: 'danger' })
+      return null
+    }
+    return { at: parsed.toISOString(), isCustom: true }
+  }
+
   const submitSetBalance = () => {
     const evaluated = evaluateMoneyExpression(balanceValue)
     if (!balanceValue.trim() || !evaluated.ok) {
@@ -490,22 +540,36 @@ export function AccountDetailSheet(props: {
       return
     }
 
-    if (moneyEquals(num, account.balance)) {
+    const resolvedAt = resolveNewRecordAt()
+    if (!resolvedAt) {
+      refocusActiveInput()
+      return
+    }
+
+    // 未选自定义时间且值没变：维持「无变化直接关闭」的既有行为；
+    // 选了时间则总是落一条记录（补记本身就是目的）
+    if (!resolvedAt.isCustom && moneyEquals(num, account.balance)) {
       balanceInputRef.current?.blur()
       transitionToAction('none')
       return
     }
 
+    // 回溯到最近校准之前 → 仅记录，不改当前余额（后续校准已确认过那之后的真实余额）
+    const canApply = canRollbackFor(account.id, resolvedAt.at)
     onAddOp({
       kind: 'set_balance',
-      at: new Date().toISOString(),
+      at: resolvedAt.at,
       accountType: account.type,
       accountId: account.id,
       before: normalizeMoney(account.balance),
       after: num,
       note: nextNote,
     })
-    onSetBalance(account.id, num)
+    if (!canApply) {
+      toast('已记录（余额未变）', { tone: 'neutral' })
+    } else if (!moneyEquals(num, account.balance)) {
+      onSetBalance(account.id, num)
+    }
     balanceInputRef.current?.blur()
     setNoteValue('')
     transitionToAction('none')
@@ -551,8 +615,17 @@ export function AccountDetailSheet(props: {
       return
     }
 
+    const resolvedAt = resolveNewRecordAt()
+    if (!resolvedAt) {
+      refocusActiveInput()
+      return
+    }
+
+    // 回溯到最近校准之前 → 仅记录，不改当前余额；此时不做「操作后余额为负」校验
+    // （余额不会变，delta 只是补记的期间流量）
+    const canApply = canRollbackFor(account.id, resolvedAt.at)
     const after = addMoney(account.balance, delta)
-    if (isNegativeAccountBalance(after)) {
+    if (canApply && isNegativeAccountBalance(after)) {
       toast('操作后余额不能为负', { tone: 'danger' })
       refocusActiveInput()
       return
@@ -560,7 +633,7 @@ export function AccountDetailSheet(props: {
 
     onAddOp({
       kind: 'adjust',
-      at: new Date().toISOString(),
+      at: resolvedAt.at,
       accountType: account.type,
       accountId: account.id,
       delta,
@@ -568,7 +641,11 @@ export function AccountDetailSheet(props: {
       after,
       note: nextNote,
     })
-    onAdjust(account.id, delta)
+    if (canApply) {
+      onAdjust(account.id, delta)
+    } else {
+      toast('已记录（余额未变）', { tone: 'neutral' })
+    }
     setAdjustAmount('')
     setNoteValue('')
     adjustInputRef.current?.blur()
@@ -1029,10 +1106,13 @@ export function AccountDetailSheet(props: {
                   amount={adjustAmount}
                   note={noteValue}
                   canApplyDiff={canApplyAdjustDiff}
+                  recordTime={recordTimeValue}
+                  recordTimeMax={recordTimeMax}
                   amountInputProps={amountInputProps}
                   inputRef={adjustInputRef}
                   onChangeAmount={setAdjustAmount}
                   onChangeNote={setNoteValue}
+                  onChangeRecordTime={setRecordTimeValue}
                   onChangeDirection={setAdjustDirection}
                   onSubmit={submitAdjust}
                   onCancel={cancelEdit}
@@ -1054,10 +1134,13 @@ export function AccountDetailSheet(props: {
                   value={balanceValue}
                   note={noteValue}
                   canApplyDiff={canApplySetBalanceDiff}
+                  recordTime={recordTimeValue}
+                  recordTimeMax={recordTimeMax}
                   expressionInputProps={expressionInputProps}
                   inputRef={setBalanceInputNode}
                   onChangeValue={setBalanceValue}
                   onChangeNote={setNoteValue}
+                  onChangeRecordTime={setRecordTimeValue}
                   onOperator={appendBalanceOperator}
                   onClearExpression={clearBalanceExpression}
                   onSubmit={submitSetBalance}

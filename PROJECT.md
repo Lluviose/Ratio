@@ -176,7 +176,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 | `adjust` | **期间净变动汇总** | 不是单笔交易 |
 | `transfer` | 账户间内部转移 | 不改变净资产，绝不能算收入/支出 |
 
-存储与规范化在 `src/lib/accountOpsStorage.ts`，Hook 在 `src/lib/useAccountOps.ts`。编辑/删除历史操作时有「回滚」语义：只有当该账户此后没有更晚的 `set_balance` 校准时才回滚余额（`canRollbackBalance` 模式，详见 `AccountDetailSheet`）。
+存储与规范化在 `src/lib/accountOpsStorage.ts`，Hook 在 `src/lib/useAccountOps.ts`。编辑/删除历史操作时有「回滚」语义：只有当该账户此后没有更晚的 `set_balance` 校准时才回滚余额（`canRollbackBalance` 模式，详见 `AccountDetailSheet`）。新建「修改余额 / 期间增减」可选记录时间（默认现在、不允许未来）：所选时间早于最近一次校准时仅落历史记录、不改当前余额（同一 `canRollbackBalance` 判断换上所选时间）；编辑历史记录时记录时间只读——改时间会让「差额是否已应用」跨校准边界漂移。`op.at` 同时决定月度流量统计的归属月份（`monthlyDisposable`）。
 
 ### 快照（src/lib/snapshots.ts）
 

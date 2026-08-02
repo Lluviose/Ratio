@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-02 - 账户余额更改支持选择记录时间
+
+- 「修改余额」「期间增减」新建记录时可选记录时间（新组件 `accountDetail/RecordTimeRow`，datetime-local 本地时区分钟精度）：默认打开动作页的时刻，未改动时提交仍用精确的当前时刻（排序精度与既有行为一致）；不允许未来时间（输入框 `max` + 提交时独立复核双层拦截）。记录时间决定操作在历史列表的位置与月度流量统计的归属月份（`monthlyDisposable` 按 `op.at` 日期分桶）。
+- 回溯语义与既有金融不变量对齐：所选时间早于该账户最近一次「修改余额」校准时，该笔仅作为历史记录保存、不改当前余额——后续校准已确认过那之后的真实余额（与编辑/删除历史共用 `canRollbackBalance` 语义，新建路径把「现在」换成所选时间做同一判断）。页内实时提示沿用既有文案「余额不会变（已在后续校准中固定）」（期间增减预览同步显示 +¥0.00），提交 toast「已记录（余额未变）」；该路径同时豁免「操作后余额不能为负」校验（余额不会变，delta 只是补记的期间流量）。选了自定义时间且金额等于当前余额的「修改余额」不再走无变化直接关闭——补记本身就是目的。
+- 编辑历史记录时记录时间只读展示：改时间会让「差额是否已应用到余额」跨校准边界漂移（已应用状态由时间序隐式承载，没有独立字段可依据），本批不支持；转账页暂不加时间选择。数据形状无变化（`at` 字段既有），不涉及 schema 迁移与备份格式。
+- 测试：新增 `AccountDetailSheet.recordTime.test.tsx` 8 例（默认时间行为不回归、过去时间写入 `op.at` 且正常应用、期间增减/修改余额回溯校准前仅记录 + 页内提示 + toast、自定义时间等值仍落记录、未来时间拒绝、编辑态只读、`toDatetimeLocalValue` 格式）。测试只假 Date 不假定时器（framer-motion 动画调度不受影响），期望值用本地时间构造与时区无关。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（38 文件 325 项）、`npm run build && npm run check:bundle`（entry 160.5/175 KiB）、`npx playwright test`（功能 30 项全矩阵 + 视觉 24 项）验证。
+
 ## 2026-07-24 - P3-15 拆分 SettingsScreen 与 uploadCloud 可测化 + P2-11 启动骨架屏
 
 - SettingsScreen 1308 → 350 行（不改任何行为，可见文本/aria/弹窗文案逐字节保留）：新目录 `src/screens/settings/` 承载九个卡片组件（外观/演示/主题/账户排序/统计月起始/云同步/云端 AI/备份/本机快照）与 `localSnapshotFormat.ts` 共享格式化；SettingsScreen 保留为状态提升与组合的编排层。`react-compiler.shared.ts` 编译范围与 vite screen-settings 分包 test 同步纳入 `settings/` 目录（新卡片组件全部进入 React Compiler 编译，分包边界不变）。
