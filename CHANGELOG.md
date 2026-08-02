@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-02 - Pages 部署管线解耦审计 + 懒分包失败恢复通道 + 云同步离场抢跑
+
+- **GitHub Pages 部署一劳永逸**：部署反复停摆的根因是 CI 里的 `npm audit --audit-level=high`——它的失败由上游新披露公告触发、与被推送的提交无关（fast-uri、brace-expansion 十天内两次实锤，7-23 与 8-2 的 main 提交因此全红、Pages 停在 7-24）。审计移出 CI 到独立 `audit.yml`（依赖清单变更 + 每周一定时 + 手动触发）：新公告只在审计工作流亮红、不再冻结部署；`deploy-pages.yml` 门禁的 CI 工作流恢复为纯代码健康信号。当前 brace-expansion 高危已 `npm audit fix` 清零（仅 lockfile 变更）。
+- **首页 AI 助手打开失败（及所有懒屏幕的同类故障）**：根因是「部署更新后旧哈希 chunk 从服务器消失」——prompt 模式下旧 SW 继续服务旧版 index，未进运行时缓存的懒分包 404；原兜底按钮的 `location.reload()` 仍由旧 SW 接管，循环失败。新增 `src/lib/chunkRecovery.ts` 恢复通道：分包失败当下立即触发一次 SW 更新检查（绕过 5 分钟节流，新版本尽快进 waiting），兜底 UI 点「重试」优先应用 waiting 的更新（与 toast「立即更新」同一路径、接管后自动刷新进新版产物），无待应用更新才普通刷新。`pwa.ts` 注入能力，组件不触碰 `virtual:pwa-register`；`LazyAiAssistant` 兜底按钮、`LazyLoadBoundary` 默认兜底、`App.ScreenLoadError` 三处接入（后两处从纯文案升级为可操作的「重试」按钮）。
+- **本地/服务器存档冲突隐患排查与修复**：全面审查同步引擎（脏标记令牌守卫、fast-forward 前二次脏检、上传乐观锁、409 后内容比对自愈、服务端 `runQueuedMutation` 原子性与单调 `updatedAt`）均无正确性缺陷；设备本地易变键（`ratio.pendingToast.v1`、`ratio.ai.chat.session.v1` 走 sessionStorage，`ratio.cloudSyncDirty` 被前缀排除）不进备份。真实的冲突制造窗口是**离场丢上传**：手机「记一笔就切走」，2.5s 防抖 + 30s 节流让上传来不及发生，脏数据滞留本机；期间另一台设备先上传，回头 409 冲突。修复：页面隐藏（visibilitychange hidden / pagehide）且有脏数据时立即抢跑上传（`runAutoSync` 新增 urgent 选项绕过防抖与节流；隐藏后定时器会被系统冻结，不绕过约等于放弃）。请求被杀死无害：脏标记与乐观锁在，下次启动重试。
+- 测试基建修复：`initCloudAutoSync` 的监听改为统一挂在 AbortController 上并导出 `disposeCloudAutoSync()`——此前 `vi.resetModules` 产生的旧模块副本监听器一直留在共享 window 上，既有用例靠「后续副本降级为 probe 路径」侥幸通过，新增的同步事件路径把 14 个泄漏副本全部触发才暴露。cloudSync.test 逐用例 dispose。
+- 测试：`chunkRecovery.test.ts` 4 例（未注入降级、接管/未接管、抛错兜底、失败通知触发更新检查）；`cloudSync.test.ts` 13 → 16 例（pagehide 立即上传且防抖定时器确认取消、30s 节流窗口内隐藏立即上传且乐观锁期望值正确、无脏数据隐藏零请求）。
+- 已通过 `npm run lint`、`npx tsc -b`、`npm test`（39 文件 332 项）、`npm run build && npm run check:bundle`、`npx playwright test`（54 项：全矩阵 52 通过，2 例 mobile-safari 因已知 Windows 无头 WebKit 抖动在主跑报环境级错误、单独重跑通过）验证；推送后确认 CI + Audit + Pages 部署三工作流全绿、线上站点更新。
+
 ## 2026-08-02 - 账户余额更改支持选择记录时间
 
 - 「修改余额」「期间增减」新建记录时可选记录时间（新组件 `accountDetail/RecordTimeRow`，datetime-local 本地时区分钟精度）：默认打开动作页的时刻，未改动时提交仍用精确的当前时刻（排序精度与既有行为一致）；不允许未来时间（输入框 `max` + 提交时独立复核双层拦截）。记录时间决定操作在历史列表的位置与月度流量统计的归属月份（`monthlyDisposable` 按 `op.at` 日期分桶）。

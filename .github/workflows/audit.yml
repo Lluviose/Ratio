@@ -1,0 +1,37 @@
+name: Audit
+
+# 依赖审计独立于 CI：npm audit 因上游新公告而失败时，只在这里亮红，
+# 不影响 CI 结论、不阻塞 Pages 部署（deploy-pages.yml 只门禁 CI 工作流）。
+# 触发时机：依赖清单变更时验证修复效果 + 每周定时扫描新披露公告 + 手动。
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - package-lock.json
+  pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+  schedule:
+    # 每周一 03:17 UTC（避开整点高峰）
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high

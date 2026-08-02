@@ -31,6 +31,7 @@ const AUTO_SYNC_MIN_INTERVAL_MS = 30000
 export const CLOUD_SYNC_DIRTY_KEY = 'ratio.cloudSyncDirty'
 
 let initialized = false
+let listenerAbort: AbortController | null = null
 let syncTimer: number | null = null
 let lastAutoSyncAt = 0
 let syncInFlight = false
@@ -389,7 +390,7 @@ async function probeRemoteFreshness(
   return reconcileRemoteBackup(settings, backup, reason, dirtyToken, { allowFastForward: true })
 }
 
-async function runAutoSync(reason: string) {
+async function runAutoSync(reason: string, options: { urgent?: boolean } = {}) {
   const settings = getCloudSyncSettings()
   const dirty = isCloudSyncDirty()
 
@@ -402,7 +403,8 @@ async function runAutoSync(reason: string) {
 
   const now = Date.now()
   const elapsed = now - lastAutoSyncAt
-  if (elapsed < AUTO_SYNC_MIN_INTERVAL_MS) {
+  // urgent（页面隐藏抢跑）绕过最小间隔：隐藏后定时器会被冻结，改约等于放弃
+  if (!options.urgent && elapsed < AUTO_SYNC_MIN_INTERVAL_MS) {
     scheduleAutoSync(reason, AUTO_SYNC_MIN_INTERVAL_MS - elapsed)
     return
   }
@@ -501,6 +503,11 @@ function scheduleAutoSync(reason: string, delay = AUTO_SYNC_DELAY_MS) {
 export function initCloudAutoSync() {
   if (initialized || typeof window === 'undefined') return
   initialized = true
+  // 所有监听统一挂到一个 AbortController：disposeCloudAutoSync 一次移除。
+  // 测试里 vi.resetModules 会产生多个模块副本，旧副本的监听若不移除会
+  // 留在共享 window 上，把一次事件放大成 N 次同步调度。
+  listenerAbort = new AbortController()
+  const { signal } = listenerAbort
 
   window.addEventListener(STORAGE_WRITE_EVENT, (event) => {
     const detail = getWriteDetail(event)
@@ -519,25 +526,54 @@ export function initCloudAutoSync() {
     if (suppressDirtyMarking) return
     setCloudSyncDirty()
     scheduleAutoSync(`storage:${detail.key}`)
-  })
+  }, { signal })
 
   window.addEventListener('online', () => {
     if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('online')
-  })
+  }, { signal })
 
   window.addEventListener('focus', () => {
     if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('focus', 800)
-  })
+  }, { signal })
 
   window.addEventListener('pageshow', () => {
     if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('pageshow', 800)
-  })
+  }, { signal })
+
+  // 离场前抢跑上传：手机上「记一笔就切走」是常态，2.5s 防抖 + 30s 节流
+  // 会让上传来不及发生，脏数据滞留本机直到下次打开——期间另一台设备先
+  // 上传，回头就是 409 冲突。存储内核在 pagehide 抢跑 flush，云同步在此
+  // 对齐：页面隐藏且有脏数据时立即同步（绕过防抖与节流）。请求被系统
+  // 杀死也无害：脏标记与乐观锁都在，下次启动 startup 路径重试。
+  const flushDirtyOnHide = () => {
+    if (!isCloudSyncDirty()) return
+    if (isDemoModeActive()) return
+    const settings = getCloudSyncSettings()
+    if (!settings.autoSync || !hasCloudCredentials(settings)) return
+    if (syncInFlight) return
+    cancelPendingCloudAutoSync()
+    void runAutoSync('hidden', { urgent: true })
+  }
 
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && shouldScheduleSync({ includeRemoteProbe: true })) {
       scheduleAutoSync('visible', 800)
     }
-  })
+    if (document.visibilityState === 'hidden') flushDirtyOnHide()
+  }, { signal })
+
+  window.addEventListener('pagehide', flushDirtyOnHide, { signal })
 
   if (shouldScheduleSync({ includeRemoteProbe: true })) scheduleAutoSync('startup', 800)
+}
+
+/** 测试用：移除本模块注册的全部监听并复位调度状态（生产环境无需调用） */
+export function disposeCloudAutoSync() {
+  listenerAbort?.abort()
+  listenerAbort = null
+  cancelPendingCloudAutoSync()
+  initialized = false
+  lastAutoSyncAt = 0
+  syncInFlight = false
+  pendingReason = null
 }

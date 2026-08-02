@@ -10,6 +10,7 @@ import { loadAiAssistant } from './components/aiAssistantLoader'
 import { LazyLoadBoundary } from './components/LazyLoadBoundary'
 import { ScreenSkeleton } from './components/ScreenSkeleton'
 import { type Account } from './lib/accounts'
+import { recoverFromChunkLoadFailure } from './lib/chunkRecovery'
 import { useAccounts } from './lib/useAccounts'
 import { useSnapshots } from './lib/useSnapshots'
 import { useAccountOps } from './lib/useAccountOps'
@@ -187,7 +188,15 @@ function scheduleBackgroundTabPreloads() {
 function ScreenLoadError() {
   return (
     <div className="muted" style={{ padding: 28, textAlign: 'center', fontSize: 13, fontWeight: 600 }}>
-      模块加载失败，请检查网络后刷新
+      <div>模块加载失败</div>
+      <button
+        type="button"
+        className="ghostBtn"
+        style={{ marginTop: 12 }}
+        onClick={() => recoverFromChunkLoadFailure()}
+      >
+        重试
+      </button>
     </div>
   )
 }

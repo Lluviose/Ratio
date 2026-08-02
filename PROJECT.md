@@ -141,6 +141,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 - 分包用显式 `advancedChunks` groups（`ai-assistant`、`screen-trend`、`screen-stats`（含 `screens/stats/`）、`screen-settings`、`vendor-markdown`（react-markdown 全家桶）、`vendor-matter`（matter-js，物理引擎按需加载））。**不要改回函数式 manualChunks，并保持 `includeDependenciesRecursively: false`**：rolldown 默认递归吸附依赖；若未显式关闭，入口会反向静态 import 名义上的懒块，浏览器首开实际把 AI/趋势/统计/设置/markdown 全部下载。vendor 组 priority 高于屏幕组，确保 vendor 先认领依赖。`npm run check:bundle` 会检查六个懒块存在、gzip 预算及入口无静态反向引用；改分包后必须先 build 再跑该门禁。
 - SW 更新采用 prompt 模式（`registerType: 'prompt'`，`skipWaiting: false`，`clientsClaim: true`）：新版本先 waiting，`src/pwa.ts` 弹「新版本已就绪」toast，用户点「立即更新」才接管并刷新；忽略则下次冷启动自然生效。更新检查在回到前台时触发（5 分钟节流 + 30 分钟兜底定时器），没有固定轮询。**不要改回 autoUpdate/skipWaiting**——那会在部署瞬间强刷正在输入的用户，也会复活首装 controllerchange 一类缺陷（见 TROUBLESHOOTING）。
+- 懒分包加载失败的恢复通道（`src/lib/chunkRecovery.ts`）：失败几乎总是「部署已更新、旧哈希 chunk 已从服务器消失」，prompt 模式下单纯 reload 仍由旧 SW 服务旧产物、死循环。恢复语义：失败当下立即触发一次 SW 更新检查（绕过 5 分钟节流），用户在兜底 UI 点「重试」时优先应用 waiting 的更新（与 toast「立即更新」同一路径），没有待应用更新才普通刷新。`pwa.ts` 经 `setChunkRecoveryHandlers` 注入能力，组件（`LazyLoadBoundary`/`LazyAiAssistant`/`ScreenLoadError`）只依赖 `chunkRecovery`，不触碰 `virtual:pwa-register`（vitest 无法解析该虚拟模块）。
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。懒边界名单（`vite.config.ts` 的 `lazyChunkNames`）除六个显式分组外还包括只被懒屏幕共享的依赖 chunk（`TrendScreen-*`/`StatsScreen-*`/`SettingsScreen-*`/`AiAssistant-*`/`savingsGoal-*`）——预加载过滤、precache 排除、运行时缓存三处必须消费同一份名单；`check:bundle` 会校验 sw.js 的 precache 清单里没有任何懒边界 chunk（名单镜像在 `scripts/check-bundle-budget.mjs` 的 `PRECACHE_EXCLUDED_CHUNKS`，两处需同步改）。
 - 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
 - **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
@@ -246,7 +247,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 ## 云同步与后端
 
-前端云端 API 封装在 `src/lib/cloud.ts`，自动同步编排在 `src/lib/cloudSync.ts`（脏标记 + 最短间隔 30s + 冲突时暂停并提示）。
+前端云端 API 封装在 `src/lib/cloud.ts`，自动同步编排在 `src/lib/cloudSync.ts`（脏标记 + 防抖 2.5s + 最短间隔 30s + 冲突时暂停并提示；页面隐藏（visibilitychange hidden / pagehide）且有脏数据时立即抢跑上传、绕过防抖与节流——手机「记一笔就切走」否则上传来不及发生，脏数据滞留期间另一台设备先上传就成了 409 冲突；请求被系统杀死无害，脏标记与乐观锁兜底，下次启动重试）。
 
 后端 `server/src/server.js`（Node 原生 `http`）：
 
@@ -285,7 +286,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - 组件测试通过可见文本、role/aria 查询 DOM——改文案或语义属性会直接打破测试。
 - 纯函数不变量用 fast-check 性质测试（`percent`、`money`、`ratioBreakdown` 已有首批），新增分配/金额类算法时优先补性质而非枚举用例。
 
-持续集成（`.github/workflows/ci.yml`）：PR 与 main push 上跑依赖高危审计、前后端 lint/测试、构建、分包体积门禁，以及 Playwright desktop chromium + mobile-chrome；mobile-safari 只在本地跑（原因见 TROUBLESHOOTING.md）。Dependabot 每周把 npm minor/patch 更新分组提 PR。
+持续集成（`.github/workflows/ci.yml`）：PR 与 main push 上跑前后端 lint/测试、构建、分包体积门禁，以及 Playwright desktop chromium + mobile-chrome；mobile-safari 只在本地跑（原因见 TROUBLESHOOTING.md）。依赖高危审计在独立的 `audit.yml`（依赖清单变更 + 每周定时 + 手动触发）：`npm audit` 的失败由上游新披露公告触发、与被推送的提交无关，放在 CI 里会让任何一条新公告冻结整个 Pages 部署管线（fast-uri、brace-expansion 两次实锤）——审计失败只亮红不阻塞部署，修复靠 Dependabot 或手动 `npm audit fix`。Pages 部署（`deploy-pages.yml`）只门禁 CI 工作流全绿。Dependabot 每周把 npm minor/patch 更新分组提 PR。
 
 端到端（Playwright）：
 

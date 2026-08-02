@@ -1,4 +1,5 @@
 import { registerSW } from 'virtual:pwa-register'
+import { setChunkRecoveryHandlers } from './lib/chunkRecovery'
 import { emitAppToast, queueToastAfterReload } from './lib/overlay'
 import { trackTelemetry } from './lib/telemetry'
 
@@ -19,6 +20,7 @@ const UPDATE_TOAST_REMIND_INTERVAL_MS = 5 * 60_000
 let updateReady = false
 let applyingUpdate = false
 let lastUpdateToastAt = 0
+let swRegistration: ServiceWorkerRegistration | undefined
 
 function showUpdateToast() {
   const now = Date.now()
@@ -57,6 +59,7 @@ const updateServiceWorker = registerSW({
     })
   },
   onRegisteredSW(swUrl, registration) {
+    swRegistration = registration
     trackTelemetry('pwa_registered', {
       swUrl,
       hasRegistration: Boolean(registration),
@@ -84,5 +87,30 @@ const updateServiceWorker = registerSW({
     window.addEventListener('focus', checkForUpdate)
     document.addEventListener('visibilitychange', checkForUpdate)
     window.setInterval(checkForUpdate, UPDATE_CHECK_FALLBACK_INTERVAL_MS)
+  },
+})
+
+// 懒分包加载失败的恢复通道（见 lib/chunkRecovery.ts）：
+// - 失败发生时立即做一次更新检查（绕过 5 分钟节流），新版本尽快进 waiting；
+// - 用户点「重试」时优先应用 waiting 的更新——与 toast「立即更新」同一条路径，
+//   接管后由 registerSW 自动刷新，加载的就是新版产物。
+setChunkRecoveryHandlers({
+  applyPendingUpdate: () => {
+    if (!updateReady) return false
+    // 已在应用中：同样视为接管，避免叠加一次普通刷新打断 SKIP_WAITING 交接
+    if (applyingUpdate) return true
+    applyingUpdate = true
+    trackTelemetry('pwa_update_accepted_on_chunk_error')
+    queueToastAfterReload('已更新到最新版本', { tone: 'success' })
+    void updateServiceWorker(true)
+    return true
+  },
+  requestUpdateCheck: () => {
+    trackTelemetry('pwa_chunk_load_failed', { updateReady })
+    if (updateReady) {
+      showUpdateToast()
+      return
+    }
+    void swRegistration?.update().catch(() => undefined)
   },
 })

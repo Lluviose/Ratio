@@ -18,7 +18,7 @@ Ratio 是本地优先的个人资产/负债管理 PWA。前端核心数据在浏
 ```bash
 npm run build      # tsc -b + vite build，约 5-10s，产物分包见 PROJECT.md「懒加载与分包」
 npm run check:bundle # build 后检查真实懒加载边界与 gzip 体积预算
-npm test           # Vitest 单测，当前 38 个文件 / 325 个用例；固定 2 workers，约 2-3 分钟
+npm test           # Vitest 单测，当前 39 个文件 / 332 个用例；固定 2 workers，约 2-3 分钟
 npm run lint       # eslint .，应零输出通过
 npm --prefix server run check # 服务端语法检查 + 真实 HTTP 集成测试
 npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约 2 分钟；首次运行会 build + preview

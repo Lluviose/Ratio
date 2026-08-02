@@ -24,8 +24,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Dependency audit
-        run: npm audit --audit-level=high
+      # 依赖审计已移到独立的 Audit 工作流（audit.yml）：npm audit 的失败由
+      # 「上游新披露公告」触发，与被推送的提交无关——放在这里会让任何一条
+      # 新公告冻结整个部署管线（fast-uri、brace-expansion 两次实锤）。
+      # Audit 工作流失败在提交状态上依然可见（红叉），但不再阻塞 Pages 部署。
 
       - name: Lint
         run: npm run lint

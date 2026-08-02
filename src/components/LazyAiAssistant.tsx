@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Sparkles } from 'lucide-react'
+import { recoverFromChunkLoadFailure } from '../lib/chunkRecovery'
 import { LazyLoadBoundary } from './LazyLoadBoundary'
 import { loadAiAssistant } from './aiAssistantLoader'
 
@@ -34,7 +35,9 @@ export function LazyAiAssistant() {
   if (!enabled) return <AiAssistantButton onClick={() => setEnabled(true)} />
 
   return (
-    <LazyLoadBoundary fallback={<AiAssistantButton onClick={() => window.location.reload()} />}>
+    // 分包加载失败：点按钮走恢复通道（优先应用 waiting 的 SW 更新，否则刷新），
+    // 而不是在旧 SW 下反复刷新加载同一批已消失的旧哈希 chunk
+    <LazyLoadBoundary fallback={<AiAssistantButton onClick={() => recoverFromChunkLoadFailure()} />}>
       <Suspense fallback={<AiAssistantButton busy />}>
         <AiAssistant initialOpen />
       </Suspense>
