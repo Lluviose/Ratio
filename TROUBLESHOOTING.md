@@ -2,6 +2,25 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## AI 助手点击无反应/闪一下（vendor 分包 import 环路，TypeError: i is not a function）
+
+现象：
+
+- 线上与本地 build 一致：点 AI 按钮只闪一下又变回按钮，面板永远打不开；无任何 UI 报错。
+- 控制台：`TypeError: i is not a function at vendor-markdown-*.js:1`，发生在懒分包**顶层求值**阶段，动态 import reject 被 `LazyLoadBoundary` 捕获、渲染回兜底按钮——旧版兜底是 `location.reload()`，表现为「点一下整页闪一下」。
+- 全套 e2e 绿灯照发：当时没有任何用例点过 AI 按钮，坏产物一路上线。
+
+原因：
+
+- `advancedChunks` 的 vendor-markdown 组正则只圈了 react-markdown 依赖树的一部分（`includeDependenciesRecursively: false` 下漏网模块不会被吸附进组）。漏掉的 CJS 桥（如 `style-to-js`）被 rolldown 放进了消费它的 `ai-assistant`/`AiAssistant` 分包；而 vendor-markdown 的顶层代码（hast-util-to-jsx-runtime 的 `__toESM(require_styleToJs(), 1)`）要在**模块求值时**回头调它——两个分包互相 import 成环，作为依赖先求值的 vendor-markdown 拿到的是对方尚未初始化的 `var` 绑定（undefined），直接 TypeError。
+- 环路是否炸取决于「跨分包引用是否在顶层求值期被调用」，纯运行期互调不会炸——所以这个结构性缺陷可以长期潜伏，直到某次依赖升级/重排把一个 init-time 调用挪到环上。
+
+处理（2026-08-19）：
+
+- vendor-markdown 的 test 正则覆盖 react-markdown + remark-gfm 的**完整**传递依赖闭包（97 包，按前缀归并；用 `node -e` 沿 package.json dependencies 递归可重新生成名单）。
+- `check:bundle` 新增 vendor 分包环路门禁：沿 dist 产物的静态 import 图做可达性检查，任何 `vendor-*` chunk 能绕回自身即判失败——依赖升级引入新漏网包时构建期直接拦截。
+- 新增 `e2e/ai-assistant.spec.ts`：点按钮断言面板真的打开 + 捕获分包求值错误，堵住「懒加载链路零覆盖」的洞。
+
 ## PWA 首次安装后数秒自动整页刷新（并连带 CI e2e 失败）
 
 现象：

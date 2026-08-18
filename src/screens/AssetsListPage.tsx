@@ -157,7 +157,7 @@ function AssetsListPageComponent(props: {
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">     
-      <div className="px-4 pt-[104px] pb-24">
+      <div className="px-4 pt-[calc(var(--safe-top)+104px)] pb-[calc(var(--safe-bottom)+96px)]">
         <div className="flex flex-col gap-[4px]">
           {groupModels.map((g, i) => {
             const id = g.id

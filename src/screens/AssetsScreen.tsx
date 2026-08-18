@@ -10,6 +10,7 @@ import { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, coerceCloudSyncSe
 import { CLOUD_SYNC_DIRTY_KEY, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEvents'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
+import { useSafeAreaTop } from '../lib/safeArea'
 import { overshootEase, quickFade } from '../lib/motionPresets'
 import {
   LIST_GROUP_ORDER,
@@ -115,6 +116,10 @@ export function AssetsScreen(props: {
   const [listRects, setListRects] = useState<Partial<Record<GroupId, Rect>>>({})
   const [viewport, setViewport] = useState({ w: 0, h: 0 })
   const [scrollerWidth, setScrollerWidth] = useState(0)
+  // 沉浸式渲染下图表区域整体下移一个状态栏高度；AssetsRatioPage 内部用同一
+  // hook 计算 chartTarget，两边必须保持同一公式
+  const safeAreaTop = useSafeAreaTop()
+  const ratioChartTop = RATIO_CHART_TOP + safeAreaTop
   // 当 skipInitialAnimation 为 true 时，initialized 直接为 true，但仍需等待 viewport 测量完成
   const [initialized, setInitialized] = useState(false)
   const [isInitialLoad, setIsInitialLoad] = useState(!skipInitialAnimation)
@@ -484,9 +489,9 @@ export function AssetsScreen(props: {
         assetsTotal: grouped.assetsTotal || 0,
         viewportW: viewport.w,
         viewportH: viewport.h,
-        top: RATIO_CHART_TOP,
+        top: ratioChartTop,
       }),
-    [blocks, grouped.assetsTotal, viewport.h, viewport.w],
+    [blocks, grouped.assetsTotal, ratioChartTop, viewport.h, viewport.w],
   )
 
   const blockKinds = useMemo(
@@ -922,14 +927,14 @@ export function AssetsScreen(props: {
 
   // 计算负债上方的底色填充块（负债比例低于100%时）
   const debtFillerRect = useMemo(
-    () => (blocks.debt ? computeDebtFillerRect(ratioLayout, RATIO_CHART_TOP) : null),
-    [blocks.debt, ratioLayout],
+    () => (blocks.debt ? computeDebtFillerRect(ratioLayout, ratioChartTop) : null),
+    [blocks.debt, ratioChartTop, ratioLayout],
   )
 
   // 计算资产底部的底色填充块（负债比例超过100%时）
   const assetFillerRect = useMemo(
-    () => (blocks.debt ? computeAssetFillerRect(ratioLayout, viewport.w, viewport.h, RATIO_CHART_TOP) : null),
-    [blocks.debt, ratioLayout, viewport.h, viewport.w],
+    () => (blocks.debt ? computeAssetFillerRect(ratioLayout, viewport.w, viewport.h, ratioChartTop) : null),
+    [blocks.debt, ratioChartTop, ratioLayout, viewport.h, viewport.w],
   )
 
   // 负债上方底色填充块的动画值
@@ -993,7 +998,7 @@ export function AssetsScreen(props: {
 
   const fallbackHome = !initialized ? (
     <div className="absolute inset-0 z-30 flex flex-col" style={{ background: 'var(--bg)' }}>
-      <div className="px-4 pt-6 pb-2 flex items-start justify-between gap-3">
+      <div className="px-4 pt-[calc(var(--safe-top)+24px)] pb-2 flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
             <span>我的净资产 (CNY)</span>
@@ -1025,7 +1030,7 @@ export function AssetsScreen(props: {
         />
       </div>
 
-      <div className="absolute left-4 bottom-4 z-20">
+      <div className="absolute left-4 bottom-[calc(var(--safe-bottom)+16px)] z-20">
         <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
           <button
             type="button"
@@ -1203,7 +1208,7 @@ export function AssetsScreen(props: {
 
       <motion.div
         aria-hidden={!initialized}
-        className="absolute inset-x-0 top-0 z-20 px-4 pt-6 pointer-events-none"
+        className="absolute inset-x-0 top-0 z-20 px-4 pt-[calc(var(--safe-top)+24px)] pointer-events-none"
         style={{ opacity: overlayFade }}
       >
         <motion.div
@@ -1274,7 +1279,7 @@ export function AssetsScreen(props: {
 
       <motion.div
         aria-hidden={!initialized}
-        className="absolute left-4 bottom-4 z-20 pointer-events-none"
+        className="absolute left-4 bottom-[calc(var(--safe-bottom)+16px)] z-20 pointer-events-none"
         style={{ opacity: overlayFade }}
       >
         <motion.div style={{ opacity: miniBarOpacity, y: miniBarY, pointerEvents: miniBarPointerEvents }}>

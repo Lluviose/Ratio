@@ -224,7 +224,7 @@ function BubbleChartPageComponent(props: {
       />
 
       {/* Title / Header */}
-      <div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 flex items-center justify-between pointer-events-none">
+      <div className="absolute inset-x-0 top-0 z-20 px-4 pt-[calc(var(--safe-top)+24px)] flex items-center justify-between pointer-events-none">
         <div className="text-[15px] font-semibold tracking-tight text-slate-900 opacity-0">
           {/* Placeholder to match layout */}
         </div>

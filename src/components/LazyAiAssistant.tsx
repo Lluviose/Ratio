@@ -12,7 +12,7 @@ function AiAssistantButton(props: { onClick?: () => void; busy?: boolean }) {
 
   return (
     <div className="absolute inset-0 z-30 pointer-events-none">
-      <div className="absolute right-4 bottom-4 pointer-events-auto">
+      <div className="absolute right-4 bottom-[calc(var(--safe-bottom)+16px)] pointer-events-auto">
         <motion.button
           type="button"
           aria-label="AI analysis"

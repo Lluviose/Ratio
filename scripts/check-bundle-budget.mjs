@@ -141,6 +141,39 @@ if (entryFile) {
   }
 }
 
+// vendor-* 分包环路门禁：vendor 组的 test 正则若没圈全依赖闭包，漏网模块会落进
+// 消费它的懒屏幕分包，vendor 分包顶层求值时回头 import 成环——先求值的一侧拿到
+// 未初始化的绑定（真实事故：style-to-js 落进 ai-assistant，vendor-markdown 顶层
+// 调用它抛 "i is not a function"，AI 面板永远打不开）。这里对每个 vendor 分包沿
+// 静态 import 图做可达性检查：能绕回自身即为环，直接判失败。
+{
+  const jsAssets = assetNames.filter((name) => name.endsWith('.js'))
+  const importGraph = new Map()
+  for (const name of jsAssets) {
+    const source = readFileSync(path.join(assetsDir, name), 'utf8')
+    const targets = staticImportSpecifiers(source)
+      .map((specifier) => path.basename(specifier.split(/[?#]/, 1)[0]))
+      .filter((base) => base.endsWith('.js'))
+    importGraph.set(name, targets)
+  }
+
+  const vendorChunks = jsAssets.filter((name) => /^vendor-/i.test(name))
+  for (const vendor of vendorChunks) {
+    const stack = [...(importGraph.get(vendor) ?? [])]
+    const visited = new Set()
+    while (stack.length > 0) {
+      const current = stack.pop()
+      if (current === vendor) {
+        fail(`chunk import cycle involving ${vendor}; its advancedChunks test regex is missing part of the dependency closure`)
+        break
+      }
+      if (visited.has(current)) continue
+      visited.add(current)
+      stack.push(...(importGraph.get(current) ?? []))
+    }
+  }
+}
+
 const swFile = path.join(distDir, 'sw.js')
 if (!existsSync(swFile)) {
   fail('missing dist/sw.js; PWA service worker was not generated')

@@ -78,7 +78,13 @@ export default defineConfig(() => {
               { name: 'vendor-matter', test: /[\\/]node_modules[\\/]matter-js[\\/]/, priority: 10 },
               {
                 name: 'vendor-markdown',
-                test: /[\\/]node_modules[\\/](?:react-markdown[\\/]|remark-gfm[\\/]|micromark|mdast-util|unist-util|hast-util|property-information[\\/]|space-separated-tokens[\\/]|comma-separated-tokens[\\/])/,
+                // 必须覆盖 react-markdown + remark-gfm 的【完整】传递依赖闭包
+                // （scripts/check-bundle-budget.mjs 有 vendor 分包环路门禁兜底）。
+                // 只圈一部分的话，漏网模块（如 CJS 的 style-to-js）会落进
+                // ai-assistant 分包，而本组的模块在顶层求值时又要回头调它——
+                // 两个分包互相 import 成环，先求值的一侧拿到未初始化的绑定，
+                // 线上表现为「TypeError: i is not a function」、AI 面板永远打不开。
+                test: /[\\/]node_modules[\\/](?:react-markdown[\\/]|remark-[^\\/]+[\\/]|micromark|mdast-util|unist-util|hast-util|unified[\\/]|vfile|bail[\\/]|trough[\\/]|devlop[\\/]|zwitch[\\/]|style-to-js[\\/]|style-to-object[\\/]|inline-style-parser[\\/]|property-information[\\/]|space-separated-tokens[\\/]|comma-separated-tokens[\\/]|html-url-attributes[\\/]|estree-util-is-identifier-name[\\/]|trim-lines[\\/]|longest-streak[\\/]|markdown-table[\\/]|ccount[\\/]|character-entities|character-reference-invalid[\\/]|decode-named-character-reference[\\/]|parse-entities[\\/]|stringify-entities[\\/]|is-alphabetical[\\/]|is-alphanumerical[\\/]|is-decimal[\\/]|is-hexadecimal[\\/]|is-plain-obj[\\/]|debug[\\/]|ms[\\/]|extend[\\/]|dequal[\\/]|escape-string-regexp[\\/]|@ungap[\\/]structured-clone[\\/])/,
                 priority: 10,
               },
               { name: 'ai-assistant', test: /[\\/]src[\\/]components[\\/]AiAssistant\.tsx/, priority: 1 },

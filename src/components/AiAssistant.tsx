@@ -389,7 +389,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
             <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" />
 
             <motion.div
-              className="absolute right-4 bottom-20 w-[min(390px,calc(100%-32px))] h-[560px] max-h-[calc(100%-112px)] rounded-[28px] bg-white/85 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
+              className="absolute right-4 bottom-[calc(var(--safe-bottom)+80px)] w-[min(390px,calc(100%-32px))] h-[560px] max-h-[calc(100%-var(--safe-top)-var(--safe-bottom)-112px)] rounded-[28px] bg-white/85 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
               style={{ originX: 1, originY: 1 }}
               initial={{ opacity: 0, y: 18, scale: 0.88 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -667,7 +667,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
         ) : null}
       </AnimatePresence>
 
-      <div className="absolute right-4 bottom-4 pointer-events-auto">
+      <div className="absolute right-4 bottom-[calc(var(--safe-bottom)+16px)] pointer-events-auto">
         <motion.button
           type="button"
           aria-label="AI analysis"

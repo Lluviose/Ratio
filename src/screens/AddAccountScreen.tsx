@@ -148,7 +148,7 @@ export function AddAccountScreen(props: {
 
   return (
     <div className="h-full overflow-auto bg-[var(--bg)]">
-      <div className="sticky top-0 z-10 bg-[var(--bg)]/90 backdrop-blur-md border-b border-[var(--hairline)] px-4 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-[var(--bg)]/90 backdrop-blur-md border-b border-[var(--hairline)] px-4 pb-3 pt-[calc(var(--safe-top)+12px)] flex items-center justify-between">
           <motion.button 
             type="button" 
             className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
@@ -181,10 +181,10 @@ export function AddAccountScreen(props: {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{
-              paddingTop: 'env(safe-area-inset-top)',
-              paddingRight: 'env(safe-area-inset-right)',
-              paddingBottom: 'env(safe-area-inset-bottom)',
-              paddingLeft: 'env(safe-area-inset-left)',
+              paddingTop: 'var(--safe-top)',
+              paddingRight: 'var(--safe-right)',
+              paddingBottom: 'var(--safe-bottom)',
+              paddingLeft: 'var(--safe-left)',
             }}
             onClick={() => setSelectedType(null)}
           >

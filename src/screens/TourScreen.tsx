@@ -358,7 +358,7 @@ export function TourScreen(props: { onClose: () => void; onEnterDemo?: () => voi
       />
 
       {/* Close Button */}
-      <div className="relative z-50 px-4 pt-4 flex justify-end">
+      <div className="relative z-50 px-4 pt-[calc(var(--safe-top)+16px)] flex justify-end">
         <button
           type="button"
           onClick={onClose}
@@ -401,7 +401,7 @@ export function TourScreen(props: { onClose: () => void; onEnterDemo?: () => voi
 
       {/* Bottom Nav */}
       <div
-        className="absolute bottom-0 left-0 right-0 p-6 pt-12 z-40"
+        className="absolute bottom-0 left-0 right-0 p-6 pt-12 pb-[calc(var(--safe-bottom)+24px)] z-40"
         style={{ background: 'linear-gradient(to top, var(--tour-fade), var(--tour-fade-soft) 50%, transparent)' }}
       >
         <div className="flex items-center justify-between">

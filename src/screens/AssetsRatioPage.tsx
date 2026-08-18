@@ -12,8 +12,10 @@ import {
 } from '../lib/ratioBreakdown'
 import { isLightColor, pickForegroundColor } from '../lib/themes'
 import { useReducedMotion } from '../lib/useReducedMotion'
+import { useSafeAreaTop } from '../lib/safeArea'
 
-/** 占比图表区域距页面顶部的高度（与 AssetsScreen 的 ratioLayout 共用） */
+/** 占比图表区域距页面顶部的基准高度（不含安全区；与 AssetsScreen 的 ratioLayout
+ * 共用同一公式：实际图表顶 = RATIO_CHART_TOP + 顶部安全区） */
 export const RATIO_CHART_TOP = 64
 
 export type RatioRect = { x: number; y: number; w: number; h: number }
@@ -450,6 +452,7 @@ export function AssetsRatioPage(props: {
   const { onBack, blocks, accountsByGroup, getIcon, hideAmounts, viewport, active, chartRadius = 32 } = props
 
   const reduceMotion = useReducedMotion()
+  const safeAreaTop = useSafeAreaTop()
   const [expanded, setExpanded] = useState<{ id: AccountGroupId; phase: ExpandPhase } | null>(null)
 
   const expandedBlock = useMemo(
@@ -469,10 +472,10 @@ export function AssetsRatioPage(props: {
     setExpanded((current) => (current && current.phase === 'closing' ? null : current))
   }, [])
 
-  const chartTarget = useMemo<RatioRect>(
-    () => ({ x: 0, y: RATIO_CHART_TOP, w: viewport.w, h: Math.max(0, viewport.h - RATIO_CHART_TOP) }),
-    [viewport.h, viewport.w],
-  )
+  const chartTarget = useMemo<RatioRect>(() => {
+    const top = RATIO_CHART_TOP + safeAreaTop
+    return { x: 0, y: top, w: viewport.w, h: Math.max(0, viewport.h - top) }
+  }, [safeAreaTop, viewport.h, viewport.w])
 
   const expandedOrigin = useMemo<RatioRect | null>(() => {
     if (!expandedBlock?.rect) return null
@@ -534,7 +537,7 @@ export function AssetsRatioPage(props: {
         )
       })}
 
-      <div className="absolute inset-x-0 top-0 z-20 px-4 pt-6 flex items-center justify-between">
+      <div className="absolute inset-x-0 top-0 z-20 px-4 pt-[calc(var(--safe-top)+24px)] flex items-center justify-between">
         <div className="text-[16px] font-semibold tracking-tight text-slate-900">资产分配比</div>
         <button
           type="button"

@@ -9,7 +9,12 @@ import { runDataSchemaMigrations } from './lib/schemaVersion'
 import { acquireInstanceLock } from './lib/instanceGuard'
 import { InstanceFrozenNotice, InstanceOccupiedGate } from './components/InstanceGateScreens.tsx'
 import { emitAppToast } from './lib/overlay'
+import { installSafeAreaFallback } from './lib/safeArea'
 import './pwa'
+
+// 个别 iOS 版本独立模式下 env(safe-area-inset-*) 恒为 0 但内容仍被沉浸式渲染，
+// 状态栏会压住页面标题；挂载前装好兜底覆写（详见 lib/safeArea.ts）。
+installSafeAreaFallback()
 
 const isCoarsePointer =
   window.matchMedia?.('(pointer: coarse)').matches ?? navigator.maxTouchPoints > 0;

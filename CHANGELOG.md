@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-19 - AI 助手分包环路修复 + iOS 沉浸式安全区模型
+
+- **AI 助手一直打不开（点击无反应/闪一下）**：真正根因不是旧 SW 旧产物，而是**当前线上构建本身已损坏**——vendor-markdown 组正则只圈了 react-markdown 依赖树的一部分，漏网的 CJS 桥（`style-to-js` 等）落进 ai-assistant 分包，vendor-markdown 顶层求值时回头调它形成跨分包 import 环，先求值一侧拿到未初始化绑定抛 `TypeError: i is not a function`，动态导入失败被 LazyLoadBoundary 吞掉、按钮闪一下复原（线上旧兜底则整页刷新）。修复：test 正则覆盖 react-markdown + remark-gfm 的完整传递依赖闭包（97 包按前缀归并）；`check:bundle` 新增 vendor 分包环路门禁（沿 dist 静态 import 图做可达性检查，`vendor-*` 能绕回自身即失败，已验证能拦截本次事故产物）；新增 `e2e/ai-assistant.spec.ts` 点按钮断言面板真的打开并捕获分包求值错误——此前全套 e2e 没有任何用例点过 AI 按钮，坏产物一路绿灯上线。诊断全文见 TROUBLESHOOTING「vendor 分包环路」。entry 体积不变（161.4/175 KiB），vendor-markdown 36.7 → 44.1 KiB（吸收闭包），ai-assistant 相应减小。
+- **首页状态栏遮住「我的净资产」+ 屏幕最底部突兀色带（iPhone PWA）**：iOS 26+ 独立模式 Web App 一律沉浸式渲染（内容画到状态栏与 Home Indicator 之下），旧配置 `apple-mobile-web-app-status-bar-style: default` 下系统可能不上报 env(safe-area-inset-top)，标题被时钟压住；而壳层 `.appViewport` 整体吃安全区的旧模型又会在占比页色块/毛玻璃导航条与屏幕物理边缘之间挤出一条底色带。重构为「应用铺满整屏、贴边组件各自避让」模型：meta 切到 `black-translucent`（让 WebKit 上报真实插入值）；`.appViewport` 不再 padding 安全区，左右插入值移交 `.appFrame`；首页头部/列表页顶距/占比页标题、topBar、toastViewport、迷你导航、AI 悬浮件与面板、Tour 首尾、添加资产/类型详情吸顶头改为 `calc(var(--safe-top/bottom) + …)`；占比图表顶 `RATIO_CHART_TOP` 在 JS 侧叠加 `useSafeAreaTop()`（AssetsScreen 与 AssetsRatioPage 同一公式）。新增 `src/lib/safeArea.ts`：探针测量 + 响应转屏 + 兜底覆写——检测「iPhone + 独立模式 + 竖屏 + env 顶部为 0」组合时把 `--safe-top/--safe-bottom` 覆写为保守常量（59px/34px），env 正常上报的设备永不触发。桌面端与浏览器内打开（env 为 0）逐像素不变，视觉基线 24 张全部零漂移。
+- 说明：手机上更新后若 AI 仍打不开，是旧 SW 还在服务坏产物——等「新版本已就绪」toast 点「立即更新」，或彻底关闭 PWA 再冷启动即可切到新版（上一批次已上线的 chunkRecovery 恢复通道此后也会在失败当下主动引导更新）。
+- 测试：新增 `safeArea.test.ts` 4 例（兜底决策纯函数：触发组合/env 正常不覆写/横屏与非独立模式不覆写）、`e2e/ai-assistant.spec.ts` 1 例 × 3 浏览器项目。
+- 已通过 `npm run lint`、`npm test`（40 文件 336 项）、`npm run build && npm run check:bundle`（含新环路门禁）、`npx playwright test`（57 项：55 通过 + 2 例 mobile-safari 启动等待超时——已知 Windows 无头 WebKit 高负载抖动，基线代码同样复现且逐次换用例，单独重跑通过；视觉 24 张零漂移）验证。
+
 ## 2026-08-02 - Pages 部署管线解耦审计 + 懒分包失败恢复通道 + 云同步离场抢跑
 
 - **GitHub Pages 部署一劳永逸**：部署反复停摆的根因是 CI 里的 `npm audit --audit-level=high`——它的失败由上游新披露公告触发、与被推送的提交无关（fast-uri、brace-expansion 十天内两次实锤，7-23 与 8-2 的 main 提交因此全红、Pages 停在 7-24）。审计移出 CI 到独立 `audit.yml`（依赖清单变更 + 每周一定时 + 手动触发）：新公告只在审计工作流亮红、不再冻结部署；`deploy-pages.yml` 门禁的 CI 工作流恢复为纯代码健康信号。当前 brace-expansion 高危已 `npm audit fix` 清零（仅 lockfile 变更）。

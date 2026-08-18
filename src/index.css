@@ -344,8 +344,12 @@ a {
 }
 
 @media (max-width: 520px), (max-height: 520px) {
+  /* 手机上应用铺满整屏（iOS 26+ 独立模式一律沉浸式）：安全区不在壳层整体
+     padding——那会在毛玻璃导航条/占比色块与屏幕物理边缘之间挤出一条底色带。
+     贴边组件各自用 calc(var(--safe-top/bottom) + …) 避让（navBar、topBar、
+     toastViewport、资产首页头部/迷你导航等）；左右插入值由 .appFrame 承接。 */
   .appViewport {
-    padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    padding: 0;
     background: var(--bg);
   }
 
@@ -355,6 +359,8 @@ a {
     min-height: 0;
     border-radius: 0;
     box-shadow: none;
+    padding-left: var(--safe-left);
+    padding-right: var(--safe-right);
   }
 
   .sheetOverlay {
@@ -372,7 +378,7 @@ a {
   top: 0;
   z-index: 2;
   background: linear-gradient(to bottom, rgb(var(--bg-rgb)) 62%, rgb(var(--bg-rgb) / 0));
-  padding: 18px 16px 12px;
+  padding: calc(18px + var(--safe-top)) 16px 12px;
 }
 
 .topBarRow {
@@ -1251,7 +1257,7 @@ button:disabled {
 
 .toastViewport {
   position: absolute;
-  top: 12px;
+  top: calc(12px + var(--safe-top));
   left: 0;
   right: 0;
   display: grid;

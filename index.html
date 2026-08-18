@@ -9,7 +9,10 @@
     <meta name="theme-color" content="#f2f4f7" />
     <script src="color-mode-boot.js"></script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- black-translucent：让 WebKit 沉浸式渲染并上报真实 env(safe-area-inset-*)。
+         iOS 26 起独立模式 Web App 无论此值如何都画到状态栏下方，default 反而
+         可能不上报插入值（标题被时钟遮住）；避让统一交给 CSS 安全区变量。 -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ratio" />
     <meta name="application-name" content="ratio" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
