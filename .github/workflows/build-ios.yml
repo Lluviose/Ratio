@@ -20,9 +20,9 @@ jobs:
     runs-on: macos-15 # 预装 Xcode 26.0/26.1，满足 Capacitor 8 的 Xcode 26+ 要求
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24 # @capacitor/cli 8.x engines: node >= 22
           cache: npm
@@ -81,7 +81,7 @@ jobs:
       # ────────────────────────────────────────────────────────────────────────
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ratio-ios-unsigned
           path: build/ratio-unsigned.ipa

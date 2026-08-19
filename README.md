@@ -13,7 +13,7 @@
 
 ### 环境要求
 
-- Node.js 20+（GitHub Actions 默认使用 20）
+- Node.js 24+（GitHub Actions 使用 24）
 
 ### 本地启动
 
