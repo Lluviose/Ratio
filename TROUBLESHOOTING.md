@@ -2,6 +2,23 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## iOS 27 独立模式：首页顶部多出巨大空块（env 顶部过大上报）
+
+现象：
+
+- 换用 `black-translucent` 状态栏样式并部署后，iPhone 17 Pro Max（iOS 27）主屏 PWA 首页顶部出现一大块空白，「我的净资产」标题被压到屏幕约 15% 高度处（~148pt）；底部安全区表现正常。
+- 代码审计确认顶部避让只应用了一次（首页头部 `pt-[calc(var(--safe-top)+24px)]`，壳层不 pad），排除样式叠加。
+
+原因：
+
+- 该设备状态栏区实际高度 ~62pt，按截图反推 `env(safe-area-inset-top)` 实际生效值 ≈124pt（62+24 应得 86pt，实测 148pt ≈ 124+24）——iOS 27 独立模式 + `black-translucent` 下 env 顶部按约 2 倍上报。
+- 同机 `default` 状态栏样式则是反向 bug：内容照样画到状态栏下（沉浸式），env 顶部却恒为 0（标题被时钟遮住的原始事故）。两个方向的错误上报都存在，env() 不可裸信。
+
+处理（2026-08-19）：
+
+- `src/index.css` 的 `--safe-top`/`--safe-bottom` 定义处加钳制：`min(env(safe-area-inset-top, 0px), 72px)` / `min(env(safe-area-inset-bottom, 0px), 48px)`。上限 = iPhone 真实最大值（状态栏区 ~62pt / Home Indicator ~34pt）加余量，正常设备不受影响，过大上报被封顶。`index.html` 启动骨架屏的 padding-top 同款钳制。
+- env 恒为 0 的反向 bug 仍由 `src/lib/safeArea.ts` 的兜底覆写处理（触发条件量 env 原始值，与钳制互不干扰）；JS 几何计算读 `--safe-top` 生效值，自动跟随钳制。
+
 ## AI 助手点击无反应/闪一下（vendor 分包 import 环路，TypeError: i is not a function）
 
 现象：

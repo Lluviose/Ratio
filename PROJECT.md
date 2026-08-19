@@ -334,4 +334,4 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 7. 动效规范：只动 transform/opacity、离场快于入场、`layoutId` 按实例唯一、无限动画受减弱动态约束（三层机制见「动效系统」）。
 8. 几何敏感：`AssetsScreen` 插值链与 `AssetsRatioPage` 标签复刻是逐像素咬合的，微调前先读「前端架构」对应小节；`RatioExpandedPanel` 的 650ms 兜底定时器不可移除。
 9. 测试兼容：可见文本、role/aria、`data-testid` 是测试 API 的一部分。
-10. UI 面向移动端 PWA：应用铺满整屏（iOS 26+ 独立模式一律沉浸式渲染），安全区不在壳层整体 padding——贴边组件各自用 `calc(var(--safe-top/bottom) + …)` 避让（首页头部/迷你导航、topBar、navBar、toastViewport、AI 悬浮件等）；左右插入值由 `.appFrame` 承接；几何计算需要 JS 数值时用 `src/lib/safeArea.ts` 的 `useSafeAreaTop()`（含 env() 不上报时的兜底覆写）。另注意底部导航高度（`--bottom-nav-height`）、触摸手势与 `touch-action` 声明。
+10. UI 面向移动端 PWA：应用铺满整屏（iOS 26+ 独立模式一律沉浸式渲染），安全区不在壳层整体 padding——贴边组件各自用 `calc(var(--safe-top/bottom) + …)` 避让（首页头部/迷你导航、topBar、navBar、toastViewport、AI 悬浮件等）；左右插入值由 `.appFrame` 承接；`--safe-top/--safe-bottom` 定义处用 `min()` 钳制（iOS 27 可能过大上报 env，约 2 倍，见 TROUBLESHOOTING）；几何计算需要 JS 数值时用 `src/lib/safeArea.ts` 的 `useSafeAreaTop()`（含 env() 不上报时的兜底覆写）。另注意底部导航高度（`--bottom-nav-height`）、触摸手势与 `touch-action` 声明。

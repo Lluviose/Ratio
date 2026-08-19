@@ -14,6 +14,11 @@ import { useEffect, useState } from 'react'
 // 画到状态栏下方（时钟直接压在页面标题上）。检测「iPhone + 独立模式 + 竖屏 +
 // env 顶部为 0」组合时，把 --safe-top/--safe-bottom 覆写为保守常量。env 正常
 // 上报的设备（黑半透明状态栏 + viewport-fit=cover 的既定行为）永远不会触发。
+//
+// 钳制：反方向的坑——iOS 27 独立模式 + black-translucent 下 env 顶部可能
+// 过大上报（实测 ~2 倍，约 124pt）。:root 的 --safe-top/--safe-bottom 定义里
+// 用 min() 封顶（见 index.css），本文件 readSafeAreaTopPx 读的是钳制后的生效值，
+// 因此 JS 几何计算自动跟随。兜底触发条件量的是 env() 原始值，不受钳制影响。
 
 const FALLBACK_TOP_PX = '59px'
 const FALLBACK_BOTTOM_PX = '34px'

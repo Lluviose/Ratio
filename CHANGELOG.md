@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-08-19 - iOS 27 顶部安全区 env 过大上报钳制
+
+- **首页顶部多出巨大空块（iPhone 17 Pro Max / iOS 27 实机反馈）**：上一批切到 `black-translucent` 后，该系统在独立模式下把 `env(safe-area-inset-top)` 按约 2 倍上报（状态栏区实际 ~62pt，生效值 ≈124pt，按截图几何反推 148pt ≈ 124 + 24 精确吻合），标题被压到屏幕 15% 处；代码审计确认顶部避让只应用了一次，排除样式叠加。修复：`--safe-top`/`--safe-bottom` 定义处加 `min()` 钳制（上限 72px/48px = iPhone 真实最大值加余量），`index.html` 启动骨架屏同款；env 正常上报的设备数值不变（62 < 72），env 恒为 0 的反向 bug 仍由 `safeArea.ts` 兜底覆写处理（触发条件量 env 原始值，与钳制互不干扰），JS 几何计算读 `--safe-top` 生效值自动跟随。详见 TROUBLESHOOTING「iOS 27 独立模式：首页顶部多出巨大空块」。
+- env() 为 0 的环境（桌面、浏览器内打开、全部 e2e 项目）钳制后逐像素不变：`min(0px, 72px)` = 0。
+
 ## 2026-08-19 - AI 助手分包环路修复 + iOS 沉浸式安全区模型
 
 - **AI 助手一直打不开（点击无反应/闪一下）**：真正根因不是旧 SW 旧产物，而是**当前线上构建本身已损坏**——vendor-markdown 组正则只圈了 react-markdown 依赖树的一部分，漏网的 CJS 桥（`style-to-js` 等）落进 ai-assistant 分包，vendor-markdown 顶层求值时回头调它形成跨分包 import 环，先求值一侧拿到未初始化绑定抛 `TypeError: i is not a function`，动态导入失败被 LazyLoadBoundary 吞掉、按钮闪一下复原（线上旧兜底则整页刷新）。修复：test 正则覆盖 react-markdown + remark-gfm 的完整传递依赖闭包（97 包按前缀归并）；`check:bundle` 新增 vendor 分包环路门禁（沿 dist 静态 import 图做可达性检查，`vendor-*` 能绕回自身即失败，已验证能拦截本次事故产物）；新增 `e2e/ai-assistant.spec.ts` 点按钮断言面板真的打开并捕获分包求值错误——此前全套 e2e 没有任何用例点过 AI 按钮，坏产物一路绿灯上线。诊断全文见 TROUBLESHOOTING「vendor 分包环路」。entry 体积不变（161.4/175 KiB），vendor-markdown 36.7 → 44.1 KiB（吸收闭包），ai-assistant 相应减小。

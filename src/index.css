@@ -40,9 +40,13 @@
   --ease-silk: cubic-bezier(0.33, 1, 0.68, 1);
   --ease-bounce-soft: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  --safe-top: env(safe-area-inset-top, 0px);
+  /* 顶/底安全区做钳制：iPhone 状态栏区实测最高 ~62pt、Home Indicator 区 ~34pt。
+     iOS 27 独立模式 + black-translucent 下 env(safe-area-inset-top) 可能过大上报
+     （实测 ~2 倍，约 124pt），不钳制会把首页标题压到屏幕 15% 处。上限取真实值
+     加余量：正常上报设备不受影响，过大上报被封顶回状态栏区高度。 */
+  --safe-top: min(env(safe-area-inset-top, 0px), 72px);
   --safe-right: env(safe-area-inset-right, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-bottom: min(env(safe-area-inset-bottom, 0px), 48px);
   --safe-left: env(safe-area-inset-left, 0px);
   --bottom-nav-height: calc(80px + var(--safe-bottom));
 
