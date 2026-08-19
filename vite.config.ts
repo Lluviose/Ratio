@@ -19,6 +19,11 @@ function resolveBuildId(): string {
   }
 }
 
+// Capacitor 原生壳构建：base 必须相对路径（壳内 origin 是 capacitor://localhost），
+// 且不注册 Service Worker（原生 app 通过 App Store 更新，SW 的「新版本已就绪」
+// 提示与 CacheFirst 缓存只会干扰）。GitHub Actions 构建时设 CAPACITOR_BUILD=1。
+const isCapacitorBuild = process.env.CAPACITOR_BUILD === '1'
+
 // https://vite.dev/config/
 export default defineConfig(() => {
   const [owner, repo] = process.env.GITHUB_REPOSITORY?.split('/') ?? []
@@ -48,7 +53,7 @@ export default defineConfig(() => {
   const lazyChunkPattern = new RegExp(`/assets/(?:${lazyChunkAlternation})-[^/]*\\.js$`, 'i')
 
   return {
-    base,
+    base: isCapacitorBuild ? './' : base,
     define: {
       __APP_BUILD__: JSON.stringify(buildId),
     },
@@ -101,45 +106,53 @@ export default defineConfig(() => {
         // React Compiler：仅编译懒加载屏幕树，范围与理由见 react-compiler.shared.ts
         babel: reactCompilerBabelConfig,
       }),
-      VitePWA({
-        // prompt 模式：新版本先 waiting，由 src/pwa.ts 弹 toast 征得用户同意后再接管，
-        // 避免部署新版时把正在输入的用户整页强刷（skipWaiting 必须保持 false）
-        registerType: 'prompt',
-        injectRegister: false,
-        includeAssets: [
-          'pwa.svg',
-          'apple-touch-icon.png',
-          'manifest.webmanifest',
-          'pwa-192x192.png',
-          'pwa-512x512.png',
-          'pwa-maskable-192x192.png',
-          'pwa-maskable-512x512.png',
-        ],
-        workbox: {
-          navigateFallback: 'index.html',
-          skipWaiting: false,
-          clientsClaim: true,
-          globIgnores: lazyChunkNames.map((name) => `**/${name}-*.js`),
-          runtimeCaching: [
-            {
-              urlPattern: lazyChunkPattern,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'ratio-lazy-chunks-v1',
-                cacheableResponse: {
-                  statuses: [0, 200],
-                },
-                expiration: {
-                  // 懒边界 chunk 现有 11 个，新旧版本交替期并存也不至于挤掉在用项
-                  maxEntries: 32,
-                  maxAgeSeconds: 60 * 60 * 24 * 30,
-                },
+      VitePWA(
+        // Capacitor 原生壳构建：插件整体禁用（disable 后不产出 sw.js；virtual:pwa-register
+        // 虚拟模块仍解析，但返回 no-op 的 registerSW——src/pwa.ts 零改动即可安全降级，
+        // onNeedRefresh 等回调永不触发，chunkRecovery 注入的处理器走可选链降级）。
+        // 注意：此模式下不要跑 npm run check:bundle（该门禁断言 dist/sw.js 存在）。
+        isCapacitorBuild
+          ? { disable: true }
+          : {
+              // prompt 模式：新版本先 waiting，由 src/pwa.ts 弹 toast 征得用户同意后再接管，
+              // 避免部署新版时把正在输入的用户整页强刷（skipWaiting 必须保持 false）
+              registerType: 'prompt',
+              injectRegister: false,
+              includeAssets: [
+                'pwa.svg',
+                'apple-touch-icon.png',
+                'manifest.webmanifest',
+                'pwa-192x192.png',
+                'pwa-512x512.png',
+                'pwa-maskable-192x192.png',
+                'pwa-maskable-512x512.png',
+              ],
+              workbox: {
+                navigateFallback: 'index.html',
+                skipWaiting: false,
+                clientsClaim: true,
+                globIgnores: lazyChunkNames.map((name) => `**/${name}-*.js`),
+                runtimeCaching: [
+                  {
+                    urlPattern: lazyChunkPattern,
+                    handler: 'CacheFirst',
+                    options: {
+                      cacheName: 'ratio-lazy-chunks-v1',
+                      cacheableResponse: {
+                        statuses: [0, 200],
+                      },
+                      expiration: {
+                        // 懒边界 chunk 现有 11 个，新旧版本交替期并存也不至于挤掉在用项
+                        maxEntries: 32,
+                        maxAgeSeconds: 60 * 60 * 24 * 30,
+                      },
+                    },
+                  },
+                ],
               },
+              manifest: false,
             },
-          ],
-        },
-        manifest: false,
-      }),
+      ),
     ],
   }
 })
