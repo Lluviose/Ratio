@@ -20,7 +20,12 @@ function readBooleanEnv(name, fallback = false) {
 const PORT = Number(process.env.PORT || 8787)
 const HOST = process.env.RATIO_HOST || process.env.HOST || '127.0.0.1'
 const DATA_DIR = process.env.RATIO_DATA_DIR || path.resolve('data')
-const CORS_ORIGIN = process.env.RATIO_CORS_ORIGIN || 'http://localhost:5173'
+// 允许的跨源来源列表（逗号分隔）。除了网页端，iOS 原生壳的请求来源是
+// capacitor://localhost（Capacitor WebView），必须显式加入才能被 CORS 放行。
+const CORS_ORIGINS = (process.env.RATIO_CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
 const MAX_BACKUP_BYTES = readPositiveNumberEnv('RATIO_MAX_BACKUP_BYTES', 2 * 1024 * 1024)
 const REGISTRATION_INVITE_CODE = (process.env.RATIO_REGISTRATION_INVITE_CODE || '').trim()
 const ALLOW_OPEN_REGISTRATION = readBooleanEnv('RATIO_ALLOW_OPEN_REGISTRATION', false)
@@ -118,7 +123,7 @@ function jsonResponse(res, status, body) {
     'Content-Length': Buffer.byteLength(text),
     'Cache-Control': 'no-store',
     ...securityHeaders(),
-    ...corsHeaders(),
+    ...corsHeaders(res),
   })
   res.end(text)
 }
@@ -139,7 +144,7 @@ function downloadJsonResponse(res, filename, body) {
   const text = JSON.stringify(body, null, 2)
   textResponse(res, 200, `${text}\n`, 'application/json; charset=utf-8', {
     'Content-Disposition': `attachment; filename="${safeName}"`,
-    ...corsHeaders(),
+    ...corsHeaders(res),
   })
 }
 
@@ -151,24 +156,32 @@ function downloadBufferResponse(res, filename, buffer, contentType = 'applicatio
     'Content-Disposition': `attachment; filename="${safeName}"`,
     'Cache-Control': 'no-store',
     ...securityHeaders(),
-    ...corsHeaders(),
+    ...corsHeaders(res),
   })
   res.end(buffer)
 }
 
 function emptyResponse(res, status = 204) {
-  res.writeHead(status, { ...securityHeaders(), ...corsHeaders() })
+  res.writeHead(status, { ...securityHeaders(), ...corsHeaders(res) })
   res.end()
 }
 
-function corsHeaders() {
+function corsHeaders(res) {
   return {
-    'Access-Control-Allow-Origin': CORS_ORIGIN,
+    // 请求来源在白名单内则回显该来源（Vary: Origin 配合多来源缓存）；
+    // 不在白名单或非浏览器调用（无 Origin）回退默认值，保持旧行为
+    'Access-Control-Allow-Origin': res?.corsOrigin ?? CORS_ORIGINS[0],
     'Access-Control-Allow-Headers': 'content-type, authorization',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
   }
+}
+
+/** 请求来源在白名单内则原样返回（浏览器要求回显），否则回退默认。 */
+function resolveCorsOrigin(origin) {
+  if (origin && CORS_ORIGINS.includes(origin)) return origin
+  return CORS_ORIGINS[0]
 }
 
 function fail(res, status, message, code = 'error', details = undefined) {
@@ -199,7 +212,7 @@ function safeEqualConfiguredSecret(input, expected) {
 function adminUnauthorized(res, challenge = false) {
   textResponse(res, 401, JSON.stringify({ error: { code: 'admin_auth_required', message: 'Admin credentials required' } }), 'application/json; charset=utf-8', {
     ...(challenge ? { 'WWW-Authenticate': 'Basic realm="Ratio Admin Console", charset="UTF-8"' } : {}),
-    ...corsHeaders(),
+    ...corsHeaders(res),
   })
 }
 
@@ -1074,12 +1087,12 @@ async function logAiServerTelemetry(req, user, payload) {
   }
 }
 
-function aiProxyHeaders(upstream) {
+function aiProxyHeaders(upstream, res) {
   return {
     'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     ...securityHeaders(),
-    ...corsHeaders(),
+    ...corsHeaders(res),
   }
 }
 
@@ -1264,7 +1277,7 @@ async function handleAiChat(req, res, user) {
   try {
     if (wantsStream && upstream.ok) {
       incrementDailyLimit('ai-user', user.id)
-      res.writeHead(upstream.status, aiProxyHeaders(upstream))
+      res.writeHead(upstream.status, aiProxyHeaders(upstream, res))
       const responseBytes = await pipeUpstreamStreamLimited(upstream, res, AI_MAX_RESPONSE_BYTES)
       responseClosed = true
       clearTimeout(timeout)
@@ -1285,7 +1298,7 @@ async function handleAiChat(req, res, user) {
     responseClosed = true
     clearTimeout(timeout)
     res.off('close', onResponseClose)
-    res.writeHead(upstream.status, aiProxyHeaders(upstream))
+    res.writeHead(upstream.status, aiProxyHeaders(upstream, res))
     res.end(text)
     await logAiServerTelemetry(req, user, {
       status: upstream.status,
@@ -1886,7 +1899,7 @@ async function handleAdminOverview(res) {
       node: process.version,
     },
     config: {
-      corsOrigin: CORS_ORIGIN,
+      corsOrigin: CORS_ORIGINS.join(','),
       maxBackupBytes: MAX_BACKUP_BYTES,
       trustProxy: TRUST_PROXY,
       telemetryRetentionDays: TELEMETRY_RETENTION_DAYS,
@@ -2242,6 +2255,8 @@ async function route(req, res) {
 }
 
 function requestHandler(req, res) {
+  // 按请求来源决定 CORS 回显值（多来源白名单见 CORS_ORIGINS）
+  res.corsOrigin = resolveCorsOrigin(String(req.headers.origin || ''))
   route(req, res).catch((error) => {
     // 兜底处理器自身绝不能再抛：这里抛出会成为 unhandled rejection 并终止进程。
     try {

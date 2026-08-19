@@ -30,7 +30,8 @@ before(async () => {
   dataDir = await mkdtemp(path.join(os.tmpdir(), 'ratio-server-test-'))
   process.env.RATIO_DATA_DIR = dataDir
   process.env.RATIO_ALLOW_OPEN_REGISTRATION = 'true'
-  process.env.RATIO_CORS_ORIGIN = 'http://test.local'
+  // 多来源白名单：验证逗号分隔 + iOS 原生壳来源（capacitor://localhost）回显
+  process.env.RATIO_CORS_ORIGIN = 'http://test.local,capacitor://localhost'
   // 锁定/health 行为的可测参数：3 次失败锁 2s；health 限流收紧便于触发
   process.env.RATIO_ADMIN_USERNAME = 'rootadmin'
   process.env.RATIO_ADMIN_PASSWORD = 'admin-secret-pass-123'
@@ -178,4 +179,22 @@ test('health endpoint is rate limited', async () => {
     assert.equal(response.status, 200)
   }
   assert.equal(sawLimited, true)
+})
+
+test('CORS echoes whitelisted origins and falls back to default otherwise', async () => {
+  // OPTIONS 预检走 emptyResponse，不限流；三个来源各验证一次
+  const cases = [
+    { origin: 'capacitor://localhost', expected: 'capacitor://localhost' }, // iOS 原生壳
+    { origin: 'http://test.local', expected: 'http://test.local' }, // 默认/网页端
+    { origin: 'https://evil.example', expected: 'http://test.local' }, // 未白名单：回退默认
+  ]
+  for (const { origin, expected } of cases) {
+    const { response } = await request('/api/health', { method: 'OPTIONS', headers: { origin } })
+    assert.equal(response.status, 204, `status for ${origin}`)
+    assert.equal(response.headers.get('access-control-allow-origin'), expected, `allow-origin for ${origin}`)
+  }
+
+  // 无 Origin（服务端调用/下载）也回退默认
+  const noOrigin = await request('/api/health', { method: 'OPTIONS' })
+  assert.equal(noOrigin.response.headers.get('access-control-allow-origin'), 'http://test.local')
 })
