@@ -27,6 +27,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 - 文档-only 变更通常不必跑完整测试，但应检查内容和命令是否准确。
 - e2e 的 webServer 端口是 4173 且 `reuseExistingServer` 开启：若有残留 preview 进程，会拿旧 dist 跑新测试。改前端代码后 e2e 结果可疑时，先杀掉 4173 上的进程或手动 `npm run build`。
 - 断言面板消失用 `expect.poll(() => locator.count())`，不要用 `toBeHidden()`（Windows 无头 WebKit 会饿死页内轮询，见 TROUBLESHOOTING.md）。
+- **不要对 `CAPACITOR_BUILD=1` 的产物跑 `npm run check:bundle`**——该模式有意不产 `dist/sw.js`，门禁必然红灯。iOS 构建走 `.github/workflows/build-ios.yml`（见 PROJECT.md「iOS 原生壳」）。
 
 ## 高风险点（改动前自查）
 
@@ -42,6 +43,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 体积与性能：
 
 - 趋势、统计、设置、AI 助手是懒加载分包（`vite.config.ts` 的显式 `advancedChunks` groups，且 `includeDependenciesRecursively` 必须保持 `false`；不要改回函数式 manualChunks），不要从首包代码新增对它们或 react-markdown/matter-js 的静态 import。改分包后必须 `npm run build && npm run check:bundle`。
+- `src/lib/haptics.ts` 用动态 import 调 `@capacitor/haptics`：不要改成静态 import（会把插件和 @capacitor/core 拉进首包）。新增触感点只调 `haptics.ts` 导出的语义函数。
 - React Compiler 只编译懒屏幕树，范围集中在 `react-compiler.shared.ts`（vite 与 vitest 共用，不要在两处分别改）；审计工具 `node scripts/compiler-report.mjs`。详见 PROJECT.md「React Compiler」。
 - 动画只动 transform/opacity；离场要快于入场；`layoutId` 必须按实例/条目唯一。规范见 PROJECT.md「动效系统」。
 

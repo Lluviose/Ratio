@@ -34,6 +34,7 @@ import { storageKernel } from './lib/storageKernel'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
+import { hapticSelectionChanged } from './lib/haptics'
 import { useReducedMotion } from './lib/useReducedMotion'
 import { initCloudAutoSync } from './lib/cloudSync'
 import { initTelemetry, trackTelemetry } from './lib/telemetry'
@@ -637,6 +638,8 @@ export default function App() {
     void preloadTab(next).catch(() => undefined)
     setTabDirection(Math.sign(tabOrder[next] - tabOrder[tab]) || 1)
     setTab(next)
+    // 底部导航切换的轻触反馈（iOS 原生 selection 级；Web 端回退 vibrate/静默）
+    hapticSelectionChanged()
   }
 
   return (

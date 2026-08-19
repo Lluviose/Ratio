@@ -76,6 +76,8 @@ AI 助手定位为分析和建议，不会直接修改资产数据。聊天记�
 - `npm run lint`：前端 TypeScript 与服务端/脚本 JavaScript ESLint
 - `npm test` / `npm run test:watch`：Vitest
 - `npm --prefix server run check`：服务端语法检查 + HTTP 集成测试
+- `CAPACITOR_BUILD=1 npm run build`：构建 iOS 原生壳用的 web 产物（相对资源路径、无 Service Worker）
+- `npx cap sync ios`：把 web 产物同步进 `ios/` 工程（在 Windows 上也可执行；需要 Mac 才能真机构建）
 
 ## 数据与备份
 
@@ -93,6 +95,22 @@ AI 助手定位为分析和建议，不会直接修改资产数据。聊天记�
 - Vite `base` 会根据 `GITHUB_REPOSITORY` 自动推导（见 `vite.config.ts`），工作流也会显式传入 `--base=/<repo>/`，确保资源路径正确。
 - Pages 设置里将 Source 设为 “GitHub Actions”。
 
+## iOS 应用（Capacitor）
+
+本项目可用 Capacitor 打包为 iOS 原生应用（`capacitor.config.ts`，Bundle ID `com.lluviose.ratio`）。`ios/` 原生工程已提交进仓库。
+
+打包流程（GitHub Actions 自动完成，`.github/workflows/build-ios.yml`）：
+
+1. 在仓库 Actions 页面手动触发 **Build iOS (unsigned IPA)**。
+2. 工作流在 macOS runner 上执行：`CAPACITOR_BUILD=1 npm run build` → `npx cap sync ios` → `xcodebuild` 归档 → 产出 **unsigned IPA** 作为 artifact 下载。
+
+注意：
+
+- **unsigned IPA 无法安装到真机**（iOS 要求至少 ad-hoc 签名），用途是流水线验证与归档。拿到付费 Apple Developer 账号后，按 workflow 注释「签名切换」配置 secrets 即可出正式签名包。
+- iOS 原生壳内不注册 Service Worker：应用更新走 App Store 渠道，SW 的「新版本已就绪」提示与缓存对原生 app 没有意义（`vite.config.ts` 的 `CAPACITOR_BUILD` 分支会禁用 PWA 插件）。
+- 触觉反馈：原生壳内 `src/lib/haptics.ts` 走 `@capacitor/haptics`（iOS 原生 UIImpactFeedbackGenerator 等），Web 端回退 `navigator.vibrate`，iOS Safari 静默。目前接入底部导航切换与气泡页 flick/burst。
+- 有 Mac 时可直接用 Xcode 打开 `ios/` 工程构建调试（免费 Apple ID 也可签名装真机，7 天有效）。
+
 ## 项目文档
 
 - `PROJECT.md`：面向 AI 代理和维护者的项目地图，包含目录结构、数据模型、存储键、后端接口和变更导航。
@@ -109,6 +127,8 @@ AI 助手定位为分析和建议，不会直接修改资产数据。聊天记�
 - `server/src`：可选云端后台和管理控制台。
 - `e2e`：Playwright 端到端冒烟测试。
 - `public`：PWA manifest、图标和静态资源。
+- `ios/`：Capacitor iOS 原生工程（SPM 依赖；`ios/App/App/public` 为 sync 产物，不提交）。
+- `resources/`：iOS 图标源图生成脚本与产物（`make-icon.py`）。
 
 ## 排错
 

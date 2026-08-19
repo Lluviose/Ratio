@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type * as Matter from 'matter-js'
 import { animate, motionValue, type MotionValue } from 'framer-motion'
+import { hapticImpact } from '../lib/haptics'
 import { useReducedMotion } from '../lib/useReducedMotion'
 
 // matter-js 按需加载：物理引擎不进首包（vendor-matter 分包，约 26KB gzip），
@@ -523,6 +524,9 @@ export function useBubblePhysics(
       durationMs: 900,
       strength: Math.min(1, speed0 / 1200),
     }
+
+    // 甩动气泡的拨动触感（iOS 原生 impact；Web 端回退 vibrate/静默）
+    hapticImpact('medium')
   }, [])
 
   const burst = useCallback(
@@ -561,6 +565,9 @@ export function useBubblePhysics(
             y: shard.velocity.y + Math.sin(a) * speed,
           })
         })
+
+        // 连击重爆的重击触感（iOS 原生 impact heavy）
+        hapticImpact('heavy')
         return
       }
 
@@ -569,6 +576,9 @@ export function useBubblePhysics(
 
       const p = burstProgress.get(id)
       if (p) animate(p, 1, { duration: 0.16, ease: [0.2, 0, 0, 1] })
+
+      // 三连击炸开的重击触感（iOS 原生 impact heavy）
+      hapticImpact('heavy')
 
       const originalSeed = driftSeedsRef.current.get(id) ?? { a: Math.random() * Math.PI * 2, b: Math.random() * Math.PI * 2 }
       driftSeedsRef.current.delete(id)

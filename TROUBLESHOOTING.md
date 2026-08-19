@@ -2,6 +2,49 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## Capacitor 构建：Windows 上 `cap sync` 生成的 SPM Package.swift 路径是反斜杠
+
+现象：
+
+- 在 Windows 上 `npx cap add/sync ios` 后，`ios/App/CapApp-SPM/Package.swift` 里插件依赖写成 `path: "..\..\..\node_modules\@capacitor\haptics"`（反斜杠）。
+
+原因：
+
+- Capacitor CLI 用 Node 的 `path.join` 拼路径，在 Windows 上产出反斜杠；SwiftPM 在 macOS 上不会把 `\` 当分隔符，按字面量找目录，解析失败。
+
+处理：
+
+- 已把仓库内的 `Package.swift` 手工修正为正斜杠（`../../node_modules/@capacitor/haptics`）。CI 的 macOS runner 上 `cap sync` 会按平台重写，无影响；仓库版本保证 Mac 上 clone 后不跑 sync 也能直接开 Xcode 构建。
+- 今后在 Windows 上跑过 `cap add` 或重装插件后，检查该文件是否有反斜杠回归，有则改回正斜杠再提交。
+
+## Capacitor iOS：`npm run check:bundle` 在 CAPACITOR_BUILD=1 模式下红灯
+
+现象：
+
+- `CAPACITOR_BUILD=1 npm run build && npm run check:bundle` 报「missing dist/sw.js」。
+
+原因：
+
+- `scripts/check-bundle-budget.mjs` 末尾强制断言 `dist/sw.js` 存在——那是 Web 产物（PWA SW 服务版本产物）的防回归门禁；Capacitor 模式有意禁用 SW（原生 app 更新走 App Store，SW 提示/缓存无意义），不产 sw.js。
+
+处理：
+
+- 该模式不跑 `check:bundle`。Web 构建（默认 `npm run build`）的 SW 门禁保持不变，不要改成「有 sw.js 也行」——那会削弱 Web 模式防回归价值。
+
+## Capacitor iOS：unsigned IPA 无法安装到真机
+
+现象：
+
+- GitHub Actions 产出的 unsigned IPA 在 iPhone 上安装失败。
+
+原因：
+
+- iOS 要求应用至少 ad-hoc 签名才能安装；`CODE_SIGNING_ALLOWED=NO` 归档的包没有任何签名，仅能归档留档、给以后补签名，或在模拟器里跑（模拟器不校验签名）。
+
+处理：
+
+- unsigned 流水线用于验证构建链路与归档。真机安装需要签名：本地 Mac + 免费 Apple ID（Xcode 里自动签名，7 天有效期）或付费开发者账号（CI 签名，见 `.github/workflows/build-ios.yml` 的「签名切换」注释）。
+
 ## iOS 27 独立模式：首页顶部多出巨大空块（env 顶部过大上报）
 
 现象：

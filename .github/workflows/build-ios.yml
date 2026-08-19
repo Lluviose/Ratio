@@ -1,0 +1,89 @@
+# 在 macOS runner 上构建 iOS 应用并产出 unsigned IPA（模拟器/归档留档用）。
+# 注意：unsigned IPA 无法直接安装到真机（iOS 要求至少 ad-hoc 签名）。
+# 获得付费 Apple Developer 账号后，按下方「签名切换」步骤启用签名构建即可。
+#
+# 触发方式：仓库 Actions 页面手动运行（workflow_dispatch）。
+name: Build iOS (unsigned IPA)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    runs-on: macos-15 # 预装 Xcode 26.0/26.1，满足 Capacitor 8 的 Xcode 26+ 要求
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24 # @capacitor/cli 8.x engines: node >= 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web (Capacitor mode)
+        run: |
+          CAPACITOR_BUILD=1 npm run build
+          test -f dist/index.html
+          test ! -f dist/sw.js # 原生壳内不注册 Service Worker（vite 侧 disable 后无 sw.js）
+
+      # ios/ 已提交进仓库：只做增量 sync（拷贝 web 产物 + 更新插件引用），不需要 cap add。
+      # 若日后删除了 ios/（或改用 CI 生成），此步换成条件 cap add + sync。
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      # 无签名归档：CODE_SIGNING_ALLOWED/REQUIRED=NO 三件套绕过 Xcode 26 对 SPM
+      # 依赖 target 的 Development Team 校验。不要加 -allowProvisioningUpdates。
+      - name: Archive (unsigned)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            -archivePath build/Ratio.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION=1.0.0 CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            archive
+
+      # ditto --sequesterRsrc 保留符号链接（SPM framework 内含 symlink，普通 zip 会丢）。
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Ratio.xcarchive/Products/Applications/App.app Payload/
+          ditto -c -k --sequesterRsrc --keepParent Payload build/ratio-unsigned.ipa
+
+      # ────────────────────────────────────────────────────────────────────────
+      # 签名切换（拿到付费 Apple Developer 账号后启用）：
+      # 1. GitHub repo → Settings → Secrets and variables 配置：
+      #    IOS_CERTIFICATE_P12_BASE64  （证书 p12 文件 base64，如 openssl base64 -in cert.p12）
+      #    IOS_CERTIFICATE_PASSWORD    （p12 密码）
+      #    PROVISIONING_PROFILE_BASE64 （描述文件 .mobileprovision base64）
+      #    PROVISIONING_PROFILE_UUID   （描述文件 UUID，Profile Identifier）
+      #    APPLE_TEAM_ID               （开发者 Team ID）
+      # 2. archive 参数改为：CODE_SIGN_IDENTITY="-"（ad-hoc 保留 entitlements；
+      #    纯 unsigned 归档会跳过 entitlements 处理，推送等能力会丢）
+      # 3. 新增 export 步骤：导入证书进 keychain → 安装描述文件 →
+      #    xcodebuild -exportArchive -archivePath build/Ratio.xcarchive \
+      #      -exportPath build/export -exportOptionsPlist exportOptions.plist
+      #    （exportOptions.plist: method=app-store-connect, teamID, signingStyle=manual,
+      #    provisioningProfiles={com.lluviose.ratio: <UUID>}）
+      # 4. 上传 TestFlight 可加 xcrun altool --upload-app（需 App Store Connect API Key）
+      # ────────────────────────────────────────────────────────────────────────
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ratio-ios-unsigned
+          path: build/ratio-unsigned.ipa
+          retention-days: 14
+          if-no-files-found: error

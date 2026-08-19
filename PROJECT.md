@@ -27,6 +27,8 @@ Ratio 是一个本地优先的个人资产/负债管理 PWA。核心数据保存
 - 测试：Vitest + jsdom + Testing Library；Playwright 端到端（chromium / mobile-chrome / mobile-safari 三项目）。
 - 后端：Node.js 20 原生 `http` 服务，无框架依赖。
 - PWA：`vite-plugin-pwa`（generateSW），manifest 和图标在 `public/`。
+- iOS 原生壳：Capacitor 8（SPM 依赖，`ios/` 工程已提交）；CI 在 macOS runner 上打 unsigned IPA（`.github/workflows/build-ios.yml`）。
+- 触觉反馈：`src/lib/haptics.ts`——原生壳走 `@capacitor/haptics`（动态 import 不占首包），Web 回退 `navigator.vibrate`。
 - 部署：GitHub Pages 发布前端；Docker Compose 部署可选后端。
 
 ## 常用命令
@@ -36,10 +38,12 @@ npm ci
 npm run dev        # http://localhost:5173
 npm run build      # tsc -b && vite build
 npm run check:bundle # build 后检查真实懒加载边界与 gzip 预算
-npm test           # Vitest --run（35 文件 / 304 用例；固定 2 workers，约 2-3 分钟）
+npm test           # Vitest --run（40 文件 / 336 用例；固定 2 workers，约 2-3 分钟）
 npm run lint       # eslint .
 npm --prefix server run check # 服务端语法检查 + 真实 HTTP 集成测试
 npm run test:e2e   # Playwright（会自行 build + preview 在 127.0.0.1:4173）
+CAPACITOR_BUILD=1 npm run build # iOS 原生壳产物（相对 base、无 SW）；见「iOS 原生壳」小节
+npx cap sync ios   # 同步 web 产物进 ios/ 工程（Windows 可跑；真机构建需 Mac）
 ```
 
 后端本地/服务器启动：
@@ -61,7 +65,9 @@ docker compose up -d --build   # 后端地址 http://localhost:8787
 ├── server/                 # 可选云端后台，Node 20 原生 http
 ├── public/                 # PWA manifest、图标和静态资源
 ├── e2e/                    # Playwright 端到端测试
-├── .github/workflows/      # GitHub Pages 构建发布
+├── .github/workflows/      # Pages 部署、CI、iOS unsigned IPA
+├── ios/                    # Capacitor iOS 原生工程（SPM；App/App/public 为 sync 产物，不提交）
+├── resources/              # iOS 图标生成脚本与源图（make-icon.py → icon-only.png）
 └── docker-compose.yml      # 后端 Docker Compose 配置
 ```
 
@@ -145,6 +151,16 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。懒边界名单（`vite.config.ts` 的 `lazyChunkNames`）除六个显式分组外还包括只被懒屏幕共享的依赖 chunk（`TrendScreen-*`/`StatsScreen-*`/`SettingsScreen-*`/`AiAssistant-*`/`savingsGoal-*`）——预加载过滤、precache 排除、运行时缓存三处必须消费同一份名单；`check:bundle` 会校验 sw.js 的 precache 清单里没有任何懒边界 chunk（名单镜像在 `scripts/check-bundle-budget.mjs` 的 `PRECACHE_EXCLUDED_CHUNKS`，两处需同步改）。
 - 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
 - **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
+
+### iOS 原生壳（Capacitor 8）
+
+`capacitor.config.ts`（appId `com.lluviose.ratio`，webDir `dist`）与已提交的 `ios/` 工程共同构成 iOS 原生壳。构建链路：
+
+- **构建模式开关**：`vite.config.ts` 里 `CAPACITOR_BUILD=1` 时——`base` 强制 `'./'`（壳内 origin 是 `capacitor://localhost`，不能用 Pages 的 `/${repo}/`）、VitePWA 插件整体 `disable`（不产出 sw.js；`virtual:pwa-register` 虚拟模块仍解析但返回 no-op 的 `registerSW`，`src/pwa.ts` 零改动安全降级，chunkRecovery 处理器经可选链失效）。**此模式下不要跑 `npm run check:bundle`**（该门禁断言 `dist/sw.js` 存在，是 Web 产物防回归手段，见 TROUBLESHOOTING）。默认构建（Pages）不受影响。
+- **sync**：`npx cap sync ios` 把 dist 拷进 `ios/App/App/public` 并重写插件引用（Windows 上可跑；`ios/.gitignore` 已忽略 sync 产物）。Capacitor 8 用 Swift Package Manager（`CapApp-SPM/Package.swift`），没有 Podfile；CI 构建用 `xcodebuild -project ios/App/App.xcodeproj -scheme App`（无顶层 workspace）。注意 Windows 上 sync 生成的 Package.swift 路径分隔符是反斜杠，已手工修正为正斜杠，Mac 上 clone 后可直开 Xcode。
+- **CI 打包**：`.github/workflows/build-ios.yml`（macOS runner）出 **unsigned IPA**（`CODE_SIGNING_ALLOWED=NO` 三件套归档 + `ditto --sequesterRsrc` 打包），上传 artifact。unsigned 包不能装真机；签名切换步骤与所需 secrets 见该 workflow 注释。
+- **安全区与状态栏**：`contentInsetAdjustmentBehavior` 默认 `'never'`——WebView 全屏渲染，安全区继续走既有的 `--safe-top/--safe-bottom`（`env()` 钳制）体系，与 PWA 独立模式同一套逻辑，不需要原生侧处理。
+- **触觉反馈**：`src/lib/haptics.ts` 统一入口——原生环境（`window.Capacitor.isNativePlatform()`）经动态 import 走 `@capacitor/haptics`（不占首包），Web 回退 `navigator.vibrate`，iOS Safari 无 API 静默；减弱动态偏好下回退跳过。目前接入点：底部导航切换（`hapticSelectionChanged`，App.tsx `navigateTab`）、气泡页 flick（`hapticImpact('medium')`）与 burst（`hapticImpact('heavy')`，BubbleChartPhysics.tsx 两条爆开路径）。新增触感点：在交互语义点调 `haptics.ts` 对应函数，不要散布原生 API 调用。
 
 ### React Compiler（作用域限定）
 
@@ -317,6 +333,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 | 云同步 | `src/lib/cloudSync.ts`、`cloud.ts`、`server/src/server.js` |
 | AI 助手 | `src/lib/ai.ts`、`src/components/AiAssistant.tsx`、`server/src/server.js` |
 | PWA/构建/分包 | `vite.config.ts`、`src/pwa.ts`、`public/manifest.webmanifest` |
+| iOS 原生壳/触觉反馈 | `capacitor.config.ts`、`ios/`、`src/lib/haptics.ts`、`.github/workflows/build-ios.yml` |
 | 后端管理台 | `server/src/server.js`、`server/src/adminConsole.js` |
 | 引导页 | `src/screens/TourScreen.tsx` |
 | Toast/确认框 | `src/components/OverlayProvider.tsx`、`src/lib/overlay.ts` |
@@ -334,4 +351,5 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 7. 动效规范：只动 transform/opacity、离场快于入场、`layoutId` 按实例唯一、无限动画受减弱动态约束（三层机制见「动效系统」）。
 8. 几何敏感：`AssetsScreen` 插值链与 `AssetsRatioPage` 标签复刻是逐像素咬合的，微调前先读「前端架构」对应小节；`RatioExpandedPanel` 的 650ms 兜底定时器不可移除。
 9. 测试兼容：可见文本、role/aria、`data-testid` 是测试 API 的一部分。
-10. UI 面向移动端 PWA：应用铺满整屏（iOS 26+ 独立模式一律沉浸式渲染），安全区不在壳层整体 padding——贴边组件各自用 `calc(var(--safe-top/bottom) + …)` 避让（首页头部/迷你导航、topBar、navBar、toastViewport、AI 悬浮件等）；左右插入值由 `.appFrame` 承接；`--safe-top/--safe-bottom` 定义处用 `min()` 钳制（iOS 27 可能过大上报 env，约 2 倍，见 TROUBLESHOOTING）；几何计算需要 JS 数值时用 `src/lib/safeArea.ts` 的 `useSafeAreaTop()`（含 env() 不上报时的兜底覆写）。另注意底部导航高度（`--bottom-nav-height`）、触摸手势与 `touch-action` 声明。
+10. UI 面向移动端 PWA：应用铺满整屏（iOS 26+ 独立模式一律沉浸式渲染），安全区不在壳层整体 padding——贴边组件各自用 `calc(var(--safe-top/bottom) + …)` 避让（首页头部/迷你导航、topBar、navBar、toastViewport、AI 悬浮件等）；左右插入值由 `.appFrame` 承接；`--safe-top/--safe-bottom` 定义处用 `min()` 钳制（iOS 27 可能过大上报 env，约 2 倍，见 TROUBLESHOOTING）；几何计算需要 JS 数值时用 `src/lib/safeArea.ts` 的 `useSafeAreaTop()`（含 env() 不上报时的兜底覆写）。另注意底部导航高度（`--bottom-nav-height`）、触摸手势与 `touch-action` 声明。Capacitor 原生壳沿用同一套安全区（contentInset 默认 never，见「iOS 原生壳」小节）。
+11. Capacitor 构建纪律：`CAPACITOR_BUILD=1` 模式的改动只动 `vite.config.ts` 的条件分支与 `src/lib/haptics.ts`；不把 SW/Pages 逻辑条件化到影响默认构建；原生壳内不注册 Service Worker（更新走 App Store）。此模式下 `dist/sw.js` 缺失是设计使然，不跑 `check:bundle`。
