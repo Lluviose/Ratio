@@ -11,6 +11,7 @@ import {
   type MoneyExpressionOperator,
 } from '../lib/moneyExpression'
 import { type Account, getAccountTypeOption } from '../lib/accounts'
+import { hapticSuccess } from '../lib/haptics'
 import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
 import { buildLatestSetBalanceAtMap, buildOpRollbackPlan, canRollbackBalance } from '../lib/opRollback'
 import { type ThemeColors } from '../lib/themes'
@@ -531,6 +532,7 @@ export function AccountDetailSheet(props: {
       if (canApply && diff !== 0) onAdjust(editingSetBalanceOp.accountId, diff)
 
       onUpdateOp(editingSetBalanceOp.id, { ...editingSetBalanceOp, after: num, note: nextNote })
+      if (canApply) hapticSuccess()
       toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
 
       balanceInputRef.current?.blur()
@@ -605,6 +607,7 @@ export function AccountDetailSheet(props: {
       if (canApply && diff !== 0) onAdjust(editingAdjustOp.accountId, diff)
 
       onUpdateOp(editingAdjustOp.id, { ...editingAdjustOp, delta, after: addMoney(editingAdjustOp.before, delta), note: nextNote })
+      if (canApply) hapticSuccess()
       toast(canApply ? '已保存' : '已保存（余额未变）', { tone: canApply ? 'success' : 'neutral' })
 
       setAdjustAmount('')
@@ -706,6 +709,7 @@ export function AccountDetailSheet(props: {
         fromAfter: nextFromAfter,
         toAfter: nextToAfter,
       })
+      if (canApplyFrom && canApplyTo) hapticSuccess()
       toast(canApplyFrom && canApplyTo ? '已保存' : '已保存（部分余额未变）', { tone: canApplyFrom && canApplyTo ? 'success' : 'neutral' })
 
       setTransferAmount('')

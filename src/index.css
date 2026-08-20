@@ -13,6 +13,12 @@
   --glass-rgb: 255 255 255;      /* 玻璃面 / 顶部高光 / 浅色描边 */
   --glass-tint-rgb: 248 250 252; /* 冷灰玻璃底（≈slate-50） */
   --glass-tint2-rgb: 241 245 249;/* 冷灰玻璃底（≈slate-100） */
+  /* iOS 26 液态玻璃材质 token：backdrop-filter 可用时启用，不可用时
+     玻璃表面回退高不透明底（见文末 @supports not 块）。新表面一律用
+     这三枚 token，不要散落魔法值。 */
+  --glass-blur: blur(22px) saturate(1.8);
+  --glass-hi: inset 0 1px 0 rgb(var(--glass-rgb) / 0.85); /* 玻璃顶部内高光 */
+  --glass-sheen: linear-gradient(180deg, rgb(var(--glass-rgb) / 0.32), rgb(var(--glass-rgb) / 0.06) 42%, transparent); /* 折射感渐变 */
   --ink-rgb: 15 23 42;           /* 文本墨色与墨色 wash（hover/badge 底） */
   --edge-rgb: 15 23 42;          /* 中性边框基色 */
   --surface-elevated: #ffffff;   /* 不透明升起面（开关旋钮 / 滑块 / 聚焦输入底） */
@@ -70,6 +76,10 @@
   --glass-rgb: 56 67 92;
   --glass-tint-rgb: 41 50 70;
   --glass-tint2-rgb: 35 44 62;
+  /* 液态玻璃材质 token（深色）：高光更暗、模糊略大，见浅色同名注释 */
+  --glass-blur: blur(26px) saturate(1.9);
+  --glass-hi: inset 0 1px 0 rgb(var(--glass-rgb) / 0.3);
+  --glass-sheen: linear-gradient(180deg, rgb(var(--glass-rgb) / 0.2), rgb(var(--glass-rgb) / 0.04) 42%, transparent);
   --ink-rgb: 226 232 244;
   --edge-rgb: 148 163 184;
   --surface-elevated: #2c3650;
@@ -702,9 +712,11 @@ a {
   height: var(--bottom-nav-height);
   padding: 10px 10px calc(10px + var(--safe-bottom));
   background: rgb(var(--bg-rgb) / 0.78);
-  backdrop-filter: blur(20px) saturate(1.7);
-  -webkit-backdrop-filter: blur(20px) saturate(1.7);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-top: 1px solid rgb(var(--edge-rgb) / 0.06);
+  /* 液态玻璃顶部内高光（浅色下为白线，深色下为暗线） */
+  box-shadow: inset 0 1px 0 rgb(var(--glass-rgb) / 0.5);
   z-index: 20;
   overscroll-behavior: none;
   touch-action: manipulation;
@@ -838,10 +850,15 @@ a {
 
 .sheet {
   width: min(420px, 100%);
-  background: var(--card);
+  /* 液态玻璃：半透明底 + 折射渐变 + 顶部内高光（iOS 26 材质，降级见文末 @supports not） */
+  background:
+    var(--glass-sheen),
+    rgb(var(--glass-tint-rgb) / 0.8);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-top-left-radius: 32px;
   border-top-right-radius: 32px;
-  box-shadow: var(--shadow-sheet);
+  box-shadow: var(--shadow-sheet), var(--glass-hi);
   border: none;
   max-height: 85vh;
   max-height: 85dvh;
@@ -1776,4 +1793,17 @@ button:disabled {
   --color-indigo-900: #312e81;
   color: #0f172a;
   color-scheme: light;
+}
+
+/* 液态玻璃降级：无 backdrop-filter（老 WebKit / 桌面浏览器）时，
+   玻璃表面回退高不透明底并去掉内高光，保证内容可读性。
+   iOS 26 Safari 渲染 backdrop-filter 走液态玻璃引擎，此块不生效。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .sheet {
+    background: var(--card);
+    box-shadow: var(--shadow-sheet);
+  }
+  .navBar {
+    box-shadow: none;
+  }
 }

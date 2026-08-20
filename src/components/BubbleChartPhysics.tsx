@@ -525,8 +525,9 @@ export function useBubblePhysics(
       strength: Math.min(1, speed0 / 1200),
     }
 
-    // 甩动气泡的拨动触感（iOS 原生 impact；Web 端回退 vibrate/静默）
-    hapticImpact('medium')
+    // 甩动气泡的拨动触感（iOS 原生 impact；Web 端回退 vibrate/静默）。
+    // 甩得越猛震得越重：超过阈值用 heavy，普通甩动 medium。
+    hapticImpact(speed0 > 1500 ? 'heavy' : 'medium')
   }, [])
 
   const burst = useCallback(
