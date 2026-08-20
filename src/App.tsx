@@ -25,6 +25,14 @@ import {
   type ThemeId,
 } from './lib/themes'
 import { useLocalStorageState } from './lib/useLocalStorageState'
+import {
+  initNativeGlass,
+  isNativeGlassAvailable,
+  nativeGlassSetAccentColor,
+  nativeGlassSetActiveTab,
+  nativeGlassSetSheetOpen,
+  readAccentColor,
+} from './lib/nativeGlass'
 import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMode, type ColorMode } from './lib/colorMode'
 import { emitAppToast, queueToastAfterReload, useOverlay } from './lib/overlay'
 import { enterDemoMode, exitDemoMode } from './lib/demoData'
@@ -633,14 +641,47 @@ export default function App() {
     [clearThemeTransitionTimers, prefersReducedMotion, randomTheme, setTheme, theme],
   )
 
-  const navigateTab = (next: TabId) => {
-    if (next === tab) return
-    void preloadTab(next).catch(() => undefined)
-    setTabDirection(Math.sign(tabOrder[next] - tabOrder[tab]) || 1)
-    setTab(next)
-    // 底部导航切换的轻触反馈（iOS 原生 selection 级；Web 端回退 vibrate/静默）
-    hapticSelectionChanged()
-  }
+  const navigateTab = useCallback(
+    (next: TabId) => {
+      if (next === tab) return
+      void preloadTab(next).catch(() => undefined)
+      setTabDirection(Math.sign(tabOrder[next] - tabOrder[tab]) || 1)
+      setTab(next)
+      // 底部导航切换的轻触反馈（iOS 原生 selection 级；Web 端回退 vibrate/静默）
+      hapticSelectionChanged()
+    },
+    [tab, setTabDirection, setTab],
+  )
+
+  // 原生液态玻璃导航栏（iOS 26+ 原生壳）：可用时接管底部导航与首页快捷栏，
+  // web 自绘导航隐藏（见 src/lib/nativeGlass.ts）。
+  const [nativeGlass] = useState(isNativeGlassAvailable)
+  // 原生回调里取最新 navigateTab（避免 init effect 依赖 navigateTab 每次重建监听）
+  const navigateTabRef = useRef(navigateTab)
+  useEffect(() => {
+    navigateTabRef.current = navigateTab
+  }, [navigateTab])
+
+  useEffect(() => {
+    if (!nativeGlass) return
+    const cleanup = initNativeGlass({ onTabSelected: (next) => navigateTabRef.current(next) })
+    // 初始同步：抽屉状态（关闭）、主题强调色（activeTab 由下方 effect 同步）
+    nativeGlassSetSheetOpen(false)
+    nativeGlassSetAccentColor(readAccentColor())
+    return cleanup
+  }, [nativeGlass])
+
+  useEffect(() => {
+    if (nativeGlass) nativeGlassSetActiveTab(tab)
+  }, [nativeGlass, tab])
+
+  useEffect(() => {
+    if (nativeGlass) nativeGlassSetAccentColor(readAccentColor())
+  }, [nativeGlass, theme])
+
+  useEffect(() => {
+    if (nativeGlass) nativeGlassSetSheetOpen(Boolean(selectedAccountId))
+  }, [nativeGlass, selectedAccountId])
 
   return (
     <MotionConfig reducedMotion="user">
@@ -763,6 +804,7 @@ export default function App() {
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
                         addButtonTone={themeColors.debt}
+                        isNativeGlass={nativeGlass}
                         onNavigate={navigateTab}
                         onHomePageActiveChange={setAssetsHomePageActive}
                         onEditAccount={(a: Account) => {
@@ -837,7 +879,7 @@ export default function App() {
                 </AnimatePresence>
               </div>
 
-              {tab !== 'assets' ? <BottomTabNav tab={tab} onNavigate={navigateTab} /> : null}
+              {!nativeGlass && tab !== 'assets' ? <BottomTabNav tab={tab} onNavigate={navigateTab} /> : null}
 
               {tab === 'assets' && view === 'main' && assetsHomePageActive && selectedAccountId == null ? <LazyAiAssistant /> : null}
 
