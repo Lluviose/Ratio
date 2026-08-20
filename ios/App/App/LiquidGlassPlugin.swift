@@ -13,7 +13,11 @@ import UIKit
 /// web 侧保留自绘 CSS 导航栏（`isNativeGlassAvailable()` 返回 false）。
 @objc(LiquidGlassPlugin)
 public class LiquidGlassPlugin: CAPPlugin {
+    /// GlassNavBar 仅 iOS 26+ 可用：属性与访问统一经 #available 保护，
+    /// 非 iOS 26 环境保持 nil，所有方法 no-op。
+    @available(iOS 26.0, *)
     private var glassNavBar: GlassNavBar?
+
     private var sheetOpen = false
     private var keyboardObservers: [NSObjectProtocol] = []
 
@@ -23,7 +27,7 @@ public class LiquidGlassPlugin: CAPPlugin {
         keyboardObservers.append(center.addObserver(
             forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.glassNavBar?.setVisible(false, animated: true)
+            self?.withGlassNavBar { $0.setVisible(false, animated: true) }
         })
         keyboardObservers.append(center.addObserver(
             forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main
@@ -34,6 +38,12 @@ public class LiquidGlassPlugin: CAPPlugin {
 
     deinit {
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
+
+    /// 在 #available 保护下访问玻璃导航栏（不存在则忽略）。
+    private func withGlassNavBar(_ body: (GlassNavBar) -> Void) {
+        guard #available(iOS 26.0, *) else { return }
+        if let bar = glassNavBar { body(bar) }
     }
 
     /// 惰性创建玻璃导航栏并挂到 WebView 容器之上（首次调用时）。
@@ -62,13 +72,14 @@ public class LiquidGlassPlugin: CAPPlugin {
     }
 
     private func refreshNavBarVisibility() {
+        guard #available(iOS 26.0, *) else { return }
         glassNavBar?.setVisible(!sheetOpen, animated: true)
     }
 
     @objc public func setActiveTab(_ call: CAPPluginCall) {
         let tab = call.getString("tab") ?? "assets"
         DispatchQueue.main.async { [weak self] in
-            self?.glassNavBar?.setActiveTab(tab)
+            self?.withGlassNavBar { $0.setActiveTab(tab) }
             call.resolve()
         }
     }
@@ -86,7 +97,7 @@ public class LiquidGlassPlugin: CAPPlugin {
         let hex = call.getString("color") ?? ""
         DispatchQueue.main.async { [weak self] in
             if let color = UIColor(hexString: hex) {
-                self?.glassNavBar?.setAccentColor(color)
+                self?.withGlassNavBar { $0.setAccentColor(color) }
             }
             call.resolve()
         }

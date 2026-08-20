@@ -41,6 +41,14 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
+      # macos-15 镜像默认 xcode-select 指向旧版 Xcode（如 16.4，iOS 18.5 SDK）——
+      # UIGlassEffect 等 iOS 26 API 会 "cannot find in scope"。显式选最高版本。
+      - name: Select latest Xcode
+        run: |
+          XCODE_PATH=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          echo "DEVELOPER_DIR=$XCODE_PATH" >> "$GITHUB_ENV"
+          echo "Using $XCODE_PATH"
+
       # 无签名归档：CODE_SIGNING_ALLOWED/REQUIRED=NO 三件套绕过 Xcode 26 对 SPM
       # 依赖 target 的 Development Team 校验。不要加 -allowProvisioningUpdates。
       - name: Archive (unsigned)
