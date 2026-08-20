@@ -79,8 +79,7 @@ async function closeDetailSheet(page: Page) {
 
 async function openSettings(page: Page) {
   // 首页 mini bar 在滚动层之下，真实 click 可能被拦截，统一 dispatchEvent
-  await page.getByRole('button', { name: 'more' }).dispatchEvent('click')
-  await page.getByRole('button', { name: '设置' }).dispatchEvent('click')
+  await page.getByRole('button', { name: 'settings' }).dispatchEvent('click')
   await expect(page.getByRole('button', { name: /导出备份/ })).toBeVisible()
 }
 

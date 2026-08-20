@@ -183,8 +183,7 @@ test('dark mode: trend', async ({ page }) => {
 
 test('dark mode: settings', async ({ page }) => {
   await prepare(page, { theme: 'matisse2', colorMode: 'dark' })
-  await page.getByRole('button', { name: 'more' }).dispatchEvent('click')
-  await page.getByText('设置').dispatchEvent('click')
+  await page.getByRole('button', { name: 'settings' }).dispatchEvent('click')
   await page.waitForTimeout(900)
   await expect(page).toHaveScreenshot('dark-settings.png', SHOT)
 })

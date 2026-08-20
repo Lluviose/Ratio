@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useMotionValue, useTransform } from 'framer-motion'
-import { BarChart3, Cloud, Eye, EyeOff, MoreHorizontal, Plus, TrendingUp } from 'lucide-react'
+import { BarChart3, Cloud, Eye, EyeOff, Plus, Settings as SettingsIcon, TrendingUp } from 'lucide-react'
 import { type ComponentType, type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { getAccountTypeOption, type Account, type AccountGroup, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
@@ -99,7 +99,6 @@ export function AssetsScreen(props: {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const listScrollRef = useRef<HTMLDivElement | null>(null)
-  const moreRef = useRef<HTMLDivElement | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const measureRafRef = useRef<number | null>(null)
   const initRafRef = useRef<number | null>(null)
@@ -107,7 +106,6 @@ export function AssetsScreen(props: {
 
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
   const [expandedGroup, setExpandedGroup] = useState<GroupId | null>(null)
-  const [moreOpen, setMoreOpen] = useState(false)
   const [hideAmounts, setHideAmounts] = useLocalStorageState<boolean>(HIDE_AMOUNTS_KEY, false)
   const [cloudSync] = useLocalStorageState(CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, {
     coerce: coerceCloudSyncSettings,
@@ -777,20 +775,6 @@ export function AssetsScreen(props: {
   }, [scheduleMeasure])
 
   useEffect(() => {
-    if (!moreOpen) return
-
-    const onPointerDown = (e: PointerEvent) => {
-      const root = moreRef.current
-      if (!root) return
-      if (e.target instanceof Node && root.contains(e.target)) return
-      setMoreOpen(false)
-    }
-
-    document.addEventListener('pointerdown', onPointerDown, { capture: true })
-    return () => document.removeEventListener('pointerdown', onPointerDown, { capture: true })
-  }, [moreOpen])
-
-  useEffect(() => {
     const el = scrollerRef.current
     if (!el) return
 
@@ -1035,6 +1019,14 @@ export function AssetsScreen(props: {
           <button
             type="button"
             className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+            onClick={() => onNavigate('trend')}
+            aria-label="trend"
+          >
+            <TrendingUp size={20} strokeWidth={2.3} />
+          </button>
+          <button
+            type="button"
+            className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
             onClick={() => onNavigate('stats')}
             aria-label="stats"
           >
@@ -1043,10 +1035,10 @@ export function AssetsScreen(props: {
           <button
             type="button"
             className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
-            onClick={() => onNavigate('trend')}
-            aria-label="trend"
+            onClick={() => onNavigate('settings')}
+            aria-label="settings"
           >
-            <TrendingUp size={20} strokeWidth={2.3} />
+            <SettingsIcon size={20} strokeWidth={2.3} />
           </button>
         </div>
       </div>
@@ -1283,58 +1275,32 @@ export function AssetsScreen(props: {
         style={{ opacity: overlayFade }}
       >
         <motion.div style={{ opacity: miniBarOpacity, y: miniBarY, pointerEvents: miniBarPointerEvents }}>
-          <div ref={moreRef} className="relative">
-            <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
-              <button
-                type="button"
-                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
-                onClick={() => onNavigate('stats')}
-                aria-label="stats"
-              >
-                <BarChart3 size={20} strokeWidth={2.3} />
-              </button>
-              <button
-                type="button"
-                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
-                onClick={() => onNavigate('trend')}
-                aria-label="trend"
-              >
-                <TrendingUp size={20} strokeWidth={2.3} />
-              </button>
-              <button
-                type="button"
-                className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
-                onClick={() => setMoreOpen((v) => !v)}
-                aria-label="more"
-              >
-                <MoreHorizontal size={20} strokeWidth={2.3} />
-              </button>
-            </div>
-
-            <AnimatePresence>
-              {moreOpen ? (
-                <motion.div
-                  key="menu"
-                  initial={{ opacity: 0, y: 10, scale: 0.92 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.96, transition: { duration: 0.13, ease: [0.4, 0, 1, 1] } }}
-                  transition={{ type: 'spring', stiffness: 560, damping: 38, mass: 0.7 }}
-                  style={{ transformOrigin: 'bottom left' }}
-                  className="absolute left-0 bottom-full mb-2 min-w-[160px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden"
-                >
-                  <button
-                    type="button"
-                    className="w-full px-4 py-3 text-left text-[13px] font-medium text-slate-800 hover:bg-black/5"
-                    onClick={() => {
-                      setMoreOpen(false)
-                      onNavigate('settings')
-                    }}
-                  >
-                    设置
-                  </button>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
+          {/* 首页快捷栏：趋势 / 统计 / 设置 平级（设置不再藏二级菜单） */}
+          <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
+            <button
+              type="button"
+              className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+              onClick={() => onNavigate('trend')}
+              aria-label="trend"
+            >
+              <TrendingUp size={20} strokeWidth={2.3} />
+            </button>
+            <button
+              type="button"
+              className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+              onClick={() => onNavigate('stats')}
+              aria-label="stats"
+            >
+              <BarChart3 size={20} strokeWidth={2.3} />
+            </button>
+            <button
+              type="button"
+              className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
+              onClick={() => onNavigate('settings')}
+              aria-label="settings"
+            >
+              <SettingsIcon size={20} strokeWidth={2.3} />
+            </button>
           </div>
         </motion.div>
       </motion.div>
