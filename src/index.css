@@ -13,10 +13,12 @@
   --glass-rgb: 255 255 255;      /* 玻璃面 / 顶部高光 / 浅色描边 */
   --glass-tint-rgb: 248 250 252; /* 冷灰玻璃底（≈slate-50） */
   --glass-tint2-rgb: 241 245 249;/* 冷灰玻璃底（≈slate-100） */
-  /* iOS 26 液态玻璃材质 token：backdrop-filter 可用时启用，不可用时
-     玻璃表面回退高不透明底（见文末 @supports not 块）。新表面一律用
-     这三枚 token，不要散落魔法值。 */
-  --glass-blur: blur(22px) saturate(1.8);
+  /* 液态玻璃材质 token（web 近似）：苹果未公开 web 版液态玻璃 API
+     （原生 Metal shader 不暴露给 WKWebView），web 能做的极限是高质感
+     玻璃——blur 取 18px 以下（>20px 在 iOS 触发渲染退化）、saturate
+     提高让背景颜色透过玻璃更鲜活、顶部内高光模拟折射亮边。
+     新表面一律用这三枚 token，不要散落魔法值。 */
+  --glass-blur: blur(18px) saturate(1.85);
   --glass-hi: inset 0 1px 0 rgb(var(--glass-rgb) / 0.85); /* 玻璃顶部内高光 */
   --glass-sheen: linear-gradient(180deg, rgb(var(--glass-rgb) / 0.32), rgb(var(--glass-rgb) / 0.06) 42%, transparent); /* 折射感渐变 */
   --ink-rgb: 15 23 42;           /* 文本墨色与墨色 wash（hover/badge 底） */
@@ -77,7 +79,7 @@
   --glass-tint-rgb: 41 50 70;
   --glass-tint2-rgb: 35 44 62;
   /* 液态玻璃材质 token（深色）：高光更暗、模糊略大，见浅色同名注释 */
-  --glass-blur: blur(26px) saturate(1.9);
+  --glass-blur: blur(20px) saturate(1.95);
   --glass-hi: inset 0 1px 0 rgb(var(--glass-rgb) / 0.3);
   --glass-sheen: linear-gradient(180deg, rgb(var(--glass-rgb) / 0.2), rgb(var(--glass-rgb) / 0.04) 42%, transparent);
   --ink-rgb: 226 232 244;
@@ -711,7 +713,7 @@ a {
   right: 0;
   height: var(--bottom-nav-height);
   padding: 10px 10px calc(10px + var(--safe-bottom));
-  background: rgb(var(--bg-rgb) / 0.78);
+  background: rgb(var(--bg-rgb) / 0.62);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-top: 1px solid rgb(var(--edge-rgb) / 0.06);
@@ -838,8 +840,11 @@ a {
 .sheetOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(11, 15, 26, 0.4);
-  backdrop-filter: blur(2px);
+  /* 遮罩必须保持「透亮」：曾加 blur(2px) + 40% 黑，把抽屉背后的内容
+     先糊掉再压暗，sheet 的 backdrop-filter 采到的是一团暗糊——玻璃感
+     被遮罩吃光。现在只做轻度压暗、不模糊，内容透过遮罩清晰可见，
+     抽屉的模糊才有东西可「透」。 */
+  background: rgba(11, 15, 26, 0.26);
   display: flex;
   justify-content: center;
   align-items: flex-end;
@@ -850,10 +855,11 @@ a {
 
 .sheet {
   width: min(420px, 100%);
-  /* 液态玻璃：半透明底 + 折射渐变 + 顶部内高光（iOS 26 材质，降级见文末 @supports not） */
+  /* 液态玻璃：半透明底 + 折射渐变 + 顶部内高光（web 近似，降级见文末 @supports not）。
+     背景透明度 0.62：太低文字可读性差，太高玻璃感消失（0.8 时几乎看不出模糊）。 */
   background:
     var(--glass-sheen),
-    rgb(var(--glass-tint-rgb) / 0.8);
+    rgb(var(--glass-tint-rgb) / 0.62);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border-top-left-radius: 32px;
@@ -1797,7 +1803,7 @@ button:disabled {
 
 /* 液态玻璃降级：无 backdrop-filter（老 WebKit / 桌面浏览器）时，
    玻璃表面回退高不透明底并去掉内高光，保证内容可读性。
-   iOS 26 Safari 渲染 backdrop-filter 走液态玻璃引擎，此块不生效。 */
+   iOS 26+ Safari 渲染 backdrop-filter 走液态玻璃引擎，此块不生效。 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .sheet {
     background: var(--card);
@@ -1805,5 +1811,17 @@ button:disabled {
   }
   .navBar {
     box-shadow: none;
+  }
+}
+
+/* 苹果未文档化的液态玻璃值（Safari 26+ 私有扩展，近似原生 UIGlassEffect 的
+   Core Animation 实现：动态亮度追踪 + SDF 边缘混合 + 三层 CALayer）。
+   官方不保证开放使用，@supports 探测到才生效；探测不到（绝大多数环境）
+   走上面的标准玻璃。不要移除——iOS 27 Safari 若识别该值即原生质感。 */
+@supports ((-webkit-backdrop-filter: liquid-glass) or (backdrop-filter: liquid-glass)) {
+  .sheet,
+  .navBar {
+    backdrop-filter: liquid-glass;
+    -webkit-backdrop-filter: liquid-glass;
   }
 }
