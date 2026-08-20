@@ -6,7 +6,10 @@ import UIKit
 /// 效果视图盖在 WKWebView 之上，滚动内容穿过玻璃由系统实时折射——
 /// 这是 web CSS 无法达到的真液态玻璃（Metal shader）。
 /// 四个 tab 与 web 侧一致：资产 / 趋势 / 统计 / 设置。
-@available(iOS 26.0, *)
+///
+/// 注意：类本身不标注 @available（stored property 无法引用受限类型），
+/// UIGlassEffect 只在 init 的 #available 分支内使用；iOS 26 以下
+/// effect 为 nil（空材质面板），插件侧 ensureNavBar 也不会创建它。
 final class GlassNavBar: UIVisualEffectView {
     var onTabSelected: ((String) -> Void)?
 
@@ -28,7 +31,11 @@ final class GlassNavBar: UIVisualEffectView {
     private var accentColor = UIColor.systemBlue
 
     init() {
-        super.init(effect: UIGlassEffect())
+        if #available(iOS 26.0, *) {
+            super.init(effect: UIGlassEffect())
+        } else {
+            super.init(effect: nil)
+        }
         backgroundColor = .clear
         layer.cornerRadius = 24
         layer.masksToBounds = true

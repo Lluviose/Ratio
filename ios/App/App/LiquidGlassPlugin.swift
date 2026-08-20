@@ -13,9 +13,7 @@ import UIKit
 /// web 侧保留自绘 CSS 导航栏（`isNativeGlassAvailable()` 返回 false）。
 @objc(LiquidGlassPlugin)
 public class LiquidGlassPlugin: CAPPlugin {
-    /// GlassNavBar 仅 iOS 26+ 可用：属性与访问统一经 #available 保护，
-    /// 非 iOS 26 环境保持 nil，所有方法 no-op。
-    @available(iOS 26.0, *)
+    /// 非 iOS 26 环境保持 nil（ensureNavBar 有 #available 守卫），所有方法 no-op。
     private var glassNavBar: GlassNavBar?
 
     private var sheetOpen = false
@@ -40,9 +38,8 @@ public class LiquidGlassPlugin: CAPPlugin {
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
-    /// 在 #available 保护下访问玻璃导航栏（不存在则忽略）。
+    /// 访问玻璃导航栏（未创建/非 iOS 26 则忽略）。
     private func withGlassNavBar(_ body: (GlassNavBar) -> Void) {
-        guard #available(iOS 26.0, *) else { return }
         if let bar = glassNavBar { body(bar) }
     }
 
@@ -72,7 +69,6 @@ public class LiquidGlassPlugin: CAPPlugin {
     }
 
     private func refreshNavBarVisibility() {
-        guard #available(iOS 26.0, *) else { return }
         glassNavBar?.setVisible(!sheetOpen, animated: true)
     }
 
