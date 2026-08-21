@@ -12,7 +12,20 @@ import UIKit
 /// iOS 25 及以下：`#available` 保护下不创建玻璃视图，所有方法 no-op，
 /// web 侧保留自绘 CSS 导航栏（`isNativeGlassAvailable()` 返回 false）。
 @objc(LiquidGlassPlugin)
-public class LiquidGlassPlugin: CAPPlugin {
+public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
+    // CAPBridgedPlugin 必填三属性（identifier/jsName/pluginMethods）：
+    // 缺任一则 CapacitorBridge.registerPluginInstance 的 guard
+    // （CapacitorPlugin = CAPPlugin & CAPBridgedPlugin）直接拦截、插件永不注册，
+    // web 侧 isNativeGlassAvailable() 永远 false → 静默降级 CSS 自绘导航。
+    // pluginMethods 的名称须与下方 @objc 方法名一致，returnType 全为 Promise。
+    public let identifier = "LiquidGlass"
+    public let jsName = "LiquidGlass"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "setActiveTab", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setSheetOpen", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setAccentColor", returnType: CAPPluginReturnPromise),
+    ]
+
     /// 非 iOS 26 环境保持 nil（ensureNavBar 有 #available 守卫），所有方法 no-op。
     private var glassNavBar: GlassNavBar?
 

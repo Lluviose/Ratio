@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-22 - iOS 原生液态玻璃导航栏从未生效（CAPBridgedPlugin 协议缺失）
+
+- **iOS 26+ 真机上玻璃胶囊导航不出现，仍由 WebView 内 CSS 自绘导航接管**：根因是 `LiquidGlassPlugin` 声明为 `CAPPlugin` 但未遵循 Capacitor 8 的 `CAPBridgedPlugin`（缺 `identifier`/`jsName`/`pluginMethods` 三属性），`CapacitorBridge.registerPluginInstance` 的 guard（`CapacitorPlugin = CAPPlugin & CAPBridgedPlugin`）直接拦截——控制台仅一行 ⚡️ 警告，插件从未注册、`JSExport` 未导出，web 侧 `isNativeGlassAvailable()` 永远 false，按设计静默降级到 CSS 毛玻璃。此前几轮迭代全在编译期（Xcode 26 SDK）与 `#available` 上打转，从未验证运行时插件是否注册成功。
+- **修复**：对照官方 `HapticsPlugin` 模板补齐协议三属性——`jsName = "LiquidGlass"` 与 web 侧 `window.Capacitor.Plugins.LiquidGlass` 探测点对齐；`pluginMethods` 声明 `setActiveTab`/`setSheetOpen`/`setAccentColor` 三个 Promise 方法（名称与 `@objc` 方法一致，`notifyListeners("tabSelected")` 事件通道不受影响）。
+- 验证：Windows 本机无法编译 iOS；需 macOS（Xcode 26+）构建后在 iOS 26 模拟器/真机确认——控制台无 "must conform to CAPBridgedPlugin" 警告、`window.Capacitor.Plugins.LiquidGlass` 存在、底部原生玻璃胶囊接管、web 隐藏自绘导航。web 侧零改动，浏览器/PWA 行为逐像素不变。
+
 ## 2026-08-19 - iOS 27 顶部安全区 env 过大上报钳制
 
 - **首页顶部多出巨大空块（iPhone 17 Pro Max / iOS 27 实机反馈）**：上一批切到 `black-translucent` 后，该系统在独立模式下把 `env(safe-area-inset-top)` 按约 2 倍上报（状态栏区实际 ~62pt，生效值 ≈124pt，按截图几何反推 148pt ≈ 124 + 24 精确吻合），标题被压到屏幕 15% 处；代码审计确认顶部避让只应用了一次，排除样式叠加。修复：`--safe-top`/`--safe-bottom` 定义处加 `min()` 钳制（上限 72px/48px = iPhone 真实最大值加余量），`index.html` 启动骨架屏同款；env 正常上报的设备数值不变（62 < 72），env 恒为 0 的反向 bug 仍由 `safeArea.ts` 兜底覆写处理（触发条件量 env 原始值，与钳制互不干扰），JS 几何计算读 `--safe-top` 生效值自动跟随。详见 TROUBLESHOOTING「iOS 27 独立模式：首页顶部多出巨大空块」。
