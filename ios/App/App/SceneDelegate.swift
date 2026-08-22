@@ -5,13 +5,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let windowScene = scene as? UIWindowScene else { return }
-
-        window = UIWindow(windowScene: windowScene)
-        // RatioBridgeViewController：注册内置液态玻璃导航栏插件（见 RatioBridgeViewController.swift）
-        window?.rootViewController = RatioBridgeViewController()
-        window?.makeKeyAndVisible()
-
+        // Main.storyboard 的初始 VC 是 RatioBridgeViewController。
+        // 不要在这里再 new 一扇 window——否则同一 scene 会出现两套 WKWebView，
+        // LiquidGlass 插件挂在看不见的那套上，真机看起来像「玻璃从来没生效」。
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 
