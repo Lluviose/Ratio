@@ -1,6 +1,15 @@
 # Changelog
 
+## 2026-08-23 - 启动闪退：玻璃栏不要挂 WKWebView，storyboard 不要找 Swift 类
+
+- **打开即闪退**（底部导航消失那次修复之后才出现）：CAPBridgeViewController 把 `view` 设成 WKWebView。`ensureNavBar` 一旦真的建栏，就把 `UIGlassEffect` 加在 WKWebView 上——合成器采样自己的远程层会崩。更早 ensureNavBar 是死代码所以看起来「没问题」。随后 storyboard 改成 `RatioBridgeViewController`（IB 启动时解析 Swift 类，找不到就直接杀进程），再加上 `setValue:forKey: "_useSystemAppearance"`（键不存在抛 NSException，Swift 接不住）、以及在 WKWebView 创建后再改 `configuration.preferences`。
+- **修复**：
+  - storyboard 改回空 `UIViewController`；`SceneDelegate` 仍用代码挂 `RatioBridgeViewController`（启动路径与闪退前一致），只有一套 WKWebView。
+  - 玻璃栏挂到 **window**，等 `capacitorViewDidAppear` 再创建；`UIGlassEffect` 在 `didMoveToWindow` 里才 materialize。
+  - 私有偏好改走 IMP 调 `_setUseSystemAppearance:`，且只在 `webViewConfiguration`（WKWebView 创建前）设置。
+
 ## 2026-08-23 - iOS 系统液态玻璃真正接通 + 设置页可选网页玻璃
+
 
 - **原生底部胶囊仍不是系统液态玻璃（或根本不出现）**：昨天补了 `CAPBridgedPlugin` 还不够。Capacitor 8 必须 **JS 侧 `registerPlugin('LiquidGlass')`**，只读 `window.Capacitor.Plugins.LiquidGlass` 会永远 undefined，web 按设计静默降级 CSS 毛玻璃。同时 `Main.storyboard` 仍实例化 `CAPBridgeViewController`，`SceneDelegate` 又另建一扇 window——同一 scene 两套 WKWebView，插件挂在看不见的那套上。
 - **就算栏出来了，看起来也只是一块切圆角的雾面**：`GlassNavBar` 把子视图加在 effect view 而不是 `contentView`、`masksToBounds + layer.cornerRadius` 裁掉玻璃溢出去的高光、在 `init` 里直接赋 effect（WWDC 要求动画块里 materialize 才会走液态材质）。frame 还按第一次 JS 调用时的 `safeAreaInsets` 写死，启动瞬间 insets=0 时胶囊会沉到 Home Indicator 下面。

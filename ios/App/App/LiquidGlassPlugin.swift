@@ -32,6 +32,7 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private var sheetOpen = false
     private var keyboardObservers: [NSObjectProtocol] = []
+    private var appearObserver: NSObjectProtocol?
 
     public override func load() {
         let center = NotificationCenter.default
@@ -47,40 +48,49 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
             self?.refreshNavBarVisibility()
         })
 
-        // 进主线程下一拍再挂栏：此时 view 已在窗口里，safeArea 有效。
-        // 不等 JS 首个方法——JS 探测是异步的，先把栏建好避免空窗。
-        DispatchQueue.main.async { [weak self] in
+        // CAPBridgeViewController 把 view 设成 WKWebView。玻璃栏不能当它的
+        // subview——UIGlassEffect 采样 WKWebView 自己的层会在合成器里崩。
+        // load() 时 view 还不在 window 里；等 capacitorViewDidAppear 再挂到 window。
+        appearObserver = center.addObserver(
+            forName: .capacitorViewDidAppear, object: nil, queue: .main
+        ) { [weak self] _ in
             _ = self?.ensureNavBar()
         }
     }
 
     deinit {
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        if let appearObserver {
+            NotificationCenter.default.removeObserver(appearObserver)
+        }
     }
 
     /// 访问玻璃导航栏：首次即惰性创建（见 ensureNavBar），
-    /// 非 iOS 26 / view 未就绪时返回 nil、body 不执行。
+    /// 非 iOS 26 / window 未就绪时返回 nil、body 不执行。
     private func withGlassNavBar(_ body: (GlassNavBar) -> Void) {
         guard let bar = ensureNavBar() else { return }
         body(bar)
     }
 
-    /// 创建玻璃导航栏并钉在安全区上（Auto Layout，转屏/动态岛会跟着走）。
+    private func overlayHost() -> UIView? {
+        bridge?.webView?.window ?? bridge?.viewController?.view.window
+    }
+
+    /// 创建玻璃导航栏并钉在 **window** 安全区上（不要加到 WKWebView 上）。
     private func ensureNavBar() -> GlassNavBar? {
         guard #available(iOS 26.0, *) else { return nil }
         if let glassNavBar { return glassNavBar }
-        guard let view = bridge?.viewController?.view else { return nil }
+        guard let host = overlayHost() else { return nil }
 
         let bar = GlassNavBar()
         bar.onTabSelected = { [weak self] tab in
             self?.notifyListeners("tabSelected", data: ["tab": tab])
         }
-        view.addSubview(bar)
-        view.bringSubviewToFront(bar)
+        host.addSubview(bar)
         let constraints = [
-            bar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
-            bar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
-            bar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -6),
+            bar.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
+            bar.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -8),
+            bar.bottomAnchor.constraint(equalTo: host.safeAreaLayoutGuide.bottomAnchor, constant: -6),
             bar.heightAnchor.constraint(equalToConstant: 72),
         ]
         NSLayoutConstraint.activate(constraints)

@@ -5,9 +5,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        // Main.storyboard 的初始 VC 是 RatioBridgeViewController。
-        // 不要在这里再 new 一扇 window——否则同一 scene 会出现两套 WKWebView，
-        // LiquidGlass 插件挂在看不见的那套上，真机看起来像「玻璃从来没生效」。
+        guard let windowScene = scene as? UIWindowScene else { return }
+
+        // 必须在这里挂 RatioBridgeViewController。Main.storyboard 只放空
+        // UIViewController，避免 IB 找不到 Swift 类导致启动即崩，也避免再
+        // 实例化一套 CAPBridgeViewController / WKWebView。
+        let window = self.window ?? UIWindow(windowScene: windowScene)
+        if !(window.rootViewController is RatioBridgeViewController) {
+            window.rootViewController = RatioBridgeViewController()
+        }
+        window.makeKeyAndVisible()
+        self.window = window
+
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
     }
 

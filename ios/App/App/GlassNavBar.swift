@@ -6,8 +6,9 @@ import UIKit
 /// UIGlassEffect 自己决定，不要用 layer.cornerRadius / masksToBounds——
 /// 那会裁掉玻璃溢到 bounds 外的高光和折射（WWDC 2025 Session 284）。
 ///
-/// 效果视图盖在 WKWebView 之上；按钮必须加在 `contentView` 上才会走
-/// 系统 vibrancy。四个 tab 与 web 侧一致：资产 / 趋势 / 统计 / 设置。
+/// 挂在 **window** 上（不要当 WKWebView 的 subview）。按钮必须加在
+/// `contentView` 上才会走系统 vibrancy。四个 tab 与 web 侧一致：
+/// 资产 / 趋势 / 统计 / 设置。
 final class GlassNavBar: UIView {
     var onTabSelected: ((String) -> Void)?
 
@@ -28,14 +29,17 @@ final class GlassNavBar: UIView {
     private var buttons: [UIButton] = []
     private var activeTab = "assets"
     private var accentColor = UIColor.systemBlue
+    private var glassMaterialized = false
 
     init() {
         super.init(frame: .zero)
         backgroundColor = .clear
         isUserInteractionEnabled = true
+        clipsToBounds = false
         translatesAutoresizingMaskIntoConstraints = false
 
         effectView.translatesAutoresizingMaskIntoConstraints = false
+        effectView.clipsToBounds = false
         addSubview(effectView)
         NSLayoutConstraint.activate([
             effectView.topAnchor.constraint(equalTo: topAnchor),
@@ -45,7 +49,6 @@ final class GlassNavBar: UIView {
         ])
 
         configureButtons()
-        materializeGlass()
         setActiveTab(activeTab)
     }
 
@@ -53,10 +56,21 @@ final class GlassNavBar: UIView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// 等进了 window 再 materialize。init 里赋 UIGlassEffect 时视图还不在
+    /// 层级里，合成器采样会崩（表现为打开即闪退）。
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil {
+            materializeGlass()
+        }
+    }
+
     /// WWDC：在动画块里赋 effect 才会走液态玻璃的 materialize；
     /// init 里直接 `UIVisualEffectView(effect:)` 经常只剩一块雾面。
     private func materializeGlass() {
+        guard !glassMaterialized else { return }
         guard #available(iOS 26.0, *) else { return }
+        glassMaterialized = true
         let glass = UIGlassEffect()
         glass.isInteractive = true
         UIView.animate(withDuration: 0.35) {

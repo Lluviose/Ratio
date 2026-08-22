@@ -161,7 +161,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - **CI 打包**：`.github/workflows/build-ios.yml`（macOS runner）出 **unsigned IPA**（`CODE_SIGNING_ALLOWED=NO` 三件套归档 + `ditto --sequesterRsrc` 打包），上传 artifact。unsigned 包不能装真机；签名切换步骤与所需 secrets 见该 workflow 注释。
 - **安全区与状态栏**：`contentInsetAdjustmentBehavior` 默认 `'never'`——WebView 全屏渲染，安全区继续走既有的 `--safe-top/--safe-bottom`（`env()` 钳制）体系，与 PWA 独立模式同一套逻辑，不需要原生侧处理。
 - **触觉反馈**：`src/lib/haptics.ts` 统一入口——原生环境（`window.Capacitor.isNativePlatform()`）经动态 import 走 `@capacitor/haptics`（不占首包），Web 回退 `navigator.vibrate`，iOS Safari 无 API 静默；减弱动态偏好下回退跳过。目前接入点：底部导航切换（`hapticSelectionChanged`，App.tsx `navigateTab`）、气泡页 flick（`hapticImpact('medium')`）与 burst（`hapticImpact('heavy')`，BubbleChartPhysics.tsx 两条爆开路径）。新增触感点：在交互语义点调 `haptics.ts` 对应函数，不要散布原生 API 调用。
-- **液态玻璃**：iOS 26+ 原生壳底部导航走 `UIGlassEffect`（`ios/App/App/GlassNavBar.swift` + `LiquidGlassPlugin`）。JS 必须 `registerPlugin('LiquidGlass')` 并等 `isSupported()`，不要只读 `Capacitor.Plugins`。网页卡片默认仍是 CSS 毛玻璃；设置页「系统液态玻璃」打开后，原生壳已启用的 `-apple-visual-effect` 才替换卡片/抽屉/导航（`src/lib/systemGlass.ts`，默认关）。该 CSS 依赖 WKWebView 私有偏好，仅自签安装有效。
+- **液态玻璃**：iOS 26+ 原生壳底部导航走 `UIGlassEffect`（挂在 window 上，不要当 WKWebView 的 subview）。JS 必须 `registerPlugin('LiquidGlass')` 并等 `isSupported()`。网页卡片默认仍是 CSS 毛玻璃；设置页「系统液态玻璃」打开后才用 `-apple-visual-effect`（`src/lib/systemGlass.ts`，默认关）。该 CSS 依赖 WKWebView 私有偏好，仅自签安装有效。Main.storyboard 保持空 VC，由 SceneDelegate 代码挂 `RatioBridgeViewController`。
 
 ### React Compiler（作用域限定）
 

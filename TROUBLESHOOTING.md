@@ -2,7 +2,20 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## iOS 原生壳：打开即闪退
+
+现象：点图标闪一下回桌面。底部导航消失那次修复之前没有。
+
+原因：
+
+- `CAPBridgeViewController.view` 就是 WKWebView。`ensureNavBar` 把 `UIGlassEffect` 加在它上面，合成器崩溃。更早 ensureNavBar 从未调用，所以「没栏也没崩」。
+- storyboard `customClass=RatioBridgeViewController`：IB 启动时解析不到 Swift 类会直接杀进程。
+- `setValue:forKey: "_useSystemAppearance"` 在键不存在时抛 NSException。
+
+处理：玻璃栏挂 window、storyboard 用空 VC、SceneDelegate 代码创建桥接 VC、私有 API 走 IMP。见 CHANGELOG 2026-08-23 闪退条。
+
 ## iOS 原生壳：系统液态玻璃不出现 / 仍是 CSS 毛玻璃
+
 
 现象：
 
