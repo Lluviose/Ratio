@@ -365,6 +365,7 @@ export function AccountDetailSheet(props: {
         open={open}
         title="账户"
         onClose={onClose}
+        sheetClassName="sheet--solid"
         sheetMotion={sheetMotion}
         sheetLayoutId={sheetLayoutId}
         onExitComplete={onExitComplete}
@@ -871,7 +872,8 @@ export function AccountDetailSheet(props: {
       sheetMotion={sheetMotion}
       sheetLayoutId={sheetLayoutId}
       onExitComplete={onExitComplete}
-      sheetStyle={{ maxHeight: '92vh', background: 'var(--bg)' }}
+      sheetClassName="sheet--solid"
+      sheetStyle={{ maxHeight: '92vh' }}
       bodyStyle={{ padding: 0 }}
       header={
         <motion.div

@@ -140,13 +140,12 @@ export function BottomSheet(props: {
   const overlayFadeInDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.18
   const overlayFadeOutDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.2
   const overlayEase: [number, number, number, number] = [0.16, 1, 0.3, 1]
-  const overlayInitial = {
-    backgroundColor: 'rgba(11, 15, 26, 0)',
-    backdropFilter: resolvedSheetMotion === 'morph' ? 'none' : 'blur(0px)',
-  }
+  // 遮罩只做压暗、绝不动画 blur：iOS WebKit 动画 backdrop-filter 不会插值，
+  // 结束帧会突然弹出一层边缘雾（账户详情最外圈「卡一下再出现」）。
+  // 抽屉玻璃在 .sheet 上；账户详情走 .sheet--solid，避免不透明底外再套一圈延迟滤镜。
+  const overlayInitial = { backgroundColor: 'rgba(11, 15, 26, 0)' }
   const overlayAnimate = {
     backgroundColor: 'rgba(11, 15, 26, 0.4)',
-    backdropFilter: resolvedSheetMotion === 'morph' ? 'none' : 'blur(2px)',
     transition: {
       duration: overlayFadeInDuration,
       ease: overlayEase,
@@ -154,7 +153,6 @@ export function BottomSheet(props: {
   }
   const overlayExit = {
     backgroundColor: 'rgba(11, 15, 26, 0)',
-    backdropFilter: resolvedSheetMotion === 'morph' ? 'none' : 'blur(0px)',
     transition: {
       duration: overlayFadeOutDuration,
       ease: overlayEase,
@@ -251,7 +249,17 @@ export function BottomSheet(props: {
                     layout: { type: 'spring', stiffness: 360, damping: 42, mass: 0.95 },
                   }
             }
-            style={{ ...resolvedSheetStyle, willChange: 'transform' }}
+            style={resolvedSheetStyle}
+            transformTemplate={
+              resolvedSheetMotion === 'slide'
+                ? ({ y }) => {
+                    // 停住时去掉 transform：will-change/translateY(0) 会让 WebKit
+                    // 把 backdrop-filter 推迟到下一拍才合成，圆角外一圈雾后到。
+                    if (y == null || y === 0 || y === '0' || y === '0px' || y === '0%') return 'none'
+                    return `translateY(${y})`
+                  }
+                : undefined
+            }
           >
             {!hideHandle ? <div className="handle" /> : null}
             {header ? (

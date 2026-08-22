@@ -873,6 +873,15 @@ a {
   flex-direction: column;
 }
 
+/* 账户详情等实心底抽屉：不要 backdrop-filter / 系统玻璃。
+   不透明底上再套滤镜，WebKit 会在圆角外画出一圈延迟出现的模糊边。 */
+.sheet.sheet--solid {
+  background: var(--bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--shadow-sheet);
+}
+
 .sheetHeader {
   padding: 14px 16px 10px;
   display: flex;
@@ -1821,7 +1830,7 @@ button:disabled {
    不要给 .segment / .pills 这类小控件套玻璃，叠多层会把页面打成一块雾。
    toast 保持原来的 CSS 毛玻璃：系统材质会把通知掏成一块雾，字也看不清。 */
 @supports (-apple-visual-effect: -apple-system-glass-material) {
-  html[data-system-glass="1"] .sheet,
+  html[data-system-glass="1"] .sheet:not(.sheet--solid),
   html[data-system-glass="1"] .navBar,
   html[data-system-glass="1"] .glassChrome {
     background-color: transparent;
@@ -1841,7 +1850,7 @@ button:disabled {
     box-shadow: none;
   }
 
-  html[data-system-glass="1"] .sheet {
+  html[data-system-glass="1"] .sheet:not(.sheet--solid) {
     box-shadow: var(--shadow-sheet);
   }
 
