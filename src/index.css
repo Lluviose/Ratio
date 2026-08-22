@@ -1818,11 +1818,11 @@ button:disabled {
    Safari / PWA / 桌面 @supports 失败，这段整块不生效，视觉基线不变。
    套在原来的 layout 上换材质，不要改圆角/尺寸/贴边方式。
    不要用 backdrop-filter: liquid-glass——那不是 WebKit 的真实属性。
-   不要给 .segment / .pills 这类小控件套玻璃，叠多层会把页面打成一块雾。 */
+   不要给 .segment / .pills 这类小控件套玻璃，叠多层会把页面打成一块雾。
+   toast 保持原来的 CSS 毛玻璃：系统材质会把通知掏成一块雾，字也看不清。 */
 @supports (-apple-visual-effect: -apple-system-glass-material) {
   html[data-system-glass="1"] .sheet,
   html[data-system-glass="1"] .navBar,
-  html[data-system-glass="1"] .toast,
   html[data-system-glass="1"] .glassChrome {
     background-color: transparent;
     background-image: none;

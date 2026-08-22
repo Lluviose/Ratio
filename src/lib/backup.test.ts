@@ -28,6 +28,32 @@ describe('backup', () => {
     expect(typeof backup.createdAt).toBe('string')
   })
 
+  it('excludes device-local system glass from backups and restores', () => {
+    localStorage.setItem('ratio.accounts', '[]')
+    localStorage.setItem('ratio.systemGlass', 'true')
+    localStorage.setItem('ratio.cloudSync', '{"autoSync":true}')
+
+    const backup = buildRatioBackup(localStorage)
+    expect(backup.items['ratio.systemGlass']).toBeUndefined()
+    expect(backup.items['ratio.cloudSync']).toBeUndefined()
+    expect(backup.items['ratio.accounts']).toBe('[]')
+
+    const restored = restoreRatioBackup(
+      parseRatioBackup(
+        JSON.stringify({
+          schema: RATIO_BACKUP_SCHEMA_V1,
+          createdAt: '2026-08-23T00:00:00.000Z',
+          items: { 'ratio.accounts': '["kept"]' },
+        }),
+      ),
+      localStorage,
+    )
+
+    expect(restored.clearedKeys).toEqual(['ratio.accounts'])
+    expect(localStorage.getItem('ratio.systemGlass')).toBe('true')
+    expect(localStorage.getItem('ratio.accounts')).toBe('["kept"]')
+  })
+
   it('clearRatioStorage removes backed-up keys only', () => {
     localStorage.setItem('ratio.accounts', '[]')
     localStorage.setItem('ratio.theme', '"matisse2"')
@@ -228,6 +254,32 @@ describe('backup', () => {
         items: { ...right.items, 'ratio.accounts': '["2"]' },
       }),
     ).toBe(false)
+  })
+
+  it('sameRatioBackupData ignores excluded device-local keys already sitting in an old cloud backup', () => {
+    const local = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2026-08-23T00:00:00.000Z',
+        items: { 'ratio.accounts': '["1"]' },
+      }),
+    )
+    const remoteWithGlass = parseRatioBackup(
+      JSON.stringify({
+        schema: RATIO_BACKUP_SCHEMA_V1,
+        createdAt: '2026-08-22T00:00:00.000Z',
+        items: { 'ratio.accounts': '["1"]', 'ratio.systemGlass': 'true' },
+      }),
+    )
+
+    expect(sameRatioBackupData(local, remoteWithGlass)).toBe(true)
+    expect(summarizeRatioBackupDiff(local, remoteWithGlass)).toEqual({
+      localOnlyCount: 0,
+      remoteOnlyCount: 0,
+      changedCount: 0,
+      differentKeyCount: 0,
+      sampleKeys: [],
+    })
   })
 
   it('sameRatioBackupData treats semantically equal account ops as equal across legacy id rewrites', () => {

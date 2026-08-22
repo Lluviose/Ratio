@@ -4,6 +4,7 @@ import {
   sameRatioBackupData,
   summarizeRatioBackupContent,
   summarizeRatioBackupDiff,
+  RATIO_BACKUP_EXCLUDE_PREFIXES,
   type RatioBackupFile,
   type RestoreResult,
 } from './backup'
@@ -21,7 +22,7 @@ import {
 } from './cloud'
 import { STORAGE_WRITE_EVENT, dispatchStorageWrite, type StorageWriteDetail } from './storageEvents'
 import { storageKernel } from './storageKernel'
-import { DEMO_KEY_PREFIX, isDemoModeActive } from './demoMode'
+import { isDemoModeActive } from './demoMode'
 import { writePreOperationLocalBackup } from './localBackups'
 import { emitAppToast } from './overlay'
 import { trackTelemetry } from './telemetry'
@@ -52,8 +53,7 @@ function getWriteDetail(event: Event): StorageWriteDetail | null {
 
 function shouldAutoSyncKey(key: string) {
   if (!key.startsWith('ratio.')) return false
-  if (key.startsWith(CLOUD_SYNC_SETTINGS_KEY)) return false
-  if (key.startsWith(DEMO_KEY_PREFIX)) return false
+  if (RATIO_BACKUP_EXCLUDE_PREFIXES.some((prefix) => key.startsWith(prefix))) return false
   // 演示模式期间的数据写入不标脏：演示数据永远不该进云端
   if (isDemoModeActive()) return false
   return true

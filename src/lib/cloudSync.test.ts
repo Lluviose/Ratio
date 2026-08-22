@@ -804,4 +804,33 @@ describe('initCloudAutoSync', () => {
     expect(cloudMocks.downloadCloudBackup).not.toHaveBeenCalled()
     expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
   })
+
+  it('does not mark cloud dirty when the system-glass toggle is written', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-04-29T13:03:54.267Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    window.dispatchEvent(
+      new CustomEvent('ratio:storage-write', {
+        detail: { key: 'ratio.systemGlass', raw: 'true' },
+      }),
+    )
+    await vi.advanceTimersByTimeAsync(2500)
+
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+    expect(cloudMocks.uploadCloudBackup).not.toHaveBeenCalled()
+  })
 })

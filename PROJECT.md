@@ -227,7 +227,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - 本机滚动快照（`src/lib/localBackups.ts`）：IDB 模式下自动保留近期全量副本——每日一代保 7 代（App 启动空闲时写，演示模式跳过）、危险操作（导入备份/云端恢复/进入演示）前抢一代保 3 代、降级会话抢救保 1 代；键以 `__backup.` 开头（非 `ratio.*`），不进备份文件、不被恢复/清空触碰、不触发云同步脏标记；设置页「本机快照」卡片可恢复。local 回退模式整体停用（5MB 配额装不下多代副本）。
 - 按 `Storage` 接口消费的模块（backup/ai/demo/cloud）默认存储是 `appStorage` 适配器；jsdom 单测环境无 indexedDB，全局内核自动回退 localStorage 语义，测试无需感知。内核自身的测试（`storageKernel.test.ts`）用 `fake-indexeddb` 注入覆盖 IDB 模式，`localBackups.test.ts` 同法。
 
-主要键都以 `ratio.` 开头。备份默认包含 `ratio.*`，但**排除**云同步账号配置和 AI 隐私确认键。
+主要键都以 `ratio.` 开头。备份默认包含 `ratio.*`，但**排除**云同步账号配置、AI 隐私确认键、演示模式暂存，以及本机「系统液态玻璃」开关（`ratio.systemGlass`：升级后多出这个键会让旧云端备份比对失败，自动备份被标成冲突）。
 
 | 键 | 用途 |
 | --- | --- |

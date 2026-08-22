@@ -12,6 +12,9 @@ export const RATIO_BACKUP_EXCLUDE_PREFIXES: readonly string[] = [
   'ratio.cloudSync',
   'ratio.aiPrivacyAcceptedServerUrl',
   'ratio.demo',
+  // 系统液态玻璃是本机壳能力，不是账本数据。进备份会让升级后多出一个键，
+  // 和旧云端备份比对失败，自动备份被标成冲突。
+  'ratio.systemGlass',
 ]
 
 export type RatioBackupFile = {
@@ -78,15 +81,17 @@ export function stringifyRatioBackup(backup: RatioBackupFile) {
 }
 
 export function sameRatioBackupData(left: RatioBackupFile, right: RatioBackupFile) {
-  const leftKeys = Object.keys(left.items).sort((a, b) => a.localeCompare(b))
-  const rightKeys = Object.keys(right.items).sort((a, b) => a.localeCompare(b))
+  const leftItems = comparableBackupItems(left.items)
+  const rightItems = comparableBackupItems(right.items)
+  const leftKeys = Object.keys(leftItems).sort((a, b) => a.localeCompare(b))
+  const rightKeys = Object.keys(rightItems).sort((a, b) => a.localeCompare(b))
   if (leftKeys.length !== rightKeys.length) return false
 
   for (let i = 0; i < leftKeys.length; i++) {
     const leftKey = leftKeys[i]
     const rightKey = rightKeys[i]
     if (leftKey !== rightKey) return false
-    if (normalizeBackupItemForCompare(leftKey, left.items[leftKey]) !== normalizeBackupItemForCompare(rightKey, right.items[rightKey])) {
+    if (normalizeBackupItemForCompare(leftKey, leftItems[leftKey]) !== normalizeBackupItemForCompare(rightKey, rightItems[rightKey])) {
       return false
     }
   }
@@ -99,8 +104,10 @@ export function summarizeRatioBackupDiff(
   remote: RatioBackupFile,
   maxSampleKeys = 12,
 ): RatioBackupDiffSummary {
-  const localKeys = Object.keys(local.items).sort((a, b) => a.localeCompare(b))
-  const remoteKeys = new Set(Object.keys(remote.items))
+  const localItems = comparableBackupItems(local.items)
+  const remoteItems = comparableBackupItems(remote.items)
+  const localKeys = Object.keys(localItems).sort((a, b) => a.localeCompare(b))
+  const remoteKeys = new Set(Object.keys(remoteItems))
   const localOnly: string[] = []
   const changed: string[] = []
 
@@ -109,7 +116,7 @@ export function summarizeRatioBackupDiff(
       localOnly.push(key)
       continue
     }
-    if (normalizeBackupItemForCompare(key, local.items[key]) !== normalizeBackupItemForCompare(key, remote.items[key])) {
+    if (normalizeBackupItemForCompare(key, localItems[key]) !== normalizeBackupItemForCompare(key, remoteItems[key])) {
       changed.push(key)
     }
     remoteKeys.delete(key)
@@ -125,6 +132,18 @@ export function summarizeRatioBackupDiff(
     differentKeyCount: localOnly.length + remoteOnly.length + changed.length,
     sampleKeys,
   }
+}
+
+function comparableBackupItems(
+  items: Record<string, string>,
+  excludeKeyPrefixes: readonly string[] = RATIO_BACKUP_EXCLUDE_PREFIXES,
+) {
+  const next: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(items)) {
+    if (isExcludedKey(key, excludeKeyPrefixes)) continue
+    next[key] = raw
+  }
+  return next
 }
 
 function normalizeBackupItemForCompare(key: string, raw: string) {
