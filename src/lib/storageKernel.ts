@@ -12,7 +12,7 @@
 //   迁移标记（标记存 IDB、不带 ratio. 前缀，永不进备份/清理）。localStorage
 //   读取中途失败时整体放弃且不写标记，下次启动重试——绝不把空/半份数据盖章成
 //   「已迁移」。旧副本原样冻结保留（旧版本回滚仍有近期数据可用），此后不再
-//   更新——例外是 BOOT_MIRROR_KEYS（colorMode/theme），持续镜像回
+//   更新——例外是 BOOT_MIRROR_KEYS（colorMode/theme/systemGlass），持续镜像回
 //   localStorage，供 public/color-mode-boot.js 在首屏样式绘制前同步读取。
 // - 跨标签同步走 BroadcastChannel（IDB 写不会触发 storage 事件），收到广播后
 //   更新内存并派发与本地写一致的 storageEvents 自定义事件，hooks 无感知。
@@ -55,7 +55,7 @@ const QUOTA_WARN_RATIO = 0.9
 // 这里按契约复写——localBackups.ts 文件头注释即该契约）
 const LOCAL_BACKUP_KEY_PREFIX = '__backup.'
 
-export const BOOT_MIRROR_KEYS: readonly string[] = ['ratio.colorMode', 'ratio.theme']
+export const BOOT_MIRROR_KEYS: readonly string[] = ['ratio.colorMode', 'ratio.theme', 'ratio.systemGlass']
 
 // 降级会话写入标记：存 localStorage（IDB 模式启动时也要能读到）。
 // 不带 ratio. 前缀，不进备份/清理/appStorage 视图。

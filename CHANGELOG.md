@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-23 - iOS 系统液态玻璃真正接通 + 设置页可选网页玻璃
+
+- **原生底部胶囊仍不是系统液态玻璃（或根本不出现）**：昨天补了 `CAPBridgedPlugin` 还不够。Capacitor 8 必须 **JS 侧 `registerPlugin('LiquidGlass')`**，只读 `window.Capacitor.Plugins.LiquidGlass` 会永远 undefined，web 按设计静默降级 CSS 毛玻璃。同时 `Main.storyboard` 仍实例化 `CAPBridgeViewController`，`SceneDelegate` 又另建一扇 window——同一 scene 两套 WKWebView，插件挂在看不见的那套上。
+- **就算栏出来了，看起来也只是一块切圆角的雾面**：`GlassNavBar` 把子视图加在 effect view 而不是 `contentView`、`masksToBounds + layer.cornerRadius` 裁掉玻璃溢出去的高光、在 `init` 里直接赋 effect（WWDC 要求动画块里 materialize 才会走液态材质）。frame 还按第一次 JS 调用时的 `safeAreaInsets` 写死，启动瞬间 insets=0 时胶囊会沉到 Home Indicator 下面。
+- **修复**：
+  - JS：`nativeGlass.ts` 经壳注入的 `isPluginAvailable` + `registerPlugin` 拿代理（仍不静态 import `@capacitor/core`，首包不变）；新增 `isSupported()` 原生方法，**只有 iOS 26+ 才藏 CSS 栏**，避免旧系统空底。首帧默认 CSS 导航，探测完成再切。
+  - 原生：storyboard 初始 VC 改为 `RatioBridgeViewController`；SceneDelegate 不再 new window；`GlassNavBar` 按 WWDC 2025 Session 284 重写（`contentView`、动画赋 `UIGlassEffect`、`isInteractive`、去掉 clip）；Auto Layout 钉在 `safeAreaLayoutGuide`；插件 `load()` 即建栏；hex 解析按 `#RRGGBB` 而不是把 AA 当红通道。
+  - **网页卡片可选系统玻璃**：设置 →「系统液态玻璃」开关（默认关）。原生壳在 `webViewConfiguration` 打开 WKWebView 私有偏好 `_useSystemAppearance`，CSS `@supports (-apple-visual-effect: -apple-system-glass-material)` 才生效；打开后卡片/抽屉/导航/toast/首页快捷栏走系统材质。Safari / PWA / 桌面 `CSS.supports` 失败，属性不写，视觉基线与 e2e 不变。该偏好是私有 API，自签侧载可用，不用于 App Store。
+- 验证：单测覆盖探测与开关落地；浏览器/PWA 默认关，外观不变。真机需 Xcode 26+ 重新签名安装后，在 iOS 26+ 上看原生胶囊，设置里打开「系统液态玻璃」看卡片。
+
 ## 2026-08-22 - iOS 原生液态玻璃导航栏从未生效（CAPBridgedPlugin 协议缺失）
 
 - **iOS 26+ 真机上玻璃胶囊导航不出现，仍由 WebView 内 CSS 自绘导航接管**：根因是 `LiquidGlassPlugin` 声明为 `CAPPlugin` 但未遵循 Capacitor 8 的 `CAPBridgedPlugin`（缺 `identifier`/`jsName`/`pluginMethods` 三属性），`CapacitorBridge.registerPluginInstance` 的 guard（`CapacitorPlugin = CAPPlugin & CAPBridgedPlugin`）直接拦截——控制台仅一行 ⚡️ 警告，插件从未注册、`JSExport` 未导出，web 侧 `isNativeGlassAvailable()` 永远 false，按设计静默降级到 CSS 毛玻璃。此前几轮迭代全在编译期（Xcode 26 SDK）与 `#available` 上打转，从未验证运行时插件是否注册成功。
