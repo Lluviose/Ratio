@@ -176,6 +176,7 @@ describe('storageKernel (IDB 模式)', () => {
     await kernel.ready
 
     expect(BOOT_MIRROR_KEYS).toContain('ratio.colorMode')
+    expect(BOOT_MIRROR_KEYS).toContain('ratio.systemGlass')
     kernel.set('ratio.colorMode', '"dark"')
     kernel.set('ratio.accounts', '[1]')
     expect(local.getItem('ratio.colorMode')).toBe('"dark"')

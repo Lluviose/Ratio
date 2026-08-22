@@ -2,15 +2,13 @@ import UIKit
 
 /// 原生液态玻璃导航栏（iOS 26+ UIGlassEffect）。
 ///
-/// 悬浮胶囊：左右留 8pt、底部安全区上 6pt、高 72pt、圆角 24。
-/// 效果视图盖在 WKWebView 之上，滚动内容穿过玻璃由系统实时折射——
-/// 这是 web CSS 无法达到的真液态玻璃（Metal shader）。
-/// 四个 tab 与 web 侧一致：资产 / 趋势 / 统计 / 设置。
+/// 悬浮胶囊：左右 8pt、底部安全区上 6pt、高 72pt。默认胶囊圆角由
+/// UIGlassEffect 自己决定，不要用 layer.cornerRadius / masksToBounds——
+/// 那会裁掉玻璃溢到 bounds 外的高光和折射（WWDC 2025 Session 284）。
 ///
-/// 注意：类本身不标注 @available（stored property 无法引用受限类型），
-/// UIGlassEffect 只在 init 的 #available 分支内使用；iOS 26 以下
-/// effect 为 nil（空材质面板），插件侧 ensureNavBar 也不会创建它。
-final class GlassNavBar: UIVisualEffectView {
+/// 效果视图盖在 WKWebView 之上；按钮必须加在 `contentView` 上才会走
+/// 系统 vibrancy。四个 tab 与 web 侧一致：资产 / 趋势 / 统计 / 设置。
+final class GlassNavBar: UIView {
     var onTabSelected: ((String) -> Void)?
 
     struct Tab {
@@ -26,28 +24,47 @@ final class GlassNavBar: UIVisualEffectView {
         Tab(id: "settings", symbol: "gearshape", title: "设置"),
     ]
 
+    private let effectView = UIVisualEffectView()
     private var buttons: [UIButton] = []
     private var activeTab = "assets"
     private var accentColor = UIColor.systemBlue
 
     init() {
-        if #available(iOS 26.0, *) {
-            super.init(effect: UIGlassEffect())
-        } else {
-            super.init(effect: nil)
-        }
+        super.init(frame: .zero)
         backgroundColor = .clear
-        layer.cornerRadius = 24
-        layer.masksToBounds = true
         isUserInteractionEnabled = true
-        configureLayout()
+        translatesAutoresizingMaskIntoConstraints = false
+
+        effectView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(effectView)
+        NSLayoutConstraint.activate([
+            effectView.topAnchor.constraint(equalTo: topAnchor),
+            effectView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            effectView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            effectView.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+
+        configureButtons()
+        materializeGlass()
+        setActiveTab(activeTab)
     }
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    private func configureLayout() {
+    /// WWDC：在动画块里赋 effect 才会走液态玻璃的 materialize；
+    /// init 里直接 `UIVisualEffectView(effect:)` 经常只剩一块雾面。
+    private func materializeGlass() {
+        guard #available(iOS 26.0, *) else { return }
+        let glass = UIGlassEffect()
+        glass.isInteractive = true
+        UIView.animate(withDuration: 0.35) {
+            self.effectView.effect = glass
+        }
+    }
+
+    private func configureButtons() {
         let stack = UIStackView()
         stack.axis = .horizontal
         stack.distribution = .fillEqually
@@ -63,15 +80,14 @@ final class GlassNavBar: UIVisualEffectView {
             stack.addArrangedSubview(button)
         }
 
-        addSubview(stack)
+        // 必须加到 contentView，系统才会给标签/图标做 vibrancy。
+        effectView.contentView.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: effectView.contentView.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: effectView.contentView.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: effectView.contentView.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: effectView.contentView.trailingAnchor),
         ])
-
-        setActiveTab(activeTab)
     }
 
     private func makeConfiguration(for tab: Tab) -> UIButton.Configuration {

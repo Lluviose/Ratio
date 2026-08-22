@@ -13,10 +13,10 @@
   --glass-rgb: 255 255 255;      /* 玻璃面 / 顶部高光 / 浅色描边 */
   --glass-tint-rgb: 248 250 252; /* 冷灰玻璃底（≈slate-50） */
   --glass-tint2-rgb: 241 245 249;/* 冷灰玻璃底（≈slate-100） */
-  /* 液态玻璃材质 token（web 近似）：苹果未公开 web 版液态玻璃 API
-     （原生 Metal shader 不暴露给 WKWebView），web 能做的极限是高质感
-     玻璃——blur 取 18px 以下（>20px 在 iOS 触发渲染退化）、saturate
-     提高让背景颜色透过玻璃更鲜活、顶部内高光模拟折射亮边。
+  /* 液态玻璃材质 token（web 近似）：系统液态玻璃走设置页可选开关
+     （html[data-system-glass] + -apple-visual-effect，仅 iOS 原生壳）。
+     默认仍是高质感 CSS 玻璃——blur 取 18px 以下（>20px 在 iOS 触发渲染退化）、
+     saturate 提高让背景颜色透过玻璃更鲜活、顶部内高光模拟折射亮边。
      新表面一律用这三枚 token，不要散落魔法值。 */
   --glass-blur: blur(18px) saturate(1.85);
   --glass-hi: inset 0 1px 0 rgb(var(--glass-rgb) / 0.85); /* 玻璃顶部内高光 */
@@ -1802,8 +1802,7 @@ button:disabled {
 }
 
 /* 液态玻璃降级：无 backdrop-filter（老 WebKit / 桌面浏览器）时，
-   玻璃表面回退高不透明底并去掉内高光，保证内容可读性。
-   iOS 26+ Safari 渲染 backdrop-filter 走液态玻璃引擎，此块不生效。 */
+   玻璃表面回退高不透明底并去掉内高光，保证内容可读性。 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .sheet {
     background: var(--card);
@@ -1814,14 +1813,33 @@ button:disabled {
   }
 }
 
-/* 苹果未文档化的液态玻璃值（Safari 26+ 私有扩展，近似原生 UIGlassEffect 的
-   Core Animation 实现：动态亮度追踪 + SDF 边缘混合 + 三层 CALayer）。
-   官方不保证开放使用，@supports 探测到才生效；探测不到（绝大多数环境）
-   走上面的标准玻璃。不要移除——iOS 27 Safari 若识别该值即原生质感。 */
-@supports ((-webkit-backdrop-filter: liquid-glass) or (backdrop-filter: liquid-glass)) {
-  .sheet,
-  .navBar {
-    backdrop-filter: liquid-glass;
-    -webkit-backdrop-filter: liquid-glass;
+/* 系统液态玻璃（可选，默认关）：iOS 原生壳打开 WKWebView 私有偏好
+   `_useSystemAppearance` 后，`-apple-visual-effect` 才会被认。
+   Safari / PWA / 桌面 @supports 失败，这段整块不生效，视觉基线不变。
+   不要用 backdrop-filter: liquid-glass——那不是 WebKit 的真实属性。 */
+@supports (-apple-visual-effect: -apple-system-glass-material) {
+  html[data-system-glass="1"] .sheet,
+  html[data-system-glass="1"] .navBar,
+  html[data-system-glass="1"] .card,
+  html[data-system-glass="1"] .toast,
+  html[data-system-glass="1"] .glassChrome,
+  html[data-system-glass="1"] .iosInsightsPage .card,
+  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card,
+  html[data-system-glass="1"] .iosInsightsPage .segment,
+  html[data-system-glass="1"] .iosInsightsPage .pills,
+  html[data-system-glass="1"] .iosStatsRangeHeader,
+  html[data-system-glass="1"] .iosTrendChartCard,
+  html[data-system-glass="1"] .iosTrendDetailPanel,
+  html[data-system-glass="1"] .iosTrendGoalPanel {
+    background: transparent;
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    -apple-visual-effect: -apple-system-glass-material;
+  }
+
+  html[data-system-glass="1"] .glassChrome {
+    border-color: transparent;
+    box-shadow: none;
   }
 }

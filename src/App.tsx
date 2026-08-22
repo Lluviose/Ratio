@@ -27,13 +27,14 @@ import {
 import { useLocalStorageState } from './lib/useLocalStorageState'
 import {
   initNativeGlass,
-  isNativeGlassAvailable,
   nativeGlassSetAccentColor,
   nativeGlassSetActiveTab,
   nativeGlassSetSheetOpen,
+  probeNativeGlassAvailable,
   readAccentColor,
 } from './lib/nativeGlass'
 import { applyDocumentColorMode, coerceColorMode, COLOR_MODE_KEY, resolveColorMode, type ColorMode } from './lib/colorMode'
+import { applyDocumentSystemGlass, coerceSystemGlass, SYSTEM_GLASS_KEY } from './lib/systemGlass'
 import { emitAppToast, queueToastAfterReload, useOverlay } from './lib/overlay'
 import { enterDemoMode, exitDemoMode } from './lib/demoData'
 import { isDemoModeActive } from './lib/demoMode'
@@ -482,6 +483,7 @@ export default function App() {
   const [view, setView] = useState<ViewId>('main')
   const [theme, setTheme] = useLocalStorageState<ThemeId>('ratio.theme', 'matisse2')
   const [colorMode] = useLocalStorageState<ColorMode>(COLOR_MODE_KEY, 'system', { coerce: coerceColorMode })
+  const [systemGlass] = useLocalStorageState<boolean>(SYSTEM_GLASS_KEY, false, { coerce: coerceSystemGlass })
   const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
@@ -541,6 +543,10 @@ export default function App() {
     mq.addEventListener('change', apply)
     return () => mq.removeEventListener('change', apply)
   }, [colorMode])
+
+  useLayoutEffect(() => {
+    applyDocumentSystemGlass(systemGlass)
+  }, [systemGlass])
 
   useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts, accounts.storageReady && snapshotsStorageReady)
 
@@ -653,14 +659,26 @@ export default function App() {
     [tab, setTabDirection, setTab],
   )
 
-  // 原生液态玻璃导航栏（iOS 26+ 原生壳）：可用时接管底部导航与首页快捷栏，
-  // web 自绘导航隐藏（见 src/lib/nativeGlass.ts）。
-  const [nativeGlass] = useState(isNativeGlassAvailable)
+  // 原生液态玻璃导航栏（iOS 26+ 原生壳）：isSupported 为 true 时接管底部
+  // 导航与首页快捷栏，web 自绘导航隐藏（见 src/lib/nativeGlass.ts）。
+  // 首帧必须是 false——插件在旧 iOS 也会注册，同步探测会把 CSS 栏藏掉
+  // 却建不出原生栏。等 isSupported 回来再切。
+  const [nativeGlass, setNativeGlass] = useState(false)
   // 原生回调里取最新 navigateTab（避免 init effect 依赖 navigateTab 每次重建监听）
   const navigateTabRef = useRef(navigateTab)
   useEffect(() => {
     navigateTabRef.current = navigateTab
   }, [navigateTab])
+
+  useEffect(() => {
+    let cancelled = false
+    void probeNativeGlassAvailable().then((available) => {
+      if (!cancelled) setNativeGlass(available)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!nativeGlass) return

@@ -25,6 +25,7 @@ import {
 import { cancelPendingCloudAutoSync, markCloudSyncClean } from '../lib/cloudSync'
 import { ACCOUNT_SORT_MODE_KEY, type AccountSortMode } from '../lib/accountSort'
 import { COLOR_MODE_KEY, coerceColorMode, type ColorMode } from '../lib/colorMode'
+import { applyDocumentSystemGlass, coerceSystemGlass, SYSTEM_GLASS_KEY } from '../lib/systemGlass'
 import { enterDemoMode, exitDemoMode } from '../lib/demoData'
 import { isDemoModeActive } from '../lib/demoMode'
 import { storageKernel } from '../lib/storageKernel'
@@ -33,6 +34,7 @@ import type { ThemeId, ThemeOption } from '../lib/themes'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { standardEase } from '../lib/motionPresets'
 import { AppearanceCard } from './settings/AppearanceCard'
+import { SystemGlassCard } from './settings/SystemGlassCard'
 import { DemoCard } from './settings/DemoCard'
 import { ThemeCard, type ThemeChangeOrigin } from './settings/ThemeCard'
 import { AccountSortCard } from './settings/AccountSortCard'
@@ -58,6 +60,9 @@ export function SettingsScreen(props: {
   )
   const [colorMode, setColorMode] = useLocalStorageState<ColorMode>(COLOR_MODE_KEY, 'system', {
     coerce: coerceColorMode,
+  })
+  const [systemGlass, setSystemGlass] = useLocalStorageState<boolean>(SYSTEM_GLASS_KEY, false, {
+    coerce: coerceSystemGlass,
   })
   const [monthStartDayRaw, setMonthStartDayRaw] = useLocalStorageState<number>(
     MONTH_START_DAY_KEY,
@@ -298,6 +303,14 @@ export function SettingsScreen(props: {
       transition={{ duration: 0.28, ease: standardEase }}
     >
       <AppearanceCard colorMode={colorMode} onChange={setColorMode} />
+
+      <SystemGlassCard
+        enabled={systemGlass}
+        onChange={(enabled) => {
+          setSystemGlass(enabled)
+          applyDocumentSystemGlass(enabled)
+        }}
+      />
 
       <DemoCard demoActive={demoActive} busy={busy} onEnterDemo={handleEnterDemo} onExitDemo={handleExitDemo} />
 

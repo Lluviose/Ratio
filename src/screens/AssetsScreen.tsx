@@ -1019,7 +1019,7 @@ export function AssetsScreen(props: {
 
       {!isNativeGlass ? (
       <div className="absolute left-4 bottom-[calc(var(--safe-bottom)+16px)] z-20">
-        <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
+        <div className="glassChrome flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
           <button
             type="button"
             className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
@@ -1282,7 +1282,7 @@ export function AssetsScreen(props: {
       >
         <motion.div style={{ opacity: miniBarOpacity, y: miniBarY, pointerEvents: miniBarPointerEvents }}>
           {/* 首页快捷栏：趋势 / 统计 / 设置 平级（设置不再藏二级菜单） */}
-          <div className="flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
+          <div className="glassChrome flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
             <button
               type="button"
               className="w-11 h-11 rounded-full flex items-center justify-center text-slate-700 hover:bg-black/5"
