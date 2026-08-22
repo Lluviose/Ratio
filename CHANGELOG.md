@@ -8,7 +8,7 @@
   - JS：`nativeGlass.ts` 经壳注入的 `isPluginAvailable` + `registerPlugin` 拿代理（仍不静态 import `@capacitor/core`，首包不变）；新增 `isSupported()` 原生方法，**只有 iOS 26+ 才藏 CSS 栏**，避免旧系统空底。首帧默认 CSS 导航，探测完成再切。
   - 原生：storyboard 初始 VC 改为 `RatioBridgeViewController`；SceneDelegate 不再 new window；`GlassNavBar` 按 WWDC 2025 Session 284 重写（`contentView`、动画赋 `UIGlassEffect`、`isInteractive`、去掉 clip）；Auto Layout 钉在 `safeAreaLayoutGuide`；插件 `load()` 即建栏；hex 解析按 `#RRGGBB` 而不是把 AA 当红通道。
   - **网页卡片可选系统玻璃**：设置 →「系统液态玻璃」开关（默认关）。原生壳在 `webViewConfiguration` 打开 WKWebView 私有偏好 `_useSystemAppearance`，CSS `@supports (-apple-visual-effect: -apple-system-glass-material)` 才生效；打开后卡片/抽屉/导航/toast/首页快捷栏走系统材质。Safari / PWA / 桌面 `CSS.supports` 失败，属性不写，视觉基线与 e2e 不变。该偏好是私有 API，自签侧载可用，不用于 App Store。
-- 验证：单测覆盖探测与开关落地；浏览器/PWA 默认关，外观不变。真机需 Xcode 26+ 重新签名安装后，在 iOS 26+ 上看原生胶囊，设置里打开「系统液态玻璃」看卡片。
+- 验证：单测覆盖探测与开关落地；浏览器/PWA 默认关，外观不变。真机需 Xcode 26+ 重新签名安装后，在 iOS 26+ 上看原生胶囊，设置里打开「系统液态玻璃」看卡片。CI 首次归档因 `final` 类上 `override open` 失败，已改为 `public`。
 
 ## 2026-08-22 - iOS 原生液态玻璃导航栏从未生效（CAPBridgedPlugin 协议缺失）
 

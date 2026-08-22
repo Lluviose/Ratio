@@ -7,7 +7,7 @@ import WebKit
 ///
 /// `_useSystemAppearance` 是 WebKit 私有接口，自签侧载可用；提交 App Store 会被拒。
 final class RatioBridgeViewController: CAPBridgeViewController {
-    override open func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+    override public func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
         let config = super.webViewConfiguration(for: instanceConfiguration)
         Self.enableSystemAppearance(on: config.preferences)
         return config
