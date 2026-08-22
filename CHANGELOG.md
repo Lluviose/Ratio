@@ -3,7 +3,10 @@
 ## 2026-08-22 - iOS 原生液态玻璃导航栏从未生效（CAPBridgedPlugin 协议缺失）
 
 - **iOS 26+ 真机上玻璃胶囊导航不出现，仍由 WebView 内 CSS 自绘导航接管**：根因是 `LiquidGlassPlugin` 声明为 `CAPPlugin` 但未遵循 Capacitor 8 的 `CAPBridgedPlugin`（缺 `identifier`/`jsName`/`pluginMethods` 三属性），`CapacitorBridge.registerPluginInstance` 的 guard（`CapacitorPlugin = CAPPlugin & CAPBridgedPlugin`）直接拦截——控制台仅一行 ⚡️ 警告，插件从未注册、`JSExport` 未导出，web 侧 `isNativeGlassAvailable()` 永远 false，按设计静默降级到 CSS 毛玻璃。此前几轮迭代全在编译期（Xcode 26 SDK）与 `#available` 上打转，从未验证运行时插件是否注册成功。
-- **修复**：对照官方 `HapticsPlugin` 模板补齐协议三属性——`jsName = "LiquidGlass"` 与 web 侧 `window.Capacitor.Plugins.LiquidGlass` 探测点对齐；`pluginMethods` 声明 `setActiveTab`/`setSheetOpen`/`setAccentColor` 三个 Promise 方法（名称与 `@objc` 方法一致，`notifyListeners("tabSelected")` 事件通道不受影响）。
+- **修复（先后两处断点）**：
+  - ① `LiquidGlassPlugin` 对照官方 `HapticsPlugin` 模板补齐 `CAPBridgedPlugin` 三属性——`jsName = "LiquidGlass"` 与 web 侧 `window.Capacitor.Plugins.LiquidGlass` 探测点对齐；`pluginMethods` 声明 `setActiveTab`/`setSheetOpen`/`setAccentColor` 三个 Promise 方法（名称与 `@objc` 方法一致，`notifyListeners("tabSelected")` 事件通道不受影响）。
+  - ② 修好注册后真机复测：**底部导航彻底消失**——`ensureNavBar()` 是死代码，从未被任何方法调用。三个方法全走 `withGlassNavBar`（仅 `glassNavBar != nil` 时生效），而 `glassNavBar` 初值 nil 且无任何入口触发它创建；web 按协议判定原生可用后隐藏 CSS 自绘栏，原生栏却建不出来 → 双空。修复：`withGlassNavBar` 改为基于 `ensureNavBar()` 惰性创建（首个方法调用即建栏挂到 WebView 之上），`refreshNavBarVisibility` 同步改用 `withGlassNavBar`。
+- 已知边界：真机为 iOS 26 以下时插件仍注册成功→web 隐藏 CSS 栏，原生栏按 `#available` 不创建→同样空底；需 web 侧按 iOS 版本设门槛（待确认目标设备版本后处理）。
 - 验证：Windows 本机无法编译 iOS；需 macOS（Xcode 26+）构建后在 iOS 26 模拟器/真机确认——控制台无 "must conform to CAPBridgedPlugin" 警告、`window.Capacitor.Plugins.LiquidGlass` 存在、底部原生玻璃胶囊接管、web 隐藏自绘导航。web 侧零改动，浏览器/PWA 行为逐像素不变。
 
 ## 2026-08-19 - iOS 27 顶部安全区 env 过大上报钳制

@@ -51,9 +51,11 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
-    /// 访问玻璃导航栏（未创建/非 iOS 26 则忽略）。
+    /// 访问玻璃导航栏：首次即惰性创建（见 ensureNavBar），
+    /// 非 iOS 26 / view 未就绪时返回 nil、body 不执行（与旧「未创建则忽略」语义一致）。
     private func withGlassNavBar(_ body: (GlassNavBar) -> Void) {
-        if let bar = glassNavBar { body(bar) }
+        guard let bar = ensureNavBar() else { return }
+        body(bar)
     }
 
     /// 惰性创建玻璃导航栏并挂到 WebView 容器之上（首次调用时）。
@@ -82,7 +84,7 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     private func refreshNavBarVisibility() {
-        glassNavBar?.setVisible(!sheetOpen, animated: true)
+        withGlassNavBar { $0.setVisible(!sheetOpen, animated: true) }
     }
 
     @objc public func setActiveTab(_ call: CAPPluginCall) {
