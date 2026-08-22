@@ -1816,30 +1816,49 @@ button:disabled {
 /* 系统液态玻璃（可选，默认关）：iOS 原生壳打开 WKWebView 私有偏好
    `_useSystemAppearance` 后，`-apple-visual-effect` 才会被认。
    Safari / PWA / 桌面 @supports 失败，这段整块不生效，视觉基线不变。
-   不要用 backdrop-filter: liquid-glass——那不是 WebKit 的真实属性。 */
+   套在原来的 layout 上换材质，不要改圆角/尺寸/贴边方式。
+   不要用 backdrop-filter: liquid-glass——那不是 WebKit 的真实属性。
+   不要给 .segment / .pills 这类小控件套玻璃，叠多层会把页面打成一块雾。 */
 @supports (-apple-visual-effect: -apple-system-glass-material) {
   html[data-system-glass="1"] .sheet,
   html[data-system-glass="1"] .navBar,
-  html[data-system-glass="1"] .card,
   html[data-system-glass="1"] .toast,
-  html[data-system-glass="1"] .glassChrome,
-  html[data-system-glass="1"] .iosInsightsPage .card,
-  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card,
-  html[data-system-glass="1"] .iosInsightsPage .segment,
-  html[data-system-glass="1"] .iosInsightsPage .pills,
-  html[data-system-glass="1"] .iosStatsRangeHeader,
-  html[data-system-glass="1"] .iosTrendChartCard,
-  html[data-system-glass="1"] .iosTrendDetailPanel,
-  html[data-system-glass="1"] .iosTrendGoalPanel {
-    background: transparent;
+  html[data-system-glass="1"] .glassChrome {
+    background-color: transparent;
     background-image: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     -apple-visual-effect: -apple-system-glass-material;
   }
 
-  html[data-system-glass="1"] .glassChrome {
-    border-color: transparent;
+  html[data-system-glass="1"] .navBar {
+    border-top-color: rgb(var(--edge-rgb) / 0.06);
     box-shadow: none;
+  }
+
+  html[data-system-glass="1"] .glassChrome {
+    border-color: rgb(var(--glass-rgb) / 0.45);
+    box-shadow: none;
+  }
+
+  html[data-system-glass="1"] .sheet {
+    box-shadow: var(--shadow-sheet);
+  }
+
+  /* 卡片：系统材质 + 裁进圆角，保留发丝边，避免相邻卡片融成一片 */
+  html[data-system-glass="1"] .card,
+  html[data-system-glass="1"] .iosInsightsPage .card,
+  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card,
+  html[data-system-glass="1"] .iosTrendChartCard,
+  html[data-system-glass="1"] .iosTrendDetailPanel,
+  html[data-system-glass="1"] .iosTrendGoalPanel {
+    background-color: rgb(var(--glass-rgb) / 0.22);
+    background-image: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    -apple-visual-effect: -apple-system-glass-material;
+    box-shadow: none;
+    isolation: isolate;
+    overflow: hidden;
   }
 }

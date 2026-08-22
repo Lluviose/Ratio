@@ -1,22 +1,18 @@
 import Capacitor
 import UIKit
 
-/// 原生液态玻璃导航栏插件（iOS 26+）。
+/// 液态玻璃探测插件（iOS 26+）。
 ///
-/// web 侧经 `window.Capacitor.registerPlugin('LiquidGlass')` 调用：
-/// - `isSupported()`：是否真正能创建 UIGlassEffect（iOS 26+）
-/// - `setActiveTab({ tab })`：同步当前激活 tab
-/// - `setSheetOpen({ open })`：抽屉开合时隐藏/恢复导航栏
-/// - `setAccentColor({ color })`：同步主题强调色（hex #RRGGBB）
-/// - 原生按钮点击经 `tabSelected` 事件回传 web
+/// 底部导航**不再**用原生 `GlassNavBar` / `UIGlassEffect` 覆盖。
+/// 那套悬浮胶囊和改造前的网页导航不是同一套样式（首页是左下角三按钮
+/// 胶囊，其它页是贴底四栏），玻璃材质还会溢到 bounds 外把页面盖住。
 ///
-/// iOS 25 及以下：插件仍注册（否则 Capacitor 报 unimplemented），但
-/// `isSupported` 返回 false，web 保留自绘 CSS 导航栏。
+/// 系统液态玻璃改走网页：`RatioBridgeViewController` 打开 WKWebView 私有
+/// 偏好后，设置页「系统液态玻璃」给原来的 `.navBar` / `.glassChrome` /
+/// `.card` / `.sheet` 套 `-apple-visual-effect`。本插件只回答 `isSupported`，
+/// 其余方法 no-op，保持 Capacitor 8 的 CAPBridgedPlugin 注册完整。
 @objc(LiquidGlassPlugin)
 public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
-    // CAPBridgedPlugin 必填三属性（identifier/jsName/pluginMethods）：
-    // 缺任一则 CapacitorBridge.registerPluginInstance 的 guard
-    // （CapacitorPlugin = CAPPlugin & CAPBridgedPlugin）直接拦截、插件永不注册。
     public let identifier = "LiquidGlass"
     public let jsName = "LiquidGlass"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -25,83 +21,6 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "setSheetOpen", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setAccentColor", returnType: CAPPluginReturnPromise),
     ]
-
-    /// 非 iOS 26 环境保持 nil（ensureNavBar 有 #available 守卫），所有方法 no-op。
-    private var glassNavBar: GlassNavBar?
-    private var navBarConstraints: [NSLayoutConstraint] = []
-
-    private var sheetOpen = false
-    private var keyboardObservers: [NSObjectProtocol] = []
-    private var appearObserver: NSObjectProtocol?
-
-    public override func load() {
-        let center = NotificationCenter.default
-        // 键盘弹出时导航栏让位（底部被键盘占据）；收起后按抽屉状态恢复
-        keyboardObservers.append(center.addObserver(
-            forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.withGlassNavBar { $0.setVisible(false, animated: true) }
-        })
-        keyboardObservers.append(center.addObserver(
-            forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.refreshNavBarVisibility()
-        })
-
-        // CAPBridgeViewController 把 view 设成 WKWebView。玻璃栏不能当它的
-        // subview——UIGlassEffect 采样 WKWebView 自己的层会在合成器里崩。
-        // load() 时 view 还不在 window 里；等 capacitorViewDidAppear 再挂到 window。
-        appearObserver = center.addObserver(
-            forName: .capacitorViewDidAppear, object: nil, queue: .main
-        ) { [weak self] _ in
-            _ = self?.ensureNavBar()
-        }
-    }
-
-    deinit {
-        keyboardObservers.forEach { NotificationCenter.default.removeObserver($0) }
-        if let appearObserver {
-            NotificationCenter.default.removeObserver(appearObserver)
-        }
-    }
-
-    /// 访问玻璃导航栏：首次即惰性创建（见 ensureNavBar），
-    /// 非 iOS 26 / window 未就绪时返回 nil、body 不执行。
-    private func withGlassNavBar(_ body: (GlassNavBar) -> Void) {
-        guard let bar = ensureNavBar() else { return }
-        body(bar)
-    }
-
-    private func overlayHost() -> UIView? {
-        bridge?.webView?.window ?? bridge?.viewController?.view.window
-    }
-
-    /// 创建玻璃导航栏并钉在 **window** 安全区上（不要加到 WKWebView 上）。
-    private func ensureNavBar() -> GlassNavBar? {
-        guard #available(iOS 26.0, *) else { return nil }
-        if let glassNavBar { return glassNavBar }
-        guard let host = overlayHost() else { return nil }
-
-        let bar = GlassNavBar()
-        bar.onTabSelected = { [weak self] tab in
-            self?.notifyListeners("tabSelected", data: ["tab": tab])
-        }
-        host.addSubview(bar)
-        let constraints = [
-            bar.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: 8),
-            bar.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -8),
-            bar.bottomAnchor.constraint(equalTo: host.safeAreaLayoutGuide.bottomAnchor, constant: -6),
-            bar.heightAnchor.constraint(equalToConstant: 72),
-        ]
-        NSLayoutConstraint.activate(constraints)
-        navBarConstraints = constraints
-        glassNavBar = bar
-        return bar
-    }
-
-    private func refreshNavBarVisibility() {
-        withGlassNavBar { $0.setVisible(!sheetOpen, animated: true) }
-    }
 
     @objc public func isSupported(_ call: CAPPluginCall) {
         if #available(iOS 26.0, *) {
@@ -112,50 +31,14 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc public func setActiveTab(_ call: CAPPluginCall) {
-        let tab = call.getString("tab") ?? "assets"
-        DispatchQueue.main.async { [weak self] in
-            self?.withGlassNavBar { $0.setActiveTab(tab) }
-            call.resolve()
-        }
+        call.resolve()
     }
 
     @objc public func setSheetOpen(_ call: CAPPluginCall) {
-        let open = call.getBool("open") ?? false
-        DispatchQueue.main.async { [weak self] in
-            self?.sheetOpen = open
-            self?.refreshNavBarVisibility()
-            call.resolve()
-        }
+        call.resolve()
     }
 
     @objc public func setAccentColor(_ call: CAPPluginCall) {
-        let hex = call.getString("color") ?? ""
-        DispatchQueue.main.async { [weak self] in
-            if let color = UIColor(hexString: hex) {
-                self?.withGlassNavBar { $0.setAccentColor(color) }
-            }
-            call.resolve()
-        }
-    }
-}
-
-private extension UIColor {
-    /// 解析 web 侧 `getComputedStyle` 给的 #RRGGBB / #RRGGBBAA。
-    convenience init?(hexString: String) {
-        var hex = hexString.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        if hex.count == 3 {
-            hex = hex.map { "\($0)\($0)" }.joined()
-        }
-        guard hex.count == 6 || hex.count == 8, let value = UInt64(hex, radix: 16) else { return nil }
-        let hasAlpha = hex.count == 8
-        let rShift: UInt64 = hasAlpha ? 24 : 16
-        let gShift: UInt64 = hasAlpha ? 16 : 8
-        let bShift: UInt64 = hasAlpha ? 8 : 0
-        self.init(
-            red: CGFloat((value >> rShift) & 0xFF) / 255,
-            green: CGFloat((value >> gShift) & 0xFF) / 255,
-            blue: CGFloat((value >> bShift) & 0xFF) / 255,
-            alpha: hasAlpha ? CGFloat(value & 0xFF) / 255 : 1
-        )
+        call.resolve()
     }
 }

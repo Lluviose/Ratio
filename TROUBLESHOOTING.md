@@ -2,6 +2,14 @@
 
 本文件记录项目开发过程中遇到的典型问题与处理思路，便于后续快速定位。
 
+## iOS 原生壳：底部导航变成一块丑胶囊 / 系统玻璃把页面盖住
+
+现象：首页不再是左下角三按钮胶囊，改成贴底宽条；设置页打开「系统液态玻璃」后主题列表被一块白雾盖住。
+
+原因：原生 `GlassNavBar`（`UIGlassEffect` 悬浮胶囊）盖在 WKWebView 上面，和改造前的网页导航不是同一套 layout；玻璃材质溢到 bounds 外。JS 探测到 iOS 26 后把网页导航藏掉。
+
+处理：不再挂原生覆盖层。导航保持网页自绘；系统材质由设置开关给原来的节点套 `-apple-visual-effect`。见 CHANGELOG 2026-08-23「底部导航回到改造前的样子」。
+
 ## iOS 原生壳：打开即闪退
 
 现象：点图标闪一下回桌面。底部导航消失那次修复之前没有。
@@ -16,22 +24,18 @@
 
 ## iOS 原生壳：系统液态玻璃不出现 / 仍是 CSS 毛玻璃
 
-
 现象：
 
-- iPhone 应用底部仍是网页那条 pill，或栏在但只是一块雾面圆角，没有系统那种流动折射。
-- 设置里打开「系统液态玻璃」后卡片外观完全不变。
+- 设置里打开「系统液态玻璃」后卡片 / 导航外观完全不变。
 
 原因：
 
-- Capacitor 8 自定义插件必须 **原生 `registerPluginInstance` + JS `registerPlugin('LiquidGlass')`**。只读 `window.Capacitor.Plugins.LiquidGlass` 不会自动出现。
-- `Main.storyboard` 若仍是 `CAPBridgeViewController`，同时 SceneDelegate 再 new 一扇 window，会出现两套 WKWebView，插件挂在看不见的那套上。
-- `UIGlassEffect` 子视图必须加在 `contentView`；`masksToBounds` 会裁掉液态高光；effect 要在动画块里赋。
-- 网页 `-apple-visual-effect` 默认被 WebKit 丢掉，除非原生打开私有偏好 `_useSystemAppearance`。Safari / 主屏幕 PWA 开不了。系统「降低透明度 / 增强对比度」也会把液态玻璃关掉。
+- 网页 `-apple-visual-effect` 默认被 WebKit 丢掉，除非原生打开私有偏好 `_useSystemAppearance`（必须在 WKWebView 创建前、走 IMP 调 setter）。
+- Safari / 主屏幕 PWA 开不了该偏好。系统「降低透明度 / 增强对比度」也会把液态玻璃关掉。
 
 处理：
 
-- 代码侧已按上面全部接通（见 CHANGELOG 2026-08-23）。改完必须用 **Xcode 26+ 重新签名安装**；CI 的 unsigned IPA 不能装真机，旧包仍是修之前的行为。
+- 原生壳已在 `RatioBridgeViewController.webViewConfiguration` 打开偏好。改完必须用 **Xcode 26+ 重新签名安装**；CI 的 unsigned IPA 不能装真机。
 - 网页卡片要走系统材质：在应用里打开设置 → 系统液态玻璃。浏览器里这个开关会保存，但当前环境不生效。
 
 ## Capacitor 构建：Windows 上 `cap sync` 生成的 SPM Package.swift 路径是反斜杠

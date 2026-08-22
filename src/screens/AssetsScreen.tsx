@@ -83,8 +83,6 @@ export function AssetsScreen(props: {
   skipInitialAnimation?: boolean
   addButtonTone?: string
   onHomePageActiveChange?: (active: boolean) => void
-  /** 原生液态玻璃导航栏可用（iOS 26+）：隐藏自绘快捷栏，由原生接管 */
-  isNativeGlass?: boolean
 }) {
   const {
     grouped,
@@ -96,7 +94,6 @@ export function AssetsScreen(props: {
     skipInitialAnimation = false,
     addButtonTone,
     onHomePageActiveChange,
-    isNativeGlass = false,
   } = props
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -1017,7 +1014,6 @@ export function AssetsScreen(props: {
         />
       </div>
 
-      {!isNativeGlass ? (
       <div className="absolute left-4 bottom-[calc(var(--safe-bottom)+16px)] z-20">
         <div className="glassChrome flex items-center gap-1 bg-white/85 backdrop-blur-lg backdrop-saturate-150 border border-white/70 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_12px_32px_-14px_rgba(15,23,42,0.32)] rounded-full p-1">
           <button
@@ -1046,7 +1042,6 @@ export function AssetsScreen(props: {
           </button>
         </div>
       </div>
-      ) : null}
     </div>
   ) : null
 
@@ -1274,7 +1269,6 @@ export function AssetsScreen(props: {
         </motion.div>
       </motion.div>
 
-      {!isNativeGlass ? (
       <motion.div
         aria-hidden={!initialized}
         className="absolute left-4 bottom-[calc(var(--safe-bottom)+16px)] z-20 pointer-events-none"
@@ -1310,7 +1304,6 @@ export function AssetsScreen(props: {
           </div>
         </motion.div>
       </motion.div>
-      ) : null}
 
       <div
         ref={scrollerRef}

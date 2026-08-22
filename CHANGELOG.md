@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-23 - 底部导航回到改造前的样子，系统玻璃只换材质
+
+- **原生 `GlassNavBar` 覆盖层太丑，打开系统液态玻璃后页面也乱**：悬浮 72pt 胶囊（左右 8pt、底 6pt）和改造前不是同一套 UI——首页原来是左下角三按钮胶囊，其它页是贴底四栏带白色选中胶囊。`UIGlassEffect` 不裁切、`isInteractive` 高光溢到 bounds 外，整块雾面盖住设置页主题列表；JS 还按 `isSupported` 把网页导航和首页快捷栏藏掉。
+- **修复**：不再创建原生覆盖层，网页导航/快捷栏始终按改造前的 layout 渲染。设置开关打开后，同一套 `.navBar` / `.glassChrome` / `.card` / `.sheet` 换 `-apple-visual-effect` 系统材质；小控件（`.segment` / `.pills`）不再套玻璃，卡片裁进圆角并留发丝边，避免叠成一块雾。
+- 浏览器 / PWA / e2e 默认关，外观不变。真机需重新签名安装。
+
 ## 2026-08-23 - 启动闪退：玻璃栏不要挂 WKWebView，storyboard 不要找 Swift 类
 
 - **打开即闪退**（底部导航消失那次修复之后才出现）：CAPBridgeViewController 把 `view` 设成 WKWebView。`ensureNavBar` 一旦真的建栏，就把 `UIGlassEffect` 加在 WKWebView 上——合成器采样自己的远程层会崩。更早 ensureNavBar 是死代码所以看起来「没问题」。随后 storyboard 改成 `RatioBridgeViewController`（IB 启动时解析 Swift 类，找不到就直接杀进程），再加上 `setValue:forKey: "_useSystemAppearance"`（键不存在抛 NSException，Swift 接不住）、以及在 WKWebView 创建后再改 `configuration.preferences`。

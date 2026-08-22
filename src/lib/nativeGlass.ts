@@ -1,17 +1,12 @@
-// 原生液态玻璃导航栏桥（iOS 26+ Capacitor 原生壳，UIGlassEffect）。
+// 原生液态玻璃探测（iOS 26+ Capacitor 壳）。
 //
-// 可用时（probeNativeGlassAvailable() === true）web 隐藏自绘底部导航与首页
-// 快捷栏，由原生玻璃导航栏接管（见 ios/App/App/GlassNavBar.swift）：
-// - 原生按钮点击 → tabSelected 事件 → 本模块回调 → web 切 tab
-// - web 侧状态变化（activeTab / 抽屉开合 / 主题强调色）→ 上报原生
+// 底部导航已改回网页自绘（与改造前同一套 layout：首页左下角三按钮胶囊、
+// 其它页贴底四栏）。系统材质由设置页「系统液态玻璃」经 CSS
+// `-apple-visual-effect` 套在原来的 .navBar / .glassChrome / .card / .sheet 上
+// （见 systemGlass.ts）。本模块不再藏 CSS 导航，也不再驱动原生 GlassNavBar。
 //
-// 不可用（浏览器 / 非 iOS 26 / 无插件）时全部 no-op，web 导航照常渲染，
-// e2e 与网页版行为完全不变。不静态依赖 @capacitor/core：直接经壳注入的
-// window.Capacitor.registerPlugin / isPluginAvailable 调用（零首包开销）。
-//
-// Capacitor 8 必须 JS 侧 registerPlugin，光靠原生 registerPluginInstance
-// 不会往 Capacitor.Plugins 上挂代理——只读 Plugins.LiquidGlass 会永远
-// undefined，然后按设计静默降级到 CSS 毛玻璃。
+// 仍通过壳注入的 window.Capacitor.registerPlugin / isPluginAvailable 探测，
+// 禁止静态 import @capacitor/core。isSupported 留给需要判断 iOS 26 的调用方。
 
 type GlassTabId = 'assets' | 'trend' | 'stats' | 'settings'
 
@@ -61,9 +56,8 @@ export function isNativeGlassPluginPresent(): boolean {
 }
 
 /**
- * 探测原生液态玻璃导航栏是否真正可用。
- * 插件在 iOS 15–25 也会注册，必须等 isSupported 返回 true 才藏 CSS 栏，
- * 否则会出现「web 栏藏了、原生栏因 #available 建不出来」的空底。
+ * 探测原生壳是否在 iOS 26+（WKWebView 能认系统玻璃 CSS）。
+ * 不再用来隐藏 CSS 导航。
  */
 export async function probeNativeGlassAvailable(): Promise<boolean> {
   const p = plugin()

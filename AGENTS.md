@@ -44,7 +44,7 @@ npm run test:e2e   # Playwright，2 个 spec × 3 浏览器项目 = 18 例，约
 
 - 趋势、统计、设置、AI 助手是懒加载分包（`vite.config.ts` 的显式 `advancedChunks` groups，且 `includeDependenciesRecursively` 必须保持 `false`；不要改回函数式 manualChunks），不要从首包代码新增对它们或 react-markdown/matter-js 的静态 import。改分包后必须 `npm run build && npm run check:bundle`。
 - `src/lib/haptics.ts` 用动态 import 调 `@capacitor/haptics`：不要改成静态 import（会把插件和 @capacitor/core 拉进首包）。新增触感点只调 `haptics.ts` 导出的语义函数。
-- iOS 自定义插件（`LiquidGlass`）必须 JS 侧 `registerPlugin` + 原生 `isSupported()`，不要只读 `window.Capacitor.Plugins.*`，也不要在 iOS 26 以下藏 CSS 导航。`src/lib/nativeGlass.ts` / `systemGlass.ts` 同样禁止静态 import `@capacitor/core`。
+- iOS 液态玻璃走网页 CSS：设置页「系统液态玻璃」打开后，原来的 `.navBar` / `.glassChrome` / `.card` / `.sheet` 套 `-apple-visual-effect`（`systemGlass.ts`）。不要再挂原生 `GlassNavBar` 覆盖层，也不要在 iOS 26 上藏 CSS 导航。`nativeGlass.ts` / `systemGlass.ts` 禁止静态 import `@capacitor/core`。
 - React Compiler 只编译懒屏幕树，范围集中在 `react-compiler.shared.ts`（vite 与 vitest 共用，不要在两处分别改）；审计工具 `node scripts/compiler-report.mjs`。详见 PROJECT.md「React Compiler」。
 - 动画只动 transform/opacity；离场要快于入场；`layoutId` 必须按实例/条目唯一。规范见 PROJECT.md「动效系统」。
 
