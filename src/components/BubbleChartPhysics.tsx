@@ -525,9 +525,8 @@ export function useBubblePhysics(
       strength: Math.min(1, speed0 / 1200),
     }
 
-    // 甩动气泡的拨动触感（iOS 原生 impact；Web 端回退 vibrate/静默）。
-    // 甩得越猛震得越重：超过阈值用 heavy，普通甩动 medium。
-    hapticImpact(speed0 > 1500 ? 'heavy' : 'medium')
+    // 甩动气泡的拨动触感。普通甩动 light，甩得猛才 medium，避免把账本甩成游戏手柄。
+    hapticImpact(speed0 > 1500 ? 'medium' : 'light')
   }, [])
 
   const burst = useCallback(
@@ -567,8 +566,8 @@ export function useBubblePhysics(
           })
         })
 
-        // 连击重爆的重击触感（iOS 原生 impact heavy）
-        hapticImpact('heavy')
+        // 连击再炸：medium，不要叠成手柄 rumble
+        hapticImpact('medium')
         return
       }
 
@@ -578,8 +577,7 @@ export function useBubblePhysics(
       const p = burstProgress.get(id)
       if (p) animate(p, 1, { duration: 0.16, ease: [0.2, 0, 0, 1] })
 
-      // 三连击炸开的重击触感（iOS 原生 impact heavy）
-      hapticImpact('heavy')
+      hapticImpact('medium')
 
       const originalSeed = driftSeedsRef.current.get(id) ?? { a: Math.random() * Math.PI * 2, b: Math.random() * Math.PI * 2 }
       driftSeedsRef.current.delete(id)

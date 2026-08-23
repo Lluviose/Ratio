@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { BottomSheet } from './BottomSheet'
+import { hapticImpact, hapticWarning } from '../lib/haptics'
 import { OverlayContext, subscribeAppToasts, takeQueuedToastAfterReload, type ConfirmOptions, type OverlayApi, type ToastAction, type ToastOptions, type ToastTone } from '../lib/overlay'
 
 type ToastItem = {
@@ -270,7 +271,11 @@ export function OverlayProvider(props: { children: ReactNode }) {
           <button
             type="button"
             className={confirmTone === 'danger' ? 'dangerBtn' : 'primaryBtn'}
-            onClick={() => closeConfirm(true)}
+            onClick={() => {
+              if (confirmTone === 'danger') hapticWarning()
+              else hapticImpact('light')
+              closeConfirm(true)
+            }}
           >
             {activeConfirm?.confirmText ?? '确定'}
           </button>

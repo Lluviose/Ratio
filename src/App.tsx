@@ -35,7 +35,7 @@ import { storageKernel } from './lib/storageKernel'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
-import { hapticSelectionChanged } from './lib/haptics'
+import { hapticSelectionChanged, preloadHaptics } from './lib/haptics'
 import { useReducedMotion } from './lib/useReducedMotion'
 import { initCloudAutoSync } from './lib/cloudSync'
 import { initTelemetry, trackTelemetry } from './lib/telemetry'
@@ -578,6 +578,7 @@ export default function App() {
   useEffect(() => {
     initCloudAutoSync()
     initTelemetry()
+    preloadHaptics()
     // 启动稍作让路后：抢救上次降级会话的数据 + 写当日本机滚动快照
     const localBackupTimer = window.setTimeout(() => {
       importFallbackSessionSnapshot()

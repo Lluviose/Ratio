@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { motion } from 'framer-motion'
 import { useId } from 'react'
 import { snappySpring } from '../lib/motionPresets'
+import { hapticSelectionChanged } from '../lib/haptics'
 
 export type SegmentedOption<T extends string> = {
   value: T
@@ -26,7 +27,11 @@ export function SegmentedControl<T extends string>(props: {
             key={opt.value}
             type="button"
             className={clsx('segmentBtn', isActive && 'segmentBtnActive')}
-            onClick={() => onChange(opt.value)}
+            onClick={() => {
+              if (isActive) return
+              hapticSelectionChanged()
+              onChange(opt.value)
+            }}
             role="tab"
             aria-selected={isActive}
             style={{ position: 'relative' }}

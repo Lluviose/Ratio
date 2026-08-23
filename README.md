@@ -108,7 +108,7 @@ AI 助手定位为分析和建议，不会直接修改资产数据。聊天记�
 
 - **unsigned IPA 无法安装到真机**（iOS 要求至少 ad-hoc 签名），用途是流水线验证与归档。拿到付费 Apple Developer 账号后，按 workflow 注释「签名切换」配置 secrets 即可出正式签名包。
 - iOS 原生壳内不注册 Service Worker：应用更新走 App Store 渠道，SW 的「新版本已就绪」提示与缓存对原生 app 没有意义（`vite.config.ts` 的 `CAPACITOR_BUILD` 分支会禁用 PWA 插件）。
-- 触觉反馈：原生壳内 `src/lib/haptics.ts` 走 `@capacitor/haptics`（iOS 原生 UIImpactFeedbackGenerator 等），Web 端回退 `navigator.vibrate`，iOS Safari 静默。目前接入底部导航切换与气泡页 flick/burst。
+- 触觉反馈：原生壳内 `src/lib/haptics.ts` 走 `@capacitor/haptics`（iOS 原生 UIImpactFeedbackGenerator 等），Web 端回退 `navigator.vibrate`，iOS Safari 静默。底部导航、开关、分段、确认与气泡交互会给触感。
 - 有 Mac 时可直接用 Xcode 打开 `ios/` 工程构建调试（免费 Apple ID 也可签名装真机，7 天有效）。
 
 ## 项目文档

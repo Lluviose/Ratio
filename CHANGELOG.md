@@ -1,6 +1,12 @@
 # Changelog
 
+## 2026-08-23 - 触觉反馈：切 Tab 其实没震，控件手感补齐
+
+- Capacitor iOS 的 `selectionChanged` 在没先 `selectionStart` 时是空操作，底部导航切换一直是哑的。现在先武装选择生成器并常驻，启动时预热插件，避免第一次点击晚一拍。
+- 开关、分段、胶囊 Tab 补上轻触；危险确认用 warning。气泡甩动从 medium/heavy 降到 light/medium，连甩不再像手柄。
+
 ## 2026-08-23 - 账户详情最外圈模糊卡一下再出现
+
 
 - 打开账户详情后，圆角外一圈雾会晚一拍才合成。两处原因：遮罩在 JS 里动画 `backdrop-filter`（iOS WebKit 不插值，结束帧突然弹出）；账户详情是实心底却仍套 `.sheet` 的滤镜/系统玻璃，不透明面上 WebKit 会在圆角外画出延迟的模糊边。
 - 遮罩只压暗、不再动画 blur。账户详情改 `.sheet--solid`（无 backdrop-filter、不套系统玻璃）。滑入停住时去掉 `translateY(0)`，避免滤镜被卡住。

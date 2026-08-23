@@ -10,23 +10,28 @@
 // 模块按需动态 import：@capacitor/haptics 不进任何静态依赖链（首包体积纪律见
 // PROJECT.md「懒加载与分包」）。任何失败都被吞掉——触觉反馈绝不影响主功能。
 // 组件测试（jsdom）无 window.Capacitor / navigator.vibrate，自然走空路径。
+//
+// Capacitor iOS 的 selectionChanged 在没先 selectionStart 时是空操作
+// （生成器为 nil）。离散点击（Tab / 分段）必须先 start 再 changed，
+// 并让生成器常驻，否则切 Tab 完全不震。
 
 type HapticsStyle = 'light' | 'medium' | 'heavy'
 
-// 仅类型导入，无运行时依赖（运行时经动态 import 加载）
 import type { ImpactStyle, NotificationType } from '@capacitor/haptics'
 
-type HapticsApi = typeof import('@capacitor/haptics')
+type HapticsPluginApi = (typeof import('@capacitor/haptics'))['Haptics']
 
-// 枚举成员值：ImpactStyle.Heavy = 'HEAVY' 等。不静态 import 枚举（会把
-// @capacitor/haptics 拉进首包），字符串字面量在调用处单点断言。
 const IMPACT_STYLE = {
   light: 'LIGHT',
   medium: 'MEDIUM',
   heavy: 'HEAVY',
 } as const satisfies Record<HapticsStyle, string>
 
-const NOTIFICATION_SUCCESS = 'SUCCESS'
+const NOTIFICATION = {
+  success: 'SUCCESS',
+  warning: 'WARNING',
+  error: 'ERROR',
+} as const satisfies Record<'success' | 'warning' | 'error', string>
 
 function isNativePlatform(): boolean {
   return (
@@ -48,16 +53,55 @@ function prefersReducedMotion(): boolean {
   )
 }
 
-/** 原生容器内执行 Haptics 调用；非原生环境直接返回。 */
-function nativeHaptics(run: (Haptics: HapticsApi['Haptics']) => void | Promise<void>) {
-  if (!isNativePlatform()) return
-  try {
-    void import('@capacitor/haptics')
-      .then(({ Haptics }) => run(Haptics))
-      .catch(() => undefined)
-  } catch {
-    // 动态 import 同步抛错（理论不可达）也静默
+let cachedPlugin: HapticsPluginApi | null = null
+let loadPromise: Promise<HapticsPluginApi | null> | null = null
+let selectionArmed = false
+
+function loadNativePlugin(): Promise<HapticsPluginApi | null> {
+  if (!isNativePlatform()) return Promise.resolve(null)
+  if (cachedPlugin) return Promise.resolve(cachedPlugin)
+  if (!loadPromise) {
+    loadPromise = import('@capacitor/haptics')
+      .then(({ Haptics }) => {
+        cachedPlugin = Haptics
+        return Haptics
+      })
+      .catch(() => {
+        loadPromise = null
+        return null
+      })
   }
+  return loadPromise
+}
+
+async function armSelection(H: HapticsPluginApi) {
+  if (selectionArmed) return
+  await H.selectionStart()
+  selectionArmed = true
+}
+
+function disarmSelection() {
+  if (!selectionArmed) return
+  selectionArmed = false
+  const H = cachedPlugin
+  if (!H) return
+  void H.selectionEnd().catch(() => undefined)
+}
+
+/** 原生容器内执行 Haptics 调用；非原生环境直接返回。 */
+function nativeHaptics(run: (Haptics: HapticsPluginApi) => void | Promise<void>) {
+  void loadNativePlugin()
+    .then((H) => {
+      if (!H) return
+      return run(H)
+    })
+    .catch(() => undefined)
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') disarmSelection()
+  })
 }
 
 // 触感节流：快速连点/连甩时合并同类型震动，避免震动风暴。
@@ -81,6 +125,11 @@ function webVibrate(pattern: number | number[]) {
   }
 }
 
+/** 启动时预热插件并武装选择生成器，避免第一次点 Tab 空震 / 晚一拍。 */
+export function preloadHaptics() {
+  nativeHaptics((H) => armSelection(H))
+}
+
 /** 普通按压反馈。style 按交互强度选：轻按 light、拨动 medium、重击 heavy。
  *  50ms 窗口节流：连点/连甩只保留首拍，避免震动风暴。 */
 export function hapticImpact(style: HapticsStyle = 'light') {
@@ -94,26 +143,46 @@ export function hapticImpact(style: HapticsStyle = 'light') {
 
 /** 连续选择开始（长按拖动等手势起点）。 */
 export function hapticSelectionStart() {
-  nativeHaptics((H) => H.selectionStart())
+  nativeHaptics((H) => armSelection(H))
 }
 
-/** 连续选择变化（tab 切换、列表项选中）。60ms 窗口节流。 */
+/** 连续选择变化（tab 切换、列表项选中）。60ms 窗口节流。
+ *  未 start 时先武装生成器，否则 iOS 上 selectionChanged 是空操作。 */
 export function hapticSelectionChanged() {
   throttled('selection:changed', 60, () => {
-    nativeHaptics((H) => H.selectionChanged())
+    nativeHaptics(async (H) => {
+      await armSelection(H)
+      await H.selectionChanged()
+    })
     if (!isNativePlatform()) webVibrate(4)
   })
 }
 
 /** 连续选择结束。 */
 export function hapticSelectionEnd() {
-  nativeHaptics((H) => H.selectionEnd())
+  disarmSelection()
 }
 
 /** 成功通知（保存完成、庆祝等）。400ms 窗口节流：连存只震一次。 */
 export function hapticSuccess() {
   throttled('notification:success', 400, () => {
-    nativeHaptics((H) => H.notification({ type: NOTIFICATION_SUCCESS as NotificationType }))
+    nativeHaptics((H) => H.notification({ type: NOTIFICATION.success as NotificationType }))
     if (!isNativePlatform()) webVibrate([6, 30, 10])
+  })
+}
+
+/** 警告（危险确认等）。 */
+export function hapticWarning() {
+  throttled('notification:warning', 400, () => {
+    nativeHaptics((H) => H.notification({ type: NOTIFICATION.warning as NotificationType }))
+    if (!isNativePlatform()) webVibrate([10, 40, 10])
+  })
+}
+
+/** 失败（操作未完成）。 */
+export function hapticError() {
+  throttled('notification:error', 400, () => {
+    nativeHaptics((H) => H.notification({ type: NOTIFICATION.error as NotificationType }))
+    if (!isNativePlatform()) webVibrate([16, 40, 16])
   })
 }

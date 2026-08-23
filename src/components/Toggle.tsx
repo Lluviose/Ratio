@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import { motion } from 'framer-motion'
+import { hapticImpact } from '../lib/haptics'
 
 export function Toggle(props: { checked: boolean; onChange: (checked: boolean) => void; disabled?: boolean }) {
   const { checked, onChange, disabled = false } = props
@@ -8,7 +9,10 @@ export function Toggle(props: { checked: boolean; onChange: (checked: boolean) =
       type="button"
       className={clsx('toggle', checked && 'toggleOn', disabled && 'opacity-60 cursor-not-allowed')}
       disabled={disabled}
-      onClick={() => onChange(!checked)}
+      onClick={() => {
+        hapticImpact('light')
+        onChange(!checked)
+      }}
       aria-pressed={checked}
     >
       <span className="toggleText toggleTextOn">开</span>
