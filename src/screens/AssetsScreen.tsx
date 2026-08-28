@@ -11,6 +11,7 @@ import { CLOUD_SYNC_DIRTY_KEY, readCloudSyncDirtyToken } from '../lib/cloudSync'
 import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEvents'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { useSafeAreaTop } from '../lib/safeArea'
+import { hapticImpact, hapticSelectionChanged } from '../lib/haptics'
 import { overshootEase, quickFade } from '../lib/motionPresets'
 import {
   LIST_GROUP_ORDER,
@@ -219,6 +220,35 @@ export function AssetsScreen(props: {
     return scrollIdx.on('change', reportHomePageActive)
   }, [reportHomePageActive, scrollIdx])
 
+  // 四页横滑落位的触感：滑到新的一页时给一次选择级反馈（原生分页手感）。
+  // 只在用户真的碰过滑动区之后才响——启动锚定跳页、宽度复算引起的位移
+  // 不该无缘无故震一下（Android PWA 上会真的振动）。
+  useEffect(() => {
+    const el = scrollerRef.current
+    if (!el) return
+
+    let touched = false
+    let settledPage = Math.round(scrollIdx.get())
+    const markTouched = () => {
+      touched = true
+    }
+    el.addEventListener('pointerdown', markTouched, { passive: true, capture: true })
+
+    const unsubscribe = scrollIdx.on('change', (idx) => {
+      const page = Math.round(idx)
+      // 只在贴近落位点时判定，滑动途中不连震
+      if (Math.abs(idx - page) > 0.04) return
+      if (page === settledPage) return
+      settledPage = page
+      if (touched) hapticSelectionChanged()
+    })
+
+    return () => {
+      el.removeEventListener('pointerdown', markTouched, { capture: true })
+      unsubscribe()
+    }
+  }, [scrollIdx])
+
   // Page 0: Bubble
   // Page 1: Ratio (Blocks)
   // Page 2: List
@@ -424,11 +454,14 @@ export function AssetsScreen(props: {
       detailPageReachedRef.current = false
       setSelectedType(type)
       setDetailPageMounted(true)
+      // 打开类型详情页：轻按反馈（与展开分组同一层级的「面板打开」语义）
+      hapticImpact('light')
     },
     [],
   )
   const handleToggleGroup = useCallback((id: GroupId) => {
     setExpandedGroup((current) => (current === id ? null : id))
+    hapticImpact('light')
   }, [])
   const clearDetailCloseFallback = useCallback(() => {
     if (detailCloseFallbackTimerRef.current === null) return
@@ -1219,7 +1252,10 @@ export function AssetsScreen(props: {
               <button
                 type="button"
                 className="w-7 h-7 -m-1.5 rounded-full flex items-center justify-center text-slate-400 hover:bg-black/5 active:bg-black/10 transition-colors"
-                onClick={() => setHideAmounts((v) => !v)}
+                onClick={() => {
+                  setHideAmounts((v) => !v)
+                  hapticImpact('light')
+                }}
                 aria-label={hideAmounts ? 'show amounts' : 'hide amounts'}
               >
                 {hideAmounts ? <EyeOff size={14} /> : <Eye size={14} />}

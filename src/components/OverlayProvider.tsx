@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { BottomSheet } from './BottomSheet'
-import { hapticImpact, hapticWarning } from '../lib/haptics'
+import { hapticError, hapticImpact, hapticSuccess, hapticWarning } from '../lib/haptics'
 import { OverlayContext, subscribeAppToasts, takeQueuedToastAfterReload, type ConfirmOptions, type OverlayApi, type ToastAction, type ToastOptions, type ToastTone } from '../lib/overlay'
 
 type ToastItem = {
@@ -58,6 +58,12 @@ export function OverlayProvider(props: { children: ReactNode }) {
       const tone: ToastTone = options?.tone ?? 'neutral'
       const durationMs =
         options?.durationMs ?? (options?.action ? 8000 : tone === 'danger' ? 3200 : tone === 'success' ? 2400 : 2400)
+
+      // 全应用的成败反馈都收口在 toast 上，触感也在这里统一给：
+      // 保存/备份/云同步/删除的成功与失败因此天然有对应的通知级震动，
+      // 不需要在每个业务点各自调一次（业务点自己再调也会被 400ms 节流合并）。
+      if (tone === 'success') hapticSuccess()
+      else if (tone === 'danger') hapticError()
 
       const id = makeId()
       setToasts((prev) => {

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'r
 import type { Account, AccountGroupId, AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { expressiveEase } from '../lib/motionPresets'
+import { hapticImpact } from '../lib/haptics'
 import {
   buildGroupBreakdown,
   buildToneScale,
@@ -461,7 +462,12 @@ export function AssetsRatioPage(props: {
   )
 
   const handleExpand = useCallback((id: AccountGroupId) => {
-    setExpanded((current) => current ?? { id, phase: 'open' })
+    setExpanded((current) => {
+      if (current) return current
+      // 色块展开成明细面板：轻按反馈（与列表分组展开同一语义）
+      hapticImpact('light')
+      return { id, phase: 'open' }
+    })
   }, [])
 
   const handleRequestClose = useCallback(() => {

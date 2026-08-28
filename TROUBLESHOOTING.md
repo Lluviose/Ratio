@@ -67,6 +67,40 @@
 
 - 该模式不跑 `check:bundle`。Web 构建（默认 `npm run build`）的 SW 门禁保持不变，不要改成「有 sw.js 也行」——那会削弱 Web 模式防回归价值。
 
+## Capacitor 插件对象是 thenable：`"X.then()" is not implemented on ios`
+
+现象：
+
+- 原生壳里某个 Capacitor 插件"完全没反应"（触觉反馈一次都不震），遥测里对应一条 `unhandled_rejection`，reason 形如 `"Haptics.then()" is not implemented on ios`。
+- 单测全绿——因为测试把插件 mock 成了普通对象。
+
+原因：
+
+- `@capacitor/core` 的 `registerPlugin()` 返回的是 `Proxy`，`get` 处理器对**任意**属性都返回一个方法包装器（只特判了 `$$typeof` / `toJSON` / `addListener` / `removeListener`）。`then` 因此也是个函数 → 这个插件对象在 JS 看来是 **thenable**。
+- 一旦让它穿过 promise resolution（`return plugin` in `.then()`、`Promise.resolve(plugin)`、`await plugin`），引擎就会调 `plugin.then(resolve, reject)`：原生侧没有名为 `then` 的方法，包装器返回一个**没人接的**拒绝（→ unhandledrejection），并且既不 resolve 也不 reject 外层 promise，于是**外层永远不 settle**，后续逻辑全部静默丢失。
+
+处理：
+
+- 插件对象一律**装箱**后再穿过 Promise：`return { plugin: Haptics }`，用的时候 `box.plugin`。见 `src/lib/haptics.ts` 的 `loadNativePlugin`。
+- 写这类桥接的测试时，把插件 mock 成**同样形状的 Proxy**（任意属性都返回函数），普通对象 mock 看不见这个 bug。`haptics.test.ts` 末尾那组用例就是干这个的。
+
+## 自动备份卡死在"冲突"：上传响应丢了，但服务端其实写进去了
+
+现象：
+
+- 手机上自动备份突然停摆，反复弹"自动备份暂停：云端备份已更新…"。遥测里的典型序列是：连续两条 `cloud_sync_auto_error`（message `Load failed`、code 空），紧接着一条 `cloud_sync_auto_conflict`，其中 `expectedUpdatedAt` 还停在**更早**的某次成功上传时间。
+
+原因：
+
+- `Load failed` 是 WebKit 对 fetch 失败的统称（切网、进后台被杀、代理超时）。它抛的是 `TypeError`，不是 `CloudRequestError`——意味着**连 HTTP 状态码都没拿到**，请求可能已经到达服务端并写入成功，我们只是丢了回执。
+- 此时本机的 `lastBackupAt`（乐观锁基线）不前进，而远端 `updatedAt` 已经变了 → 下一次自动上传必然 409 `backup_conflict` → `lastSyncStatus` 锁死在 conflict → 之后每次自动同步都只是"重新下载比对、重新判定冲突"，永远不再上传，直到用户手动在设置里选"上传覆盖"或"从云端恢复"。
+
+处理（2026-08-28）：
+
+- `runAutoSync` 的 catch 里加了自愈：只在**确实发起过 PUT** 且错误**不是** `CloudRequestError` 时回查一次远端，且只有"远端 updatedAt 确实前进了 **且** 远端内容与刚发出去的那份逐字节相同"两条同时成立，才认定上传其实成功并收编远端的 `updatedAt`（遥测 `cloud_sync_auto_upload_recovered`）。
+- 判定故意做得很窄：任何一条不满足就按普通网络错误走——脏标记保留、下次重试，绝不静默改动乐观锁基线，更不会覆盖远端数据。
+- 已经卡住的设备（发布前的版本）仍需人工解一次：本机数据更新时在设置里选"上传覆盖"；如果是另一台设备的数据更新，则选"从云端恢复"。
+
 ## Capacitor iOS：unsigned IPA 无法安装到真机
 
 现象：

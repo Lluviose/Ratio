@@ -2,6 +2,7 @@ import clsx from 'clsx'
 import { X, ArrowRight, Check } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { hapticSelectionChanged } from '../lib/haptics'
 
 type Slide = {
   id: string
@@ -282,8 +283,10 @@ export function TourScreen(props: { onClose: () => void; onEnterDemo?: () => voi
   const [navDir, setNavDir] = useState(1)
 
   const goTo = (next: number) => {
-    setNavDir(next >= index ? 1 : -1)
+    if (next === index) return
+    setNavDir(next > index ? 1 : -1)
     setIndex(next)
+    hapticSelectionChanged()
   }
 
   const slides: Slide[] = useMemo(

@@ -522,6 +522,145 @@ describe('initCloudAutoSync', () => {
     expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
   })
 
+  // 2026-08-27 线上事故：上传的响应丢了（WebKit 报 "Load failed"），
+  // 服务端其实已写入 → 本机 lastBackupAt 不前进 → 下次上传必 409 → 自动备份卡死。
+  it('adopts the remote result when an upload response is lost but the write landed', async () => {
+    const { buildRatioBackup } = await import('./backup')
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["wallet"]')
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, 'dirty-token')
+    const localBackup = buildRatioBackup()
+    const remoteMeta = {
+      updatedAt: '2026-08-27T16:32:04.001Z',
+      clientCreatedAt: '2026-08-27T16:32:03.900Z',
+      itemCount: Object.keys(localBackup.items).length,
+      device: 'iPhone',
+    }
+
+    // PUT 抛的是 fetch 的 TypeError（不是 CloudRequestError）——连状态码都没拿到
+    cloudMocks.uploadCloudBackup.mockRejectedValue(new TypeError('Load failed'))
+    // 回查：远端 updatedAt 已前进，内容与刚发出去的那份逐字节相同
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: { ...localBackup, createdAt: remoteMeta.clientCreatedAt },
+      meta: remoteMeta,
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-08-25T04:02:05.455Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.uploadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
+
+    const settings = getCloudSyncSettings()
+    // 乐观锁基线收编为远端的 updatedAt → 下一次上传不会再 409
+    expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+  })
+
+  it('keeps the network error when the remote did not move（上传是真的没到）', async () => {
+    const { buildRatioBackup } = await import('./backup')
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["wallet"]')
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, 'dirty-token')
+    const localBackup = buildRatioBackup()
+    const lastBackupAt = '2026-08-25T04:02:05.455Z'
+
+    cloudMocks.uploadCloudBackup.mockRejectedValue(new TypeError('Load failed'))
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: { ...localBackup, createdAt: '2026-08-25T04:02:05.000Z' },
+      meta: {
+        updatedAt: lastBackupAt,
+        clientCreatedAt: '2026-08-25T04:02:05.000Z',
+        itemCount: Object.keys(localBackup.items).length,
+        device: 'iPhone',
+      },
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt,
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastSyncStatus).toBe('error')
+    expect(settings.lastBackupAt).toBe(lastBackupAt)
+    // 脏标记必须留着：数据还没上去，下次要重试
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBe('dirty-token')
+  })
+
+  it('does not adopt a remote whose content differs from what we uploaded', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    localStorage.setItem('ratio.accounts', '["local"]')
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, 'dirty-token')
+
+    cloudMocks.uploadCloudBackup.mockRejectedValue(new TypeError('Load failed'))
+    cloudMocks.downloadCloudBackup.mockResolvedValue({
+      backup: {
+        schema: 1,
+        createdAt: '2026-08-27T16:00:00.000Z',
+        items: { 'ratio.accounts': '["from-another-device"]' },
+      },
+      meta: {
+        updatedAt: '2026-08-27T16:31:00.000Z',
+        clientCreatedAt: '2026-08-27T16:00:00.000Z',
+        itemCount: 1,
+        device: 'Mac',
+      },
+    })
+
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: '2026-08-25T04:02:05.455Z',
+        lastSyncStatus: 'ok',
+      }),
+    )
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastSyncStatus).toBe('error')
+    expect(settings.lastBackupAt).toBe('2026-08-25T04:02:05.455Z')
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBe('dirty-token')
+  })
+
   it('keeps a conflict when the remote backup differs from local data', async () => {
     const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
     const { initCloudAutoSync } = await import('./cloudSync')

@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-28 - iOS 触觉反馈从未真的响过（插件对象是 thenable）+ 触感深度适配 + 自动备份卡死自愈
+
+- **原生壳里触觉反馈一次都没生效**（不是"某些控件没震"，是整条链路哑火）：`loadNativePlugin` 把 `@capacitor/haptics` 的 `Haptics` 对象直接从 `.then()` 回调里 return。它是 `registerPlugin` 造的 Proxy——**任意**属性访问都返回方法包装器，`then` 也不例外，于是它是个 thenable。Promise 拿到它就去 adopt：调 `Haptics.then(resolve, reject)` → 原生没有名为 `then` 的方法 → 包装器返回一个没人接的拒绝（`"Haptics.then()" is not implemented on ios`，被 telemetry 记成应用错误），而外层 promise **永远不 settle**，`nativeHaptics` 里的 run 从此再也执行不到。缓存命中路径 `Promise.resolve(cachedPlugin)` 同样中招，所以第二次之后也一样死。
+  - 线上遥测实锤：8-23 的两条 `unhandled_rejection` reason 就是这条消息（build 8c4dd97，iPhone OS 18.7 原生壳）。
+  - 修复：插件对象一律**装箱**后再穿过 Promise（`{ plugin: Haptics }`），永不让 Proxy 直接参与 promise resolution。
+  - 回归护栏：`haptics.test.ts` 新增一组用真实 Proxy 语义模拟插件的用例（旧用例把 Haptics mock 成普通对象，看不见这个形状，所以一路绿灯上线）；已验证在修复前必红。
+- **触感深度适配**（都调 `haptics.ts` 既有语义函数，不散落原生 API）：
+  - 通知级统一收口到 `OverlayProvider.toast()`——tone `success`/`danger` 分别给 success/error 触感，全应用的保存、备份、云同步、删除、失败提示因此天然有反馈（业务点已有的 `hapticSuccess` 被 400ms 节流合并，不会震两下）。
+  - 首页四页横滑**落位**时给一次选择级反馈（只在贴近落位点、且用户真的碰过滑动区之后才响；启动锚定跳页不震）。
+  - 列表分组展开 / 占比色块展开成明细 / 打开类型详情页 / 金额隐藏开关：轻按。
+  - 抽屉升起（`BottomSheet`，覆盖账户详情与确认框等全部抽屉）：轻按；关闭不给，避免一次操作震两下。
+  - 引导页翻页：选择级；主题切换涟漪：medium 按压。
+- **自动备份卡死在"冲突"（8-27 线上事故）**：上传的**响应丢了**（WebKit 报 `Load failed`：切网/进后台/代理超时），但 PUT 其实已经到服务端并写入成功。本机的 `lastBackupAt` 停在旧值，远端 `updatedAt` 已前进 → 下一次自动上传必然 409 → 状态锁死在 conflict，之后每次自动同步都只会重新比对再重新冲突，直到用户手动"上传覆盖"或"恢复云端"。遥测里 16:32/16:33 两次 `cloud_sync_auto_error`（`Load failed`）后紧跟 16:34 的 `cloud_sync_auto_conflict`（`expectedUpdatedAt` 还停在 8-25），完整复刻了这条路径。
+  - 修复：上传抛出的**不是** `CloudRequestError`（连 HTTP 状态都没拿到）时回查一次远端，只有"远端 updatedAt 确实前进了 **且** 远端内容与刚发出去的那份逐字节相同"才认定上传其实成功，把远端的 `updatedAt` 收编为新的乐观锁基线（`cloud_sync_auto_upload_recovered`）。任何一条不满足就按普通网络错误处理——脏标记留着下次重试，绝不静默改动基线、更不覆盖远端。
+  - 测试：`cloudSync.test.ts` 新增 3 例（回执丢失但写入成功 → 收编基线且清脏标记；远端没动 → 仍报 error 且保留脏标记；远端内容是别人的 → 不收编）。第一例已验证在修复前必红。
+
 ## 2026-08-23 - 触觉反馈：切 Tab 其实没震，控件手感补齐
 
 - Capacitor iOS 的 `selectionChanged` 在没先 `selectionStart` 时是空操作，底部导航切换一直是哑的。现在先武装选择生成器并常驻，启动时预热插件，避免第一次点击晚一拍。

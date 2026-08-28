@@ -35,7 +35,7 @@ import { storageKernel } from './lib/storageKernel'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
 import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
-import { hapticSelectionChanged, preloadHaptics } from './lib/haptics'
+import { hapticImpact, hapticSelectionChanged, preloadHaptics } from './lib/haptics'
 import { useReducedMotion } from './lib/useReducedMotion'
 import { initCloudAutoSync } from './lib/cloudSync'
 import { initTelemetry, trackTelemetry } from './lib/telemetry'
@@ -605,6 +605,8 @@ export default function App() {
     (id: ThemeId, origin?: ThemeChangeOrigin) => {
       if (id !== 'random' && id === theme) return
 
+      // 主题涟漪是全屏级的视觉事件，配一记稍重的按压反馈
+      hapticImpact('medium')
       clearThemeTransitionTimers()
       const nextRandomTheme = id === 'random' ? pickNextRandomTheme(randomTheme) : randomTheme
       const nextResolvedTheme: RealThemeId = id === 'random' ? nextRandomTheme : id

@@ -54,17 +54,25 @@ function prefersReducedMotion(): boolean {
 }
 
 let cachedPlugin: HapticsPluginApi | null = null
-let loadPromise: Promise<HapticsPluginApi | null> | null = null
+let loadPromise: Promise<PluginBox | null> | null = null
 let selectionArmed = false
 
-function loadNativePlugin(): Promise<HapticsPluginApi | null> {
+// Capacitor 的插件对象是个 Proxy：**任意**属性访问都返回方法包装器，`then` 也不例外
+// ——于是它是个 thenable。把它直接从 .then 回调里 return（或塞进 Promise.resolve）会被
+// Promise 当成 thenable 去 adopt：引擎调用 `Haptics.then(resolve, reject)`，原生侧没有
+// 名为 then 的方法 → 抛 `"Haptics.then()" is not implemented on ios`，而这个包装器返回的
+// 拒绝没人接（成了 unhandledrejection，被 telemetry 记成应用错误），外层 promise 则
+// **永远不 settle** → 整条原生触觉链路彻底哑火。装箱后再穿过 Promise 即可绕开。
+type PluginBox = { plugin: HapticsPluginApi }
+
+function loadNativePlugin(): Promise<PluginBox | null> {
   if (!isNativePlatform()) return Promise.resolve(null)
-  if (cachedPlugin) return Promise.resolve(cachedPlugin)
+  if (cachedPlugin) return Promise.resolve({ plugin: cachedPlugin })
   if (!loadPromise) {
     loadPromise = import('@capacitor/haptics')
       .then(({ Haptics }) => {
         cachedPlugin = Haptics
-        return Haptics
+        return { plugin: Haptics }
       })
       .catch(() => {
         loadPromise = null
@@ -91,9 +99,9 @@ function disarmSelection() {
 /** 原生容器内执行 Haptics 调用；非原生环境直接返回。 */
 function nativeHaptics(run: (Haptics: HapticsPluginApi) => void | Promise<void>) {
   void loadNativePlugin()
-    .then((H) => {
-      if (!H) return
-      return run(H)
+    .then((box) => {
+      if (!box) return
+      return run(box.plugin)
     })
     .catch(() => undefined)
 }

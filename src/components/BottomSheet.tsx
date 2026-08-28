@@ -1,6 +1,7 @@
 import { X } from 'lucide-react'
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { hapticImpact } from '../lib/haptics'
 
 const openSheetStack: string[] = []
 
@@ -181,6 +182,8 @@ export function BottomSheet(props: {
     if (!open) return
     const sheetId = sheetIdRef.current
     pushOpenSheet(sheetId)
+    // 抽屉升起的轻按反馈（原生 iOS 的 sheet 手感）；关闭不给，避免一次操作震两下
+    hapticImpact('light')
     lockBodyScroll()
     scrollLockCountRef.current += 1
     const onKeyDown = (e: KeyboardEvent) => {

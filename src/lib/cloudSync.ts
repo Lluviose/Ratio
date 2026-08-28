@@ -276,6 +276,40 @@ function tryAutoFastForward(
   return true
 }
 
+/**
+ * 上传「响应丢了」的自愈。
+ *
+ * fetch 抛 TypeError（WebKit 上就是 `Load failed`：切网、进后台被杀、代理超时）时，
+ * 请求**可能已经到达服务端并写入成功**——我们只是没拿到回执。此时本机的
+ * `lastBackupAt` 仍停在旧值，而远端的 updatedAt 已经前进，于是下一次自动上传必然
+ * 撞 409，自动备份就此卡死在 conflict 状态，直到用户手动选择覆盖或恢复
+ * （2026-08-27 线上事故，见 TROUBLESHOOTING「自动备份卡在冲突」）。
+ *
+ * 判定极窄，只认「确实是我们那次上传写进去的」：远端 updatedAt 必须与本机记录的
+ * 不同（远端确实动了），且远端内容与刚才发出去的那份**逐字节相同**。任何一条不满足
+ * 就当作普通网络错误处理（脏标记还在，下次重试），绝不静默改动乐观锁基线。
+ */
+async function tryAdoptLostUploadResult(
+  settings: CloudSyncSettings,
+  uploaded: RatioBackupFile,
+  reason: string,
+  dirtyToken: string | undefined,
+): Promise<boolean> {
+  const remote = await downloadCloudBackup(settings)
+  if (!remote.meta || !remote.backup) return false
+  if (remote.meta.updatedAt === (settings.lastBackupAt || '')) return false
+  if (!sameRatioBackupData(uploaded, remote.backup)) return false
+
+  return writeAutoSyncSuccess(
+    settings,
+    remote.meta,
+    reason,
+    `已确认上传成功（${remote.meta.itemCount} 项，回执丢失）`,
+    dirtyToken,
+    'cloud_sync_auto_upload_recovered',
+  )
+}
+
 async function reconcileRemoteBackup(
   settings: CloudSyncSettings,
   backup: RatioBackupFile,
@@ -425,6 +459,9 @@ async function runAutoSync(reason: string, options: { urgent?: boolean } = {}) {
     localItemCount,
   })
 
+  // 只有真的发出过 PUT，才谈得上「回执丢了但其实写进去了」
+  let uploadAttempted = false
+
   try {
     if (!dirty && settings.lastBackupAt && settings.lastSyncStatus !== 'conflict') {
       await probeRemoteFreshness(settings, backup, reason, dirtyToken)
@@ -438,6 +475,7 @@ async function runAutoSync(reason: string, options: { urgent?: boolean } = {}) {
       if (settings.lastSyncStatus === 'conflict') return
     }
 
+    uploadAttempted = true
     const meta = await uploadCloudBackup(settings, backup, { expectedUpdatedAt: settings.lastBackupAt })
     writeAutoSyncSuccess(settings, meta, reason, `已自动上传 ${meta.itemCount} 项数据`, dirtyToken, 'cloud_sync_auto_upload')
   } catch (error) {
@@ -447,6 +485,16 @@ async function runAutoSync(reason: string, options: { urgent?: boolean } = {}) {
         if (remoteState !== 'missing') return
       } catch {
         // Keep the original conflict below; auto-sync must not overwrite remote data on a failed re-check.
+      }
+    }
+
+    // 非 CloudRequestError = 连 HTTP 状态都没拿到（fetch 抛 TypeError / 响应体读一半断）。
+    // 这种失败下服务端可能已经写入成功，先回查一次再决定是不是真的失败。
+    if (uploadAttempted && !(error instanceof CloudRequestError)) {
+      try {
+        if (await tryAdoptLostUploadResult(settings, backup, reason, dirtyToken)) return
+      } catch {
+        // 回查本身也失败（多半还是没网）：照常走下面的错误分支，脏标记留着下次重试
       }
     }
 
