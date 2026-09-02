@@ -87,7 +87,7 @@ export function ScreenSkeleton(props: { screen: ScreenSkeletonKind }) {
 
   return (
     <motion.div
-      className="screenSkeleton"
+      className={screen === 'trend' ? 'screenSkeleton screenSkeletonTrend' : 'screenSkeleton'}
       aria-hidden="true"
       initial="hidden"
       animate="show"

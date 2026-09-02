@@ -1770,6 +1770,29 @@ button:disabled {
   border-radius: 18px;
 }
 
+/* iOS 系统玻璃把带透明度脉冲的趋势骨架提升为独立合成层时，透明面会短暂
+   采到 WKWebView 的黑色 backing store。只给趋势 fallback 铺与现有视觉等价
+   的不透明主题底；块上的渐变与 shimmer 仍保留，也不要给骨架套系统材质。 */
+html[data-system-glass="1"] .screenSkeletonTrend {
+  background-color: var(--bg);
+  isolation: isolate;
+}
+
+html[data-system-glass="1"] .screenSkeletonTrend .skeletonBlock {
+  background-color: color-mix(in srgb, rgb(11 15 26) 5%, var(--bg));
+}
+
+html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
+  background-color: color-mix(in srgb, rgb(var(--glass-rgb)) 48%, var(--bg));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html[data-system-glass="1"] .screenSkeletonTrend {
+    /* 避免整层反复降透明度；各块的 shimmerSweep 继续提供加载动效。 */
+    animation: none;
+  }
+}
+
 /* 引导页（TourScreen）：页面层跟随明暗模式，手机 mockup 保持浅色截图质感。
    —— 页面背景按幻灯片索引取 --tour-bg-N，颜色变化由 background-color 过渡动画完成；
    —— 底部渐隐 --tour-fade* 固定每模式一组（浅色与原 from-white 行为一致）；

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-03 - iOS 系统玻璃下趋势加载骨架不再露黑
+
+- 浅色模式打开「系统液态玻璃」后，首次切到趋势页时，流光骨架的半透明面在 iOS WebKit 合成期间会短暂采到黑色 backing store。趋势骨架现在有与页面同色的不透明承托层，骨架块和图表框也改为视觉等价的主题混色底。
+- 仅在系统玻璃开启的趋势 fallback 中停用整层透明度脉冲，块内流光、错峰浮现和页面切换动画保持不变；统计、设置及普通模式不受影响。端到端测试会延迟趋势分包并检查承托层不透明且流光仍在运行。
+
 ## 2026-08-28 - iOS 触觉反馈从未真的响过（插件对象是 thenable）+ 触感深度适配 + 自动备份卡死自愈
 
 - **原生壳里触觉反馈一次都没生效**（不是"某些控件没震"，是整条链路哑火）：`loadNativePlugin` 把 `@capacitor/haptics` 的 `Haptics` 对象直接从 `.then()` 回调里 return。它是 `registerPlugin` 造的 Proxy——**任意**属性访问都返回方法包装器，`then` 也不例外，于是它是个 thenable。Promise 拿到它就去 adopt：调 `Haptics.then(resolve, reject)` → 原生没有名为 `then` 的方法 → 包装器返回一个没人接的拒绝（`"Haptics.then()" is not implemented on ios`，被 telemetry 记成应用错误），而外层 promise **永远不 settle**，`nativeHaptics` 里的 run 从此再也执行不到。缓存命中路径 `Promise.resolve(cachedPlugin)` 同样中招，所以第二次之后也一样死。

@@ -98,6 +98,62 @@ test('returns to assets when backing out of stats before it finishes loading', a
   await expectAssetsHomeVisible(page)
 })
 
+test('keeps the trend loading skeleton backed while system glass is active', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'no-preference' })
+  await page.route(/\/assets\/(?:TrendScreen|screen-trend)-.*\.js$/, async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 900))
+    await route.continue()
+  })
+  await expectAssetsHomeVisible(page)
+  await page.evaluate(() => {
+    document.documentElement.dataset.systemGlass = '1'
+  })
+
+  await page.getByRole('button', { name: 'trend' }).click()
+
+  const skeleton = page.locator('.screenSkeletonTrend')
+  await expect(skeleton).toBeVisible()
+  const styles = await skeleton.evaluate((element) => {
+    const chart = element.querySelector<HTMLElement>('.skeletonChart')
+    const block = element.querySelector<HTMLElement>('.skeletonBlock')
+    if (!chart || !block) throw new Error('Trend skeleton surfaces are missing')
+
+    const colorAlpha = (color: string) => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 1
+      canvas.height = 1
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('Canvas 2D context is unavailable')
+      context.clearRect(0, 0, 1, 1)
+      context.fillStyle = color
+      context.fillRect(0, 0, 1, 1)
+      return context.getImageData(0, 0, 1, 1).data[3]
+    }
+
+    const rootStyle = getComputedStyle(element)
+    const chartStyle = getComputedStyle(chart)
+    const blockStyle = getComputedStyle(block)
+    const shimmerStyle = getComputedStyle(block, '::after')
+    return {
+      systemGlass: document.documentElement.dataset.systemGlass,
+      rootBackground: rootStyle.backgroundColor,
+      pageBackground: getComputedStyle(document.body).backgroundColor,
+      rootAnimation: rootStyle.animationName,
+      chartBackgroundAlpha: colorAlpha(chartStyle.backgroundColor),
+      blockBackgroundAlpha: colorAlpha(blockStyle.backgroundColor),
+      shimmerAnimation: shimmerStyle.animationName,
+    }
+  })
+
+  expect(styles.systemGlass).toBe('1')
+  expect(styles.rootBackground).toBe(styles.pageBackground)
+  expect(styles.rootAnimation).toBe('none')
+  expect(styles.chartBackgroundAlpha).toBe(255)
+  expect(styles.blockBackgroundAlpha).toBe(255)
+  expect(styles.shimmerAnimation).toContain('shimmerSweep')
+  await expect(page.locator('.iosTrendPage')).toBeVisible({ timeout: 10_000 })
+})
+
 test('focuses the blank balance input when opening edit balance', async ({ page }) => {
   await expectAssetsHomeVisible(page)
 
