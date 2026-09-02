@@ -527,25 +527,25 @@ describe('initCloudAutoSync', () => {
   it('adopts the remote result when an upload response is lost but the write landed', async () => {
     const { buildRatioBackup } = await import('./backup')
     const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
-    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+    const { CLOUD_SYNC_DIRTY_KEY, CLOUD_SYNC_PENDING_UPLOAD_KEY, initCloudAutoSync } = await import('./cloudSync')
 
     localStorage.setItem('ratio.accounts', '["wallet"]')
     localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, 'dirty-token')
     const localBackup = buildRatioBackup()
     const remoteMeta = {
       updatedAt: '2026-08-27T16:32:04.001Z',
-      clientCreatedAt: '2026-08-27T16:32:03.900Z',
+      clientCreatedAt: '',
       itemCount: Object.keys(localBackup.items).length,
       device: 'iPhone',
     }
 
     // PUT 抛的是 fetch 的 TypeError（不是 CloudRequestError）——连状态码都没拿到
-    cloudMocks.uploadCloudBackup.mockRejectedValue(new TypeError('Load failed'))
-    // 回查：远端 updatedAt 已前进，内容与刚发出去的那份逐字节相同
-    cloudMocks.downloadCloudBackup.mockResolvedValue({
-      backup: { ...localBackup, createdAt: remoteMeta.clientCreatedAt },
-      meta: remoteMeta,
+    cloudMocks.uploadCloudBackup.mockImplementation(async (_settings: unknown, uploaded: typeof localBackup) => {
+      remoteMeta.clientCreatedAt = uploaded.createdAt
+      throw new TypeError('Load failed')
     })
+    // 回查：远端 meta 的 clientCreatedAt 命中 PUT 前已落盘的上传检查点
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: remoteMeta })
 
     localStorage.setItem(
       CLOUD_SYNC_SETTINGS_KEY,
@@ -564,13 +564,84 @@ describe('initCloudAutoSync', () => {
     await vi.advanceTimersByTimeAsync(800)
 
     expect(cloudMocks.uploadCloudBackup).toHaveBeenCalledOnce()
-    expect(cloudMocks.downloadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).not.toHaveBeenCalled()
 
     const settings = getCloudSyncSettings()
     // 乐观锁基线收编为远端的 updatedAt → 下一次上传不会再 409
     expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
     expect(settings.lastSyncStatus).toBe('ok')
     expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+    expect(localStorage.getItem(CLOUD_SYNC_PENDING_UPLOAD_KEY)).toBeNull()
+  })
+
+  // 2026-09-02 真机残余场景：PUT 已落盘后 iOS 直接杀掉页面，catch 根本没有机会
+  // 回查；下次启动又先生成新快照，因此「远端 === 当前本地」已经不成立。
+  it('adopts a persisted upload after restart and then uploads newer local data on the new baseline', async () => {
+    const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
+    const { CLOUD_SYNC_DIRTY_KEY, CLOUD_SYNC_PENDING_UPLOAD_KEY, initCloudAutoSync } = await import('./cloudSync')
+
+    const oldBaseline = '2026-08-29T15:06:13.634Z'
+    const landedBackupCreatedAt = '2026-09-02T09:20:48.416Z'
+    const landedMeta = {
+      updatedAt: '2026-09-02T09:20:52.188Z',
+      clientCreatedAt: landedBackupCreatedAt,
+      itemCount: 1,
+      device: 'iPhone',
+    }
+    const nextMeta = {
+      updatedAt: '2026-09-02T16:10:42.000Z',
+      clientCreatedAt: '2026-09-02T16:10:41.500Z',
+      itemCount: 1,
+      device: 'iPhone',
+    }
+
+    // 重启后本地已生成新数据，dirty token 与上次 PUT 前保存的 token 不同。
+    localStorage.setItem('ratio.accounts', '["after-restart"]')
+    localStorage.setItem(CLOUD_SYNC_DIRTY_KEY, 'dirty-after-restart')
+    localStorage.setItem(
+      CLOUD_SYNC_SETTINGS_KEY,
+      JSON.stringify({
+        ...DEFAULT_CLOUD_SYNC_SETTINGS,
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        password: 'secret',
+        autoSync: true,
+        lastBackupAt: oldBaseline,
+        lastSyncStatus: 'error',
+      }),
+    )
+    localStorage.setItem(
+      CLOUD_SYNC_PENDING_UPLOAD_KEY,
+      JSON.stringify({
+        schema: 'ratio.cloud-pending-upload.v1',
+        serverUrl: 'https://example.com',
+        username: 'shinonome',
+        expectedUpdatedAt: oldBaseline,
+        backupCreatedAt: landedBackupCreatedAt,
+        itemCount: 1,
+        dirtyToken: 'dirty-before-kill',
+        stagedAt: landedBackupCreatedAt,
+      }),
+    )
+
+    cloudMocks.fetchCloudBackupMeta.mockResolvedValue({ meta: landedMeta })
+    cloudMocks.uploadCloudBackup.mockResolvedValue(nextMeta)
+
+    initCloudAutoSync()
+    await vi.advanceTimersByTimeAsync(800)
+
+    expect(cloudMocks.fetchCloudBackupMeta).toHaveBeenCalledOnce()
+    expect(cloudMocks.downloadCloudBackup).not.toHaveBeenCalled()
+    expect(cloudMocks.uploadCloudBackup).toHaveBeenCalledOnce()
+    expect(cloudMocks.uploadCloudBackup.mock.calls[0][1].items['ratio.accounts']).toBe('["after-restart"]')
+    expect(cloudMocks.uploadCloudBackup.mock.calls[0][2]).toMatchObject({ expectedUpdatedAt: landedMeta.updatedAt })
+
+    const settings = getCloudSyncSettings()
+    expect(settings.lastBackupAt).toBe(nextMeta.updatedAt)
+    expect(settings.lastSyncStatus).toBe('ok')
+    expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+    expect(localStorage.getItem(CLOUD_SYNC_PENDING_UPLOAD_KEY)).toBeNull()
   })
 
   it('keeps the network error when the remote did not move（上传是真的没到）', async () => {
@@ -811,7 +882,7 @@ describe('initCloudAutoSync', () => {
 
   it('uploads dirty data immediately on pagehide, bypassing the debounce', async () => {
     const { CLOUD_SYNC_SETTINGS_KEY, DEFAULT_CLOUD_SYNC_SETTINGS, getCloudSyncSettings } = await import('./cloud')
-    const { CLOUD_SYNC_DIRTY_KEY, initCloudAutoSync } = await import('./cloudSync')
+    const { CLOUD_SYNC_DIRTY_KEY, CLOUD_SYNC_PENDING_UPLOAD_KEY, initCloudAutoSync } = await import('./cloudSync')
 
     localStorage.setItem('ratio.accounts', '["wallet"]')
     const remoteMeta = {
@@ -820,7 +891,13 @@ describe('initCloudAutoSync', () => {
       itemCount: 1,
       device: 'iPhone',
     }
-    cloudMocks.uploadCloudBackup.mockResolvedValue(remoteMeta)
+    cloudMocks.uploadCloudBackup.mockImplementation(async () => {
+      // PUT 开始前检查点必须已经同步写入；页面从这里起随时被杀都能在重启后认领。
+      const pending = JSON.parse(localStorage.getItem(CLOUD_SYNC_PENDING_UPLOAD_KEY) ?? '{}') as Record<string, unknown>
+      expect(pending.expectedUpdatedAt).toBe('2026-04-29T13:03:54.267Z')
+      expect(pending.dirtyToken).toBe(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY))
+      return remoteMeta
+    })
 
     localStorage.setItem(
       CLOUD_SYNC_SETTINGS_KEY,
@@ -850,6 +927,7 @@ describe('initCloudAutoSync', () => {
     expect(settings.lastBackupAt).toBe(remoteMeta.updatedAt)
     expect(settings.lastSyncStatus).toBe('ok')
     expect(localStorage.getItem(CLOUD_SYNC_DIRTY_KEY)).toBeNull()
+    expect(localStorage.getItem(CLOUD_SYNC_PENDING_UPLOAD_KEY)).toBeNull()
 
     // 挂起的防抖定时器已被取消：推进时间不应再触发任何请求（clean 态会走 probe）
     await vi.advanceTimersByTimeAsync(2500)

@@ -32,10 +32,12 @@ describe('backup', () => {
     localStorage.setItem('ratio.accounts', '[]')
     localStorage.setItem('ratio.systemGlass', 'true')
     localStorage.setItem('ratio.cloudSync', '{"autoSync":true}')
+    localStorage.setItem('ratio.cloudSync.pendingUpload', '{"schema":"ratio.cloud-pending-upload.v1"}')
 
     const backup = buildRatioBackup(localStorage)
     expect(backup.items['ratio.systemGlass']).toBeUndefined()
     expect(backup.items['ratio.cloudSync']).toBeUndefined()
+    expect(backup.items['ratio.cloudSync.pendingUpload']).toBeUndefined()
     expect(backup.items['ratio.accounts']).toBe('[]')
 
     const restored = restoreRatioBackup(
@@ -51,6 +53,7 @@ describe('backup', () => {
 
     expect(restored.clearedKeys).toEqual(['ratio.accounts'])
     expect(localStorage.getItem('ratio.systemGlass')).toBe('true')
+    expect(localStorage.getItem('ratio.cloudSync.pendingUpload')).not.toBeNull()
     expect(localStorage.getItem('ratio.accounts')).toBe('["kept"]')
   })
 

@@ -264,7 +264,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 ## 云同步与后端
 
-前端云端 API 封装在 `src/lib/cloud.ts`，自动同步编排在 `src/lib/cloudSync.ts`（脏标记 + 防抖 2.5s + 最短间隔 30s + 冲突时暂停并提示；页面隐藏（visibilitychange hidden / pagehide）且有脏数据时立即抢跑上传、绕过防抖与节流——手机「记一笔就切走」否则上传来不及发生，脏数据滞留期间另一台设备先上传就成了 409 冲突；请求被系统杀死无害，脏标记与乐观锁兜底，下次启动重试）。
+前端云端 API 封装在 `src/lib/cloud.ts`，自动同步编排在 `src/lib/cloudSync.ts`（脏标记 + 防抖 2.5s + 最短间隔 30s + 冲突时暂停并提示；页面隐藏（visibilitychange hidden / pagehide）且有脏数据时立即抢跑上传、绕过防抖与节流——手机「记一笔就切走」否则上传来不及发生，脏数据滞留期间另一台设备先上传就成了 409 冲突；自动 PUT 前持久化 `ratio.cloudSync.pendingUpload` 检查点，重启后用远端 `clientCreatedAt` 认领已经落盘但丢失回执的上传，只清旧 dirty token，新写入继续基于收编后的版本上传）。
 
 后端 `server/src/server.js`（Node 原生 `http`）：
 
