@@ -161,7 +161,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - **CI 打包**：`.github/workflows/build-ios.yml`（macOS runner）出 **unsigned IPA**（`CODE_SIGNING_ALLOWED=NO` 三件套归档 + `ditto --sequesterRsrc` 打包），上传 artifact。unsigned 包不能装真机；签名切换步骤与所需 secrets 见该 workflow 注释。
 - **安全区与状态栏**：`contentInsetAdjustmentBehavior` 默认 `'never'`——WebView 全屏渲染，安全区继续走既有的 `--safe-top/--safe-bottom`（`env()` 钳制）体系，与 PWA 独立模式同一套逻辑，不需要原生侧处理。
 - **触觉反馈**：`src/lib/haptics.ts` 统一入口——原生环境经动态 import 走 `@capacitor/haptics`（不占首包，启动 `preloadHaptics` 预热），Web 回退 `navigator.vibrate`，iOS Safari 无 API 静默；减弱动态偏好下回退跳过。Capacitor iOS 的 `selectionChanged` 必须先 `selectionStart`，离散点击会自动武装生成器。接入点：底部导航 / 分段 / 胶囊 Tab / 引导页翻页（`hapticSelectionChanged`）、开关 / 分组展开 / 占比块展开 / 金额隐藏 / 抽屉升起（`hapticImpact('light')`）、主题切换（medium）、危险确认（`hapticWarning`）、账户保存（`hapticSuccess`）；成败通知级反馈统一收口在 `OverlayProvider.toast()`（tone success/danger → success/error）。新增触感点只调 `haptics.ts` 语义函数。
-- **液态玻璃**：底部导航保持改造前的网页 layout（首页左下角三按钮胶囊、其它页贴底四栏）。设置页「系统液态玻璃」打开后，同一套节点换 `-apple-visual-effect` 系统材质（`src/lib/systemGlass.ts`，默认关）。不再用原生 `UIGlassEffect` 覆盖层——那套悬浮胶囊和原版不是同一形状，玻璃还会溢到 bounds 外盖住页面。该 CSS 依赖 WKWebView 私有偏好 `_useSystemAppearance`（`RatioBridgeViewController`），仅自签安装有效。Main.storyboard 保持空 VC，由 SceneDelegate 代码挂 `RatioBridgeViewController`。
+- **液态玻璃**：底部导航使用网页节点（首页左下角三按钮胶囊、其它页默认贴底四栏）。设置页「系统液态玻璃」打开且受支持时，四栏变为悬浮胶囊，导航等 chrome 换 `-apple-visual-effect` 系统材质（`src/lib/systemGlass.ts`，默认关）。趋势图表、目标和详情面板使用主题实底与高光，避免入场合成阶段的系统材质黑闪；加载骨架同样有实底。不再用原生 `UIGlassEffect` 覆盖层。该 CSS 依赖 WKWebView 私有偏好 `_useSystemAppearance`（`RatioBridgeViewController`），仅自签安装有效。Main.storyboard 保持空 VC，由 SceneDelegate 代码挂 `RatioBridgeViewController`。
 
 ### React Compiler（作用域限定）
 

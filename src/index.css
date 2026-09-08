@@ -1848,7 +1848,7 @@ html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
 /* 系统液态玻璃（可选，默认关）：iOS 原生壳打开 WKWebView 私有偏好
    `_useSystemAppearance` 后，`-apple-visual-effect` 才会被认。
    Safari / PWA / 桌面 @supports 失败，这段整块不生效，视觉基线不变。
-   套在原来的 layout 上换材质，不要改圆角/尺寸/贴边方式。
+   非首页四栏在开启时使用悬浮胶囊；首页保留原有迷你导航。
    不要用 backdrop-filter: liquid-glass——那不是 WebKit 的真实属性。
    不要给 .segment / .pills 这类小控件套玻璃，叠多层会把页面打成一块雾。
    toast 保持原来的 CSS 毛玻璃：系统材质会把通知掏成一块雾，字也看不清。 */
@@ -1863,11 +1863,6 @@ html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
     -apple-visual-effect: -apple-system-glass-material;
   }
 
-  html[data-system-glass="1"] .navBar {
-    border-top-color: rgb(var(--edge-rgb) / 0.06);
-    box-shadow: none;
-  }
-
   html[data-system-glass="1"] .glassChrome {
     border-color: rgb(var(--glass-rgb) / 0.45);
     box-shadow: none;
@@ -1880,10 +1875,7 @@ html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
   /* 卡片：系统材质 + 裁进圆角，保留发丝边，避免相邻卡片融成一片 */
   html[data-system-glass="1"] .card,
   html[data-system-glass="1"] .iosInsightsPage .card,
-  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card,
-  html[data-system-glass="1"] .iosTrendChartCard,
-  html[data-system-glass="1"] .iosTrendDetailPanel,
-  html[data-system-glass="1"] .iosTrendGoalPanel {
+  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card {
     background-color: rgb(var(--glass-rgb) / 0.22);
     background-image: none;
     backdrop-filter: none;
@@ -1893,4 +1885,46 @@ html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
     isolation: isolate;
     overflow: hidden;
   }
+}
+
+/* data-system-glass 只在材质受支持且开关开启时设置。胶囊和底部空隙总高
+   仍为 80px + safe-bottom，与 --bottom-nav-height 的内容避让保持一致。 */
+html[data-system-glass="1"] .navBar {
+  left: calc(16px + var(--safe-left));
+  right: calc(16px + var(--safe-right));
+  bottom: calc(8px + var(--safe-bottom));
+  height: 72px;
+  padding: 8px;
+  border: 1px solid rgb(var(--glass-rgb) / 0.45);
+  border-radius: 999px;
+  overflow: hidden;
+  box-shadow: var(--glass-hi), 0 8px 24px -12px rgb(15 23 42 / 0.24);
+}
+
+html[data-system-glass="1"] .navBarGrid {
+  gap: 4px;
+}
+
+html[data-system-glass="1"] .navItem {
+  height: 54px;
+  min-width: 0;
+  padding: 6px 4px;
+  border-radius: 999px;
+}
+
+html[data-system-glass="1"] .navActiveIndicator {
+  border-radius: inherit;
+}
+
+/* 趋势的真实图表/目标/详情也会在带 opacity/transform 的父层内挂载。
+   系统材质在这些数据面板初始化时会采到黑色 backing store；只修骨架
+   无法覆盖 Suspense 完成后的首帧。数据面板使用主题实底承托原有高光，
+   不参与系统材质或 backdrop 采样；导航等 chrome 继续使用液态玻璃。 */
+html[data-system-glass="1"] .iosTrendChartCard,
+html[data-system-glass="1"] .iosTrendDetailPanel,
+html[data-system-glass="1"] .iosTrendGoalPanel {
+  background-color: var(--card);
+  background-image: var(--glass-sheen);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }

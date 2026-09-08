@@ -229,6 +229,7 @@ function BottomTabNav(props: { tab: TabId; onNavigate: (tab: TabId) => void }) {
               {active ? <motion.div className="navActiveIndicator" layoutId="bottomNavActive" transition={navSpring} /> : null}
               <motion.span
                 className="navIcon"
+                initial={false}
                 animate={
                   active
                     ? { y: -1, scale: [1, 1.22, 1], opacity: 1, rotate: [0, -4, 0] }
@@ -244,6 +245,7 @@ function BottomTabNav(props: { tab: TabId; onNavigate: (tab: TabId) => void }) {
               </motion.span>
               <motion.span
                 className="navLabel"
+                initial={false}
                 animate={{ opacity: active ? 1 : 0.68, scale: active ? 1.04 : 1 }}
                 transition={active ? snappySpring : microTransition}
               >
