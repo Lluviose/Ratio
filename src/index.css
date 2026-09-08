@@ -1894,11 +1894,13 @@ html[data-system-glass="1"] .navBar {
   right: calc(16px + var(--safe-right));
   bottom: calc(8px + var(--safe-bottom));
   height: 72px;
-  padding: 8px;
-  border: 1px solid rgb(var(--glass-rgb) / 0.45);
+  /* 系统材质自带轮廓和阴影；再画 CSS 边框/内高光会在玻璃里形成第二圈。
+     去掉 1px 边框后补入 padding，保持按钮位置与点击区域不变。 */
+  padding: 9px;
+  border: 0;
   border-radius: 999px;
   overflow: hidden;
-  box-shadow: var(--glass-hi), 0 8px 24px -12px rgb(15 23 42 / 0.24);
+  box-shadow: none;
 }
 
 html[data-system-glass="1"] .navBarGrid {

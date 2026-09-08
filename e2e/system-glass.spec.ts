@@ -32,6 +32,10 @@ for (const mode of ['light', 'dark'] as const) {
     })
 
     const nav = page.locator('.navBar')
+    // The system material owns the capsule rim; a CSS border/inset highlight
+    // paints a second full-width capsule inside it on iOS.
+    await expect(nav).toHaveCSS('border-width', '0px')
+    await expect(nav).toHaveCSS('box-shadow', 'none')
     const geometry = await nav.evaluate((element) => {
       const rect = element.getBoundingClientRect()
       const frame = document.querySelector('.appFrame')!.getBoundingClientRect()
