@@ -63,6 +63,9 @@ export default defineConfig(() => {
       chunkSizeWarningLimit: 550,
       modulePreload: {
         resolveDependencies(_filename, deps) {
+          // Native chunks are bundled locally: preload their dependencies in
+          // parallel instead of applying the web bandwidth-saving filter.
+          if (isCapacitorBuild) return deps
           return deps.filter((dep) => !lazyChunkFilePattern.test(dep))
         },
       },

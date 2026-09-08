@@ -1,3 +1,7 @@
-// AI 助手分包的唯一动态导入点：LazyAiAssistant 按需挂载用它，
-// App 的后台预热链也用它在空闲且用户静默时提前解析大分包。
-export const loadAiAssistant = () => import('./AiAssistant')
+import { preloadableComponent } from '../lib/preloadableComponent'
+import type { ComponentProps } from 'react'
+
+// One import shared by on-demand rendering, web idle warmup and immediate iOS startup.
+export const { Component: AiAssistant, preload: loadAiAssistant } = preloadableComponent<NonNullable<ComponentProps<typeof import('./AiAssistant').AiAssistant>>>(
+  () => import('./AiAssistant').then((mod) => ({ default: mod.AiAssistant })),
+)

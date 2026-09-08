@@ -3,15 +3,11 @@ import type * as Matter from 'matter-js'
 import { animate, motionValue, type MotionValue } from 'framer-motion'
 import { hapticImpact } from '../lib/haptics'
 import { useReducedMotion } from '../lib/useReducedMotion'
+import { loadMatter } from '../lib/matterLoader'
 
 // matter-js 按需加载：物理引擎不进首包（vendor-matter 分包，约 26KB gzip），
-// 首次挂载时开始拉取；加载完成前气泡停留在初始位置，flick/burst 静默忽略。
+// Web 首次挂载时开始拉取，iOS 启动时预热；完成前气泡停留在初始位置，flick/burst 静默忽略。
 type MatterModule = typeof import('matter-js')
-let matterModulePromise: Promise<MatterModule> | null = null
-function loadMatter(): Promise<MatterModule> {
-  matterModulePromise ??= import('matter-js')
-  return matterModulePromise
-}
 
 export type BubbleNode = {
   id: string

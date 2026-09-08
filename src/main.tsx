@@ -11,6 +11,11 @@ import { InstanceFrozenNotice, InstanceOccupiedGate } from './components/Instanc
 import { emitAppToast } from './lib/overlay'
 import { installSafeAreaFallback } from './lib/safeArea'
 import './pwa'
+import { preloadNativeModules } from './lib/nativeStartup'
+
+// iOS modules live in the app bundle: warm them during storage hydration so
+// first navigation can start the full entrance animation without a lazy fallback.
+void preloadNativeModules()
 
 // 个别 iOS 版本独立模式下 env(safe-area-inset-*) 恒为 0 但内容仍被沉浸式渲染，
 // 状态栏会压住页面标题；挂载前装好兜底覆写（详见 lib/safeArea.ts）。

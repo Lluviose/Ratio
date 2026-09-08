@@ -1,5 +1,5 @@
 import { BarChart3, ChevronLeft, Settings as SettingsIcon, TrendingUp, Wallet } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen'
 import { TourScreen } from './screens/TourScreen'
@@ -34,12 +34,14 @@ import { ensureDailyLocalBackup, importFallbackSessionSnapshot } from './lib/loc
 import { storageKernel } from './lib/storageKernel'
 import { useDailySnapshotSync } from './lib/useDailySnapshotSync'
 import { OverlayProvider } from './components/OverlayProvider'
-import { microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
+import { entranceDelay, microTransition, navSpring, screenTransition, snappySpring } from './lib/motionPresets'
 import { hapticImpact, hapticSelectionChanged, preloadHaptics } from './lib/haptics'
 import { useReducedMotion } from './lib/useReducedMotion'
 import { initCloudAutoSync } from './lib/cloudSync'
 import { initTelemetry, trackTelemetry } from './lib/telemetry'
 import { withAccountSnapshot } from './lib/snapshots'
+import { TrendScreen, StatsScreen, SettingsScreen, loadTrendScreen, loadStatsScreen, loadSettingsScreen } from './components/screenLoaders'
+import { isNativeIos } from './lib/nativePlatform'
 
 type TabId = 'assets' | 'trend' | 'stats' | 'settings'
 type ViewId = 'main' | 'addAccount'
@@ -77,14 +79,6 @@ const screenVariants = {
     scale: 0.988,
   }),
 }
-
-const loadTrendScreen = () => import('./screens/TrendScreen')
-const loadStatsScreen = () => import('./screens/StatsScreen')
-const loadSettingsScreen = () => import('./screens/SettingsScreen')
-
-const TrendScreen = lazy(() => loadTrendScreen().then((mod) => ({ default: mod.TrendScreen })))
-const StatsScreen = lazy(() => loadStatsScreen().then((mod) => ({ default: mod.StatsScreen })))
-const SettingsScreen = lazy(() => loadSettingsScreen().then((mod) => ({ default: mod.SettingsScreen })))
 
 function preloadTab(tab: TabId) {
   if (tab === 'trend') return loadTrendScreen()
@@ -457,7 +451,7 @@ function DemoModeBadge() {
       onClick={() => void handleExit()}
       initial={{ opacity: 0, y: -14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
+      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1], delay: entranceDelay(0.4) }}
       className="absolute left-1/2 z-30 -translate-x-1/2 rounded-full border px-3 py-1.5 text-[12px] font-semibold shadow-sm backdrop-blur-md"
       style={{
         top: 'calc(var(--safe-top) + 8px)',
@@ -571,6 +565,8 @@ export default function App() {
   }, [tab])
 
   useEffect(() => {
+    // iOS starts all bundled modules in main.tsx, before this screen mounts.
+    if (isNativeIos()) return
     if (!tourSeen) return
     if (tab !== 'assets' || view !== 'main' || !assetsHomePageActive || selectedAccountId != null) return
 
@@ -784,7 +780,7 @@ export default function App() {
                           setDetailTransitionAccountId(a.id)
                           setDetailAction('none')
                         }}
-                        skipInitialAnimation={hasVisitedAssets}
+                        skipInitialAnimation={hasVisitedAssets && !isNativeIos()}
                         activeAccountId={detailTransitionAccountId}
                       />
                     </motion.div>

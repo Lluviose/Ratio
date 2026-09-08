@@ -1,11 +1,9 @@
-import { lazy, Suspense, useState } from 'react'
+import { Suspense, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Sparkles } from 'lucide-react'
 import { recoverFromChunkLoadFailure } from '../lib/chunkRecovery'
 import { LazyLoadBoundary } from './LazyLoadBoundary'
-import { loadAiAssistant } from './aiAssistantLoader'
-
-const AiAssistant = lazy(() => loadAiAssistant().then((mod) => ({ default: mod.AiAssistant })))
+import { AiAssistant } from './aiAssistantLoader'
 
 function AiAssistantButton(props: { onClick?: () => void; busy?: boolean }) {
   const { onClick, busy = false } = props

@@ -15,6 +15,7 @@ import {
   cardEntranceAnimate,
   cardEntranceInitial,
   cardEntranceTransition,
+  entranceDelay,
   fadeUpAnimate,
   quickFade,
   screenTransition,
@@ -55,7 +56,7 @@ const trendPageTransition = {
 
 const chartEntranceTransition = {
   ...cardEntranceTransition,
-  delay: 0.08,
+  delay: entranceDelay(0.08),
 }
 
 const detailExit = {

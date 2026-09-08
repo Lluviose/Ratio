@@ -1,5 +1,11 @@
 // 全局动效词汇表：所有屏幕与组件共享同一套缓动、弹簧与编排预设，
 // 保证节奏一致。仅动画 transform/opacity 等合成器友好属性。
+import { isNativeIos } from './nativePlatform'
+
+/** iOS entrance animations start immediately; preserve the animation itself. */
+export function entranceDelay(delay: number): number {
+  return isNativeIos() ? 0 : delay
+}
 
 // ─── 缓动曲线 ───────────────────────────────────────────────────────────────
 
@@ -191,6 +197,6 @@ export function staggerDelay(index: number, step = 0.045, base = 0.03, max = 0.5
 export function cardEntranceAt(index: number, step = 0.05, base = 0.04) {
   return {
     ...cardEntranceTransition,
-    delay: staggerDelay(index, step, base),
+    delay: staggerDelay(index, step, entranceDelay(base)),
   }
 }

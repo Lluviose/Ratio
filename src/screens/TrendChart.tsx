@@ -1,6 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useReducedMotion } from '../lib/useReducedMotion'
+import { entranceDelay } from '../lib/motionPresets'
 import type { TrendPoint } from './trendGoalLines'
 import { buildYTicks, linearPath, monotonePath, type XY } from './trendChartMath'
 
@@ -188,7 +189,7 @@ export function TrendChart(props: TrendChartProps) {
               height={height}
               initial={{ width: 0 }}
               animate={{ width }}
-              transition={{ duration: 1.1, delay: 0.08, ease: 'easeOut' }}
+              transition={{ duration: 1.1, delay: entranceDelay(0.08), ease: 'easeOut' }}
             />
           )}
         </clipPath>

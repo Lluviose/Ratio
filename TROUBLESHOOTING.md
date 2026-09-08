@@ -225,7 +225,9 @@
 
 - 首开后台会预热懒加载分包（趋势/统计/设置/AI，共 700KB+ 原始体积），`requestIdleCallback` 只知道「当前帧有空闲」，不知道一个手势驱动的动画正要开始——用户点开详情的瞬间恰是 rIC 眼里的空闲点，此时解析 300KB+ 脚本会阻塞主线程数百毫秒，而展开动画按几何约束只能动 x/y/width/height（JS rAF 驱动，主线程受阻即跳帧）。访问过趋势/统计后分包已解析完毕，故恢复流畅。
 
-处理（`src/App.tsx` 的 `scheduleBackgroundTabPreloads`）：
+处理（Web/PWA 的 `src/App.tsx` → `scheduleBackgroundTabPreloads`）：
+
+iOS 原生壳现按性能优先策略，在 `main.tsx` 中立即并行预热本地分包，取消本节的等待门控；Web/PWA 仍保留以下策略。
 
 - 预热链从小到大逐块串行（settings → stats → trend → AI），块间留 1.2s 空隙。
 - 交互静默门控：距最近一次 `pointerdown`/`touchmove` 不足 1.6s 时不启动任何分包解析，改为重排稍后再试，保证手势后的动画窗口不被解析打断。

@@ -12,7 +12,7 @@ import { STORAGE_WRITE_EVENT, type StorageWriteDetail } from '../lib/storageEven
 import { useLocalStorageState } from '../lib/useLocalStorageState'
 import { useSafeAreaTop } from '../lib/safeArea'
 import { hapticImpact, hapticSelectionChanged } from '../lib/haptics'
-import { overshootEase, quickFade } from '../lib/motionPresets'
+import { entranceDelay, overshootEase, quickFade } from '../lib/motionPresets'
 import {
   LIST_GROUP_ORDER,
   computeAssetFillerRect,
@@ -1245,7 +1245,7 @@ export function AssetsScreen(props: {
             className="min-w-0"
             initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: 0.15, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: entranceDelay(0.15), ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="flex items-center gap-2 text-[13px] font-medium text-slate-500/80">
               <span>我的净资产 (CNY)</span>
@@ -1298,7 +1298,7 @@ export function AssetsScreen(props: {
             aria-label="add"
             initial={isInitialLoad ? { y: -50, opacity: 0 } : false}
             animate={initialized ? { y: 0, opacity: 1 } : false}
-            transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            transition={{ duration: 0.5, delay: entranceDelay(0.2), ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <Plus size={22} strokeWidth={2.75} />
           </motion.button>

@@ -76,7 +76,7 @@ docker compose up -d --build   # 后端地址 http://localhost:8787
 ### 应用编排（src/App.tsx）
 
 - 全局包裹 `<MotionConfig reducedMotion="user">`：系统减弱动态偏好下自动禁用位移/布局动画（透明度保留）。
-- 四个底部 Tab：`assets`（常驻首包）与 `trend` / `stats` / `settings`（React.lazy 懒加载，切换带方向感知的滑动过渡）。看过引导页后在空闲回调里预热三个懒加载模块。
+- 四个底部 Tab：`assets`（常驻首包）与 `trend` / `stats` / `settings`（React.lazy 懒加载，切换带方向感知的滑动过渡）。Web 看过引导页后在空闲回调里预热；iOS 原生壳在 `main.tsx` 启动时立即并行预热，已预热页面同步渲染，避免首次导航再闪加载占位。
 - 主题切换：`handleThemeChange` 创建全屏 bloom 过渡覆盖层（脉冲环 + 径向扩散 + 颜色 wash），用两个定时器编排「先播动画 → 中途应用 `data-theme` 与 CSS 变量 → 结束移除覆盖层」。`SettingsScreen` 通过 `onThemeChange(id, origin)` 上报点击坐标作为扩散原点——改主题流程时不要破坏这个坐标约定。
 - 账户详情 `AccountDetailSheet` 挂在 App 层：从资产列表行进入时走 `sheetMotion="morph"`（共享 `layoutId`，行卡片变形为抽屉），其他入口走 `slide`。
 - 每日快照同步（`useDailySnapshotSync`）、云自动同步、遥测都在这里初始化。
@@ -130,7 +130,8 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 3. `layoutId` 按实例唯一：`SegmentedControl`/`PillTabs` 用 `useId()` 隔离；跨组件 morph 用 `src/lib/layoutIds.ts` 的工厂（如 `accountDetailSheetLayoutId(accountId)`，列表行 → 详情抽屉共享）。
 4. 反映持久化状态的控件加 `initial={false}`，避免挂载时误播动画。
 5. 无限/环境动画必须被减弱动态偏好关闭。三层机制：App 层 `MotionConfig reducedMotion="user"`（framer 位移动画）、`index.css` 的 `prefers-reduced-motion` 全局守卫（CSS 动画/过渡）、`src/lib/useReducedMotion.ts`（JS 驱动的逻辑，如物理漂移、面板兜底时长）。新增动画归类到对应层。
-6. CSS 侧缓动变量在 `index.css`（`--ease-out/-spring/-emphasized/-silk/-bounce-soft`）；骨架屏是流光扫过（`shimmerSweep`）+ 容器脉冲。
+6. iOS 原生壳保留返回资产页时的完整入场动画；`entranceDelay` 去掉首轮入场等待，列表仍保留逐项错峰。`Info.plist` 的 `CADisableMinimumFrameDurationOnPhone` 开启 ProMotion 适配，实际帧率由设备、系统和负载决定；继续尊重系统减弱动态偏好。
+7. CSS 侧缓动变量在 `index.css`（`--ease-out/-spring/-emphasized/-silk/-bounce-soft`）；骨架屏是流光扫过（`shimmerSweep`）+ 容器脉冲。
 
 ### 气泡物理（src/components/BubbleChartPhysics.tsx）
 
@@ -149,7 +150,8 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 - SW 更新采用 prompt 模式（`registerType: 'prompt'`，`skipWaiting: false`，`clientsClaim: true`）：新版本先 waiting，`src/pwa.ts` 弹「新版本已就绪」toast，用户点「立即更新」才接管并刷新；忽略则下次冷启动自然生效。更新检查在回到前台时触发（5 分钟节流 + 30 分钟兜底定时器），没有固定轮询。**不要改回 autoUpdate/skipWaiting**——那会在部署瞬间强刷正在输入的用户，也会复活首装 controllerchange 一类缺陷（见 TROUBLESHOOTING）。
 - 懒分包加载失败的恢复通道（`src/lib/chunkRecovery.ts`）：失败几乎总是「部署已更新、旧哈希 chunk 已从服务器消失」，prompt 模式下单纯 reload 仍由旧 SW 服务旧产物、死循环。恢复语义：失败当下立即触发一次 SW 更新检查（绕过 5 分钟节流），用户在兜底 UI 点「重试」时优先应用 waiting 的更新（与 toast「立即更新」同一路径），没有待应用更新才普通刷新。`pwa.ts` 经 `setChunkRecoveryHandlers` 注入能力，组件（`LazyLoadBoundary`/`LazyAiAssistant`/`ScreenLoadError`）只依赖 `chunkRecovery`，不触碰 `virtual:pwa-register`（vitest 无法解析该虚拟模块）。
 - `modulePreload.resolveDependencies` 把这些懒块从预加载里过滤掉；Service Worker 对它们 `globIgnores` + `CacheFirst` 运行时缓存（`ratio-lazy-chunks-v1`）。懒边界名单（`vite.config.ts` 的 `lazyChunkNames`）除六个显式分组外还包括只被懒屏幕共享的依赖 chunk（`TrendScreen-*`/`StatsScreen-*`/`SettingsScreen-*`/`AiAssistant-*`/`savingsGoal-*`）——预加载过滤、precache 排除、运行时缓存三处必须消费同一份名单；`check:bundle` 会校验 sw.js 的 precache 清单里没有任何懒边界 chunk（名单镜像在 `scripts/check-bundle-budget.mjs` 的 `PRECACHE_EXCLUDED_CHUNKS`，两处需同步改）。
-- 后台预热链（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
+- **iOS 原生预热**：`main.tsx` 调 `preloadNativeModules()`，与存储水合并行启动趋势、统计、设置、AI、Matter 动态导入，不等待计时器、空闲或触摸静默，也不阻塞首屏。`nativePlatform.ts` 只识别 Capacitor 的 iOS bridge，Safari/PWA 不走该路径。`preloadableComponent` 共享请求并缓存已解析组件，热组件同步渲染，冷组件仍由 Suspense/错误边界兜底；预热失败不阻断其他模块。原生构建的 modulePreload 保留依赖并行加载，Web 继续过滤懒块。
+- **Web 后台预热链**（`App.tsx` 的 `scheduleBackgroundTabPreloads`）：settings → stats → trend → AI 从小到大串行预热，带 1.6s 交互静默门控——用户刚触摸过就不启动解析，避免大块脚本解析打断手势后的动画（诊断见 TROUBLESHOOTING.md「iOS PWA 首开」条目）。AI 分包唯一动态导入点在 `src/components/aiAssistantLoader.ts`。
 - **纪律**：不要从首包代码（App/Assets 系列/共享组件）静态 import 上述模块或 react-markdown/matter-js，否则分包与预加载策略同时失效。`src/lib/motionPresets.ts` 体积极小，任意引用无妨。
 
 ### iOS 原生壳（Capacitor 8）
