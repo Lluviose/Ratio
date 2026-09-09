@@ -105,7 +105,7 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 ### 占比页展开面板（src/screens/AssetsRatioPage.tsx）
 
-点击色块 → `RatioExpandedPanel` 从色块矩形弹簧生长到整个图表区，内部是分类型分段占比。两个精密约定：
+点击色块 → `RatioExpandedPanel` 从色块矩形弹簧生长到整个图表区，内部是分类型分段占比。面板按目标尺寸一次排版，仅动画完整 `transform` 字符串，让 Motion 走浏览器 WAAPI；禁止回到逐帧改 width/height 或独立 x/y 的主线程几何动画。起始色块和标签是独立的原尺寸兄弟层，通过 opacity 衔接，确保端点不被缩放。iOS 遮罩只做染色，不在首次点击时捕获全屏 backdrop blur。两个精密约定：
 
 - 面板收起后的首尾帧靠 `BlockLabelReplica` 与底层色块**逐像素对齐**（字号/布局分档逻辑复制自 `OverlayBlockLabels`），这是「几何敏感」的原因。
 - 单一资产占满图表时，收起动画没有数值变化，framer 不触发 `onAnimationComplete`，靠 650ms 兜底定时器卸载面板——不要移除这个定时器。

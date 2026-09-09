@@ -14,6 +14,7 @@ import {
 import { isLightColor, pickForegroundColor } from '../lib/themes'
 import { useReducedMotion } from '../lib/useReducedMotion'
 import { useSafeAreaTop } from '../lib/safeArea'
+import { isNativeIos } from '../lib/nativePlatform'
 
 /** 占比图表区域距页面顶部的基准高度（不含安全区；与 AssetsScreen 的 ratioLayout
  * 共用同一公式：实际图表顶 = RATIO_CHART_TOP + 顶部安全区） */
@@ -251,24 +252,12 @@ function RatioExpandedPanel(props: {
   )
 
   const originGeom = {
-    x: origin.x,
-    y: origin.y,
-    width: origin.w,
-    height: origin.h,
-    borderTopLeftRadius: block.corner.tl,
-    borderTopRightRadius: block.corner.tr,
-    borderBottomLeftRadius: block.corner.bl,
-    borderBottomRightRadius: block.corner.br,
+    // A single transform can run through Motion's native WAAPI path. Separate
+    // x/y plus width/height require JS updates and layout on every frame.
+    transform: `translate(${origin.x}px, ${origin.y}px) scale(${origin.w / target.w}, ${origin.h / target.h})`,
   }
   const openGeom = {
-    x: target.x,
-    y: target.y,
-    width: target.w,
-    height: target.h,
-    borderTopLeftRadius: chartRadius,
-    borderTopRightRadius: chartRadius,
-    borderBottomLeftRadius: chartRadius,
-    borderBottomRightRadius: chartRadius,
+    transform: `translate(${target.x}px, ${target.y}px) scale(1, 1)`,
   }
 
   const panelTransition: Transition = reduceMotion
@@ -290,136 +279,153 @@ function RatioExpandedPanel(props: {
   }, [isOpen, onClosed, reduceMotion])
 
   return (
-    <motion.div
-      className="absolute left-0 top-0 z-40 overflow-hidden cursor-pointer"
-      style={{
-        background: block.tone,
-        boxShadow: '0 18px 44px -20px rgba(15, 23, 42, 0.38)',
-        touchAction: 'none',
-        pointerEvents: 'auto',
-        willChange: 'transform, width, height',
-      }}
-      initial={originGeom}
-      animate={isOpen ? openGeom : originGeom}
-      transition={panelTransition}
-      onAnimationComplete={handleAnimationComplete}
-      onClick={onRequestClose}
-      role="dialog"
-      aria-label={`${block.name}占比详情`}
-      data-testid="ratio-breakdown-panel"
-    >
-      {/* 展开态内容：按目标尺寸固定排版，随面板生长逐渐显现 */}
+    <>
       <motion.div
-        className="absolute left-0 top-0"
-        style={{ width: target.w, height: target.h }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isOpen ? 1 : 0 }}
-        transition={{
-          duration: reduceMotion ? 0 : isOpen ? 0.2 : 0.12,
-          delay: reduceMotion || !isOpen ? 0 : 0.05,
-          ease: 'linear',
+        className="absolute left-0 top-0 z-40 overflow-hidden cursor-pointer"
+        style={{
+          background: block.tone,
+          boxShadow: '0 18px 44px -20px rgba(15, 23, 42, 0.38)',
+          touchAction: 'none',
+          pointerEvents: 'auto',
+          width: target.w,
+          height: target.h,
+          borderRadius: chartRadius,
+          transformOrigin: '0 0',
+          contain: 'layout paint',
+          willChange: 'transform',
         }}
+        initial={originGeom}
+        animate={isOpen ? openGeom : originGeom}
+        transition={panelTransition}
+        onAnimationComplete={handleAnimationComplete}
+        onClick={onRequestClose}
+        role="dialog"
+        aria-label={`${block.name}占比详情`}
+        data-testid="ratio-breakdown-panel"
       >
+        {/* 固定目标尺寸，只在浏览器合成层变形；内容淡入与生长一起完成。 */}
         <motion.div
-          className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 px-5 pt-[18px]"
-          style={{ color: fg, height: PANEL_HEADER_HEIGHT }}
-          initial={reduceMotion ? false : { opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: reduceMotion ? 0 : 0.26, delay: reduceMotion ? 0 : 0.08, ease: expressiveEase }}
+          className="absolute left-0 top-0"
+          style={{ width: target.w, height: target.h }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: isOpen ? 1 : 0 }}
+          transition={{
+            duration: reduceMotion ? 0 : isOpen ? 0.2 : 0.12,
+            delay: reduceMotion || !isOpen ? 0 : 0.05,
+            ease: 'linear',
+          }}
         >
-          <div className="min-w-0">
-            <div className="text-[13px] font-medium" style={{ opacity: 0.85 }}>
-              {block.name}
+          <motion.div
+            className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 px-5 pt-[18px]"
+            style={{ color: fg, height: PANEL_HEADER_HEIGHT }}
+            initial={reduceMotion ? false : { opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: reduceMotion ? 0 : 0.26, delay: reduceMotion ? 0 : 0.08, ease: expressiveEase }}
+          >
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium" style={{ opacity: 0.85 }}>
+                {block.name}
+              </div>
+              <div
+                className="mt-0.5 text-[28px] font-semibold leading-tight"
+                style={{ letterSpacing: hideAmounts ? '0.28em' : '-0.02em' }}
+              >
+                {hideAmounts ? maskedText : formatCny(block.amount)}
+              </div>
+              <div className="mt-1 text-[11px] font-medium" style={{ opacity: 0.7 }}>
+                {hideAmounts
+                  ? maskedText
+                  : `${breakdown.length} 类 · ${accounts.length} 项${isDebt ? ' · 相当于资产的' : ' · 占资产的'} ${block.percent}%`}
+              </div>
             </div>
-            <div
-              className="mt-0.5 text-[28px] font-semibold leading-tight"
-              style={{ letterSpacing: hideAmounts ? '0.28em' : '-0.02em' }}
-            >
-              {hideAmounts ? maskedText : formatCny(block.amount)}
+            <div className="flex items-center gap-2 shrink-0">
+              <div
+                className="h-9 px-3 rounded-full text-[12px] font-semibold leading-none flex items-center"
+                style={{ background: fgSoftBg }}
+              >
+                {block.percent}%
+              </div>
+              <motion.button
+                type="button"
+                className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
+                style={{ background: fgSoftBg, color: fg }}
+                onPointerDown={(e) => {
+                  e.stopPropagation()
+                  onRequestClose()
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onRequestClose()
+                }}
+                whileTap={{ scale: 0.9 }}
+                aria-label="收起占比详情"
+              >
+                <X size={18} strokeWidth={2.5} />
+              </motion.button>
             </div>
-            <div className="mt-1 text-[11px] font-medium" style={{ opacity: 0.7 }}>
-              {hideAmounts
-                ? maskedText
-                : `${breakdown.length} 类 · ${accounts.length} 项${isDebt ? ' · 相当于资产的' : ' · 占资产的'} ${block.percent}%`}
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div
-              className="h-9 px-3 rounded-full text-[12px] font-semibold leading-none flex items-center"
-              style={{ background: fgSoftBg }}
-            >
-              {block.percent}%
-            </div>
-            <motion.button
-              type="button"
-              className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer"
-              style={{ background: fgSoftBg, color: fg }}
-              onPointerDown={(e) => {
-                e.stopPropagation()
-                onRequestClose()
-              }}
-              onClick={(e) => {
-                e.stopPropagation()
-                onRequestClose()
-              }}
-              whileTap={{ scale: 0.9 }}
-              aria-label="收起占比详情"
-            >
-              <X size={18} strokeWidth={2.5} />
-            </motion.button>
+          </motion.div>
+
+          <div
+            className="absolute flex flex-col"
+            style={{
+              top: PANEL_HEADER_HEIGHT,
+              left: SEGMENT_AREA_INSET_X,
+              right: SEGMENT_AREA_INSET_X,
+              bottom: SEGMENT_AREA_INSET_BOTTOM,
+              gap: SEGMENT_GAP,
+            }}
+          >
+            {breakdown.map((item, i) => {
+              const segmentHeight = segmentHeights[i] ?? 0
+              const segmentTone = toneScale[i] ?? block.tone
+              const TypeIcon = getIcon(item.type)
+              return (
+                <motion.div
+                  key={item.type}
+                  className="overflow-hidden shrink-0"
+                  style={{
+                    height: segmentHeight,
+                    background: segmentTone,
+                    color: pickForegroundColor(segmentTone),
+                    borderRadius: SEGMENT_RADIUS,
+                  }}
+                  initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={
+                    reduceMotion
+                      ? { duration: 0 }
+                      : { duration: 0.34, delay: 0.12 + i * 0.05, ease: expressiveEase }
+                  }
+                >
+                  <BreakdownSegmentContent
+                    item={item}
+                    height={segmentHeight}
+                    index={i}
+                    Icon={TypeIcon}
+                    hideAmounts={hideAmounts}
+                    animatePercent={!reduceMotion}
+                  />
+                </motion.div>
+              )
+            })}
           </div>
         </motion.div>
 
-        <div
-          className="absolute flex flex-col"
-          style={{
-            top: PANEL_HEADER_HEIGHT,
-            left: SEGMENT_AREA_INSET_X,
-            right: SEGMENT_AREA_INSET_X,
-            bottom: SEGMENT_AREA_INSET_BOTTOM,
-            gap: SEGMENT_GAP,
-          }}
-        >
-          {breakdown.map((item, i) => {
-            const segmentHeight = segmentHeights[i] ?? 0
-            const segmentTone = toneScale[i] ?? block.tone
-            const TypeIcon = getIcon(item.type)
-            return (
-              <motion.div
-                key={item.type}
-                className="overflow-hidden shrink-0"
-                style={{
-                  height: segmentHeight,
-                  background: segmentTone,
-                  color: pickForegroundColor(segmentTone),
-                  borderRadius: SEGMENT_RADIUS,
-                }}
-                initial={reduceMotion ? false : { opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={
-                  reduceMotion
-                    ? { duration: 0 }
-                    : { duration: 0.34, delay: 0.12 + i * 0.05, ease: expressiveEase }
-                }
-              >
-                <BreakdownSegmentContent
-                  item={item}
-                  height={segmentHeight}
-                  index={i}
-                  Icon={TypeIcon}
-                  hideAmounts={hideAmounts}
-                  animatePercent={!reduceMotion}
-                />
-              </motion.div>
-            )
-          })}
-        </div>
       </motion.div>
 
-      {/* 起始态标签复刻：面板收起到色块大小时与底下的色块标签逐像素对齐 */}
+      {/* 独立的起始色块复刻保持原始尺寸/圆角，文字不跟随面板缩放。
+          淡入淡出衔接两种几何；收起末帧仍与底层标签逐像素对齐。 */}
       <motion.div
-        className="absolute left-0 top-0 pointer-events-none"
-        style={{ width: origin.w, height: origin.h }}
+        className="absolute left-0 top-0 z-50 overflow-hidden pointer-events-none"
+        style={{
+          transform: `translate(${origin.x}px, ${origin.y}px)`,
+          width: origin.w,
+          height: origin.h,
+          background: block.tone,
+          borderRadius: `${block.corner.tl}px ${block.corner.tr}px ${block.corner.br}px ${block.corner.bl}px`,
+        }}
+        aria-hidden
+        data-testid="ratio-breakdown-origin"
         initial={{ opacity: 1 }}
         animate={{ opacity: isOpen ? 0 : 1 }}
         transition={{
@@ -436,7 +442,7 @@ function RatioExpandedPanel(props: {
           height={origin.h}
         />
       </motion.div>
-    </motion.div>
+    </>
   )
 }
 
@@ -561,8 +567,10 @@ export function AssetsRatioPage(props: {
             className="absolute inset-0 z-30"
             style={{
               background: 'rgb(var(--bg-rgb) / 0.62)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
+              // Avoid a full-screen backdrop capture on the first native tap.
+              // The expanding opaque panel covers the chart; tint provides separation.
+              backdropFilter: isNativeIos() ? 'none' : 'blur(10px)',
+              WebkitBackdropFilter: isNativeIos() ? 'none' : 'blur(10px)',
               touchAction: 'none',
               pointerEvents: 'auto',
             }}

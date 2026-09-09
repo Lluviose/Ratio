@@ -7,6 +7,9 @@ test.use({ serviceWorkers: 'block' })
 const accounts = [
   { id: 'e2e-bank', type: 'bank_card', name: 'Salary Card', balance: 8000, updatedAt: '2026-06-08T00:00:00.000Z' },
   { id: 'e2e-cash', type: 'cash', name: 'Wallet Cash', balance: 2000, updatedAt: '2026-06-08T00:00:00.000Z' },
+  // A second category ensures expansion actually changes geometry (the single
+  // full-size category's no-motion close fallback is covered by the unit test).
+  { id: 'e2e-fund', type: 'fund', name: 'Index Fund', balance: 5000, updatedAt: '2026-06-08T00:00:00.000Z' },
 ]
 
 async function seedApp(page: Page) {
@@ -29,11 +32,11 @@ async function seedApp(page: Page) {
         {
           date: '2026-06-08',
           cash: 10000,
-          invest: 0,
+          invest: 5000,
           fixed: 0,
           receivable: 0,
           debt: 0,
-          net: 10000,
+          net: 15000,
         },
       ]),
     )
@@ -126,4 +129,38 @@ test('closes the breakdown when tapping the scrim or leaving the ratio page', as
     el.dispatchEvent(new Event('scroll', { bubbles: true }))
   })
   await expect.poll(() => panel.count(), { timeout: 10_000 }).toBe(0)
+})
+
+test('first expansion uses native transforms without changing layout size', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await gotoRatioPage(page)
+  await page.getByRole('button', { name: '展开流动资金占比详情' }).click()
+  const panel = page.getByTestId('ratio-breakdown-panel')
+  await expect(panel).toBeVisible()
+  const sampled = await panel.evaluate(async (element) => {
+    const node = element as HTMLElement
+    const sizes: string[] = []
+    const properties = new Set<string>()
+    for (let frame = 0; frame < 12; frame++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      sizes.push(`${node.offsetWidth}x${node.offsetHeight}`)
+      for (const animation of node.getAnimations()) {
+        const effect = animation.effect as KeyframeEffect
+        for (const keyframe of effect.getKeyframes()) {
+          for (const key of Object.keys(keyframe)) properties.add(key)
+        }
+      }
+    }
+    return { sizes: [...new Set(sizes)], properties: [...properties] }
+  })
+  expect(sampled.sizes).toHaveLength(1)
+  expect(sampled.properties).toContain('transform')
+  expect(sampled.properties).not.toContain('width')
+  expect(sampled.properties).not.toContain('height')
+
+  // Close before the spring has necessarily settled: no jump to the fully-open
+  // rectangle, and both the panel and the unscaled source replica must be removed.
+  await panel.getByRole('button', { name: '收起占比详情' }).dispatchEvent('click')
+  await expect.poll(() => panel.count()).toBe(0)
+  await expect(page.getByTestId('ratio-breakdown-origin')).toHaveCount(0)
 })

@@ -89,6 +89,34 @@ describe('AssetsRatioPage', () => {
     expect(screen.getAllByText('*****').length).toBeGreaterThan(0)
   })
 
+  it('lays out the panel once at its target size and keeps the source label unscaled', () => {
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: '展开流动资金占比详情' }))
+    const panel = screen.getByTestId('ratio-breakdown-panel')
+    const origin = screen.getByTestId('ratio-breakdown-origin')
+    expect(panel.style.width).toBe('390px')
+    expect(panel.style.height).toBe('636px')
+    expect(panel.style.transformOrigin).toBe('0 0')
+    expect(origin.parentElement).toBe(panel.parentElement)
+    expect(origin.style.width).toBe('296px')
+    expect(origin.style.height).toBe('368px')
+    expect(origin.style.transform).toBe('translate(94px, 64px)')
+    expect(origin.style.borderRadius).toBe('0px 32px 0px 0px')
+  })
+
+  it('still unmounts when a single block already fills the expanded geometry', async () => {
+    renderPage({
+      blocks: [{
+        ...blocks[0], rect: { x: 0, y: 64, w: 390, h: 636 }, displayHeight: 636,
+        corner: { tl: 32, tr: 32, bl: 32, br: 32 },
+      }],
+    })
+    fireEvent.click(screen.getByRole('button', { name: '展开流动资金占比详情' }))
+    fireEvent.click(screen.getByRole('button', { name: '收起占比详情' }))
+    await waitFor(() => expect(screen.queryByTestId('ratio-breakdown-panel')).not.toBeInTheDocument(), { timeout: 2000 })
+    expect(screen.queryByTestId('ratio-breakdown-origin')).not.toBeInTheDocument()
+  })
+
   it('collapses the panel via the close button', async () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: '展开流动资金占比详情' }))

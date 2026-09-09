@@ -215,7 +215,7 @@
 - 用 `POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun-failed-jobs` 重跑失败的 deploy job（或在 Actions 页面点 Re-run failed jobs）即可，无需改动工作流。
 - 若未来失败率明显升高再考虑在 deploy job 里加自动重试循环；当前保持简单。
 
-## iOS PWA 首开：占比页展开动画丢帧/跳帧
+## 占比详情首开：启动预热期间展开动画丢帧/跳帧
 
 现象：
 
@@ -223,9 +223,11 @@
 
 原因：
 
-- 首开后台会预热懒加载分包（趋势/统计/设置/AI，共 700KB+ 原始体积），`requestIdleCallback` 只知道「当前帧有空闲」，不知道一个手势驱动的动画正要开始——用户点开详情的瞬间恰是 rIC 眼里的空闲点，此时解析 300KB+ 脚本会阻塞主线程数百毫秒，而展开动画按几何约束只能动 x/y/width/height（JS rAF 驱动，主线程受阻即跳帧）。访问过趋势/统计后分包已解析完毕，故恢复流畅。
+- 首开后台会预热懒加载分包（趋势/统计/设置/AI，共 700KB+ 原始体积），`requestIdleCallback` 只知道「当前帧有空闲」，不知道一个手势驱动的动画正要开始——用户点开详情的瞬间恰是 rIC 眼里的空闲点，此时解析 300KB+ 脚本会阻塞主线程数百毫秒，而旧版展开动画逐帧修改 x/y/width/height（JS rAF 驱动，主线程受阻即跳帧）。访问过趋势/统计后分包已解析完毕，故恢复流畅。
 
-处理（Web/PWA 的 `src/App.tsx` → `scheduleBackgroundTabPreloads`）：
+当前动画修复（`AssetsRatioPage.tsx`）：面板固定目标宽高，使用完整 transform 字符串的位移/缩放弹簧，交由 Motion 的 WAAPI 路径播放；起始色块/标签单独保留原几何并淡入淡出，避免末帧文字缩放。iOS 的遮罩使用染色，避免首次模糊捕获开销。保留原生立即预热、减弱动态和 650ms 收起兜底。普通浏览器 e2e 检查首次展开期间布局尺寸恒定且存在原生 transform 动画，实际 iOS 帧率仍需真机验证。
+
+Web/PWA 的额外措施（`src/App.tsx` → `scheduleBackgroundTabPreloads`）：
 
 iOS 原生壳现按性能优先策略，在 `main.tsx` 中立即并行预热本地分包，取消本节的等待门控；Web/PWA 仍保留以下策略。
 
