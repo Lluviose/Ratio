@@ -11,7 +11,7 @@ import {
   type MoneyExpressionOperator,
 } from '../lib/moneyExpression'
 import { type Account, type AccountTypeId, getAccountTypeOption } from '../lib/accounts'
-import { formatDateKey, isItemAccountType, normalizeStoredDateKey, todayDateKey } from '../lib/accountCost'
+import { formatDateKey, isItemAccountType, normalizeStoredDateKey, todayDateKey, dateKeyFromTimestamp, findItemOpenedByTransfer, companionOpIdsForItem } from '../lib/accountCost'
 import { hapticSuccess } from '../lib/haptics'
 import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
 import { buildLatestSetBalanceAtMap, buildOpRollbackPlan, canRollbackBalance } from '../lib/opRollback'
@@ -450,6 +450,7 @@ export function AccountDetailSheet(props: {
   const editingRevalueOp = editingOp?.kind === 'revalue' ? editingOp : null
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
   const isItem = isItemAccountType(account.type)
+  const archivedDateKey = account.archivedAt ? dateKeyFromTimestamp(account.archivedAt) : undefined
   const balanceWord = isItem ? '净值' : '余额'
   const nextNote = normalizeNoteValue(noteValue)
 
@@ -1105,28 +1106,42 @@ export function AccountDetailSheet(props: {
       latestSetBalanceAtByAccountId,
       getAccountBalance: (id) => byId.get(id)?.balance,
     })
+    const openedItem = findItemOpenedByTransfer(op, accounts, ops)
+    const peerRollback = openedItem
+      ? rollbackTargets.find((t) => t.accountId !== openedItem.id)
+      : undefined
+    const willDeleteItem = Boolean(
+      openedItem && (!peerRollback || peerRollback.canRollback || peerRollback.delta === 0),
+    )
 
     const affectedCount = rollbackTargets.length
-    const willRollback = rollbackTargets.filter((t) => t.canRollback && t.delta !== 0)
+    const willRollback = rollbackTargets.filter((t) => {
+      if (willDeleteItem && openedItem && t.accountId === openedItem.id) return false
+      return t.canRollback && t.delta !== 0
+    })
     const willRollbackCount = willRollback.length
 
     const noRollbackHint =
-      affectedCount > 1
+      affectedCount > 1 && !willDeleteItem
         ? `；其中部分账户${balanceWord}不变（后续校准或${balanceWord}不足）`
         : `；${balanceWord}不变（后续校准或${balanceWord}不足）`
 
     const rollbackSummary =
       op.kind === 'set_cost'
         ? '只删除这条原值记录，当前原值与净值都不变'
-        : willRollbackCount > 0
-          ? `将回滚：${willRollback.map((t) => `${getAccountName(t.accountId)} ${formatSigned(t.delta)}`).join('；')}${
-              willRollbackCount < affectedCount ? noRollbackHint : ''
-            }`
-          : `${balanceWord}不会变化（后续校准或${balanceWord}不足）`
+        : willDeleteItem && openedItem
+          ? `${willRollbackCount > 0 ? `将回滚：${willRollback.map((t) => `${getAccountName(t.accountId)} ${formatSigned(t.delta)}`).join('；')}；` : ''}「${openedItem.name}」由这笔转入创建，将一并删除`
+          : willRollbackCount > 0
+            ? `将回滚：${willRollback.map((t) => `${getAccountName(t.accountId)} ${formatSigned(t.delta)}`).join('；')}${
+                willRollbackCount < affectedCount ? noRollbackHint : ''
+              }`
+            : `${balanceWord}不会变化（后续校准或${balanceWord}不足）`
 
     const confirmTitle =
       op.kind === 'transfer'
-        ? '删除这条转账记录？'
+        ? willDeleteItem
+          ? '删除这笔购入？'
+          : '删除这条转账记录？'
         : op.kind === 'set_balance'
           ? `删除这条修改${balanceWord}记录？`
           : op.kind === 'adjust'
@@ -1140,7 +1155,13 @@ export function AccountDetailSheet(props: {
     const ok = await confirm({
       title: confirmTitle,
       message: `${title}（${formatTime(op.at)}）；${rollbackSummary}`,
-      confirmText: willRollbackCount > 0 ? '删除并回滚' : '仅删除记录',
+      confirmText: willDeleteItem
+        ? willRollbackCount > 0
+          ? '删除物品并回滚'
+          : '删除记录和物品'
+        : willRollbackCount > 0
+          ? '删除并回滚'
+          : '仅删除记录',
       cancelText: '取消',
       tone: 'danger',
     })
@@ -1148,25 +1169,37 @@ export function AccountDetailSheet(props: {
 
     const rolledBackAccountIds: string[] = []
     for (const t of rollbackTargets) {
+      if (willDeleteItem && openedItem && t.accountId === openedItem.id) continue
       if (!t.canRollback) continue
       if (t.delta === 0) continue
       onAdjust(t.accountId, t.delta)
       rolledBackAccountIds.push(t.accountId)
     }
 
+    if (willDeleteItem && openedItem) {
+      for (const id of companionOpIdsForItem(ops, openedItem.id, op.id)) onDeleteOp(id)
+    }
     onDeleteOp(op.id)
+    if (willDeleteItem && openedItem) {
+      onDelete(openedItem.id)
+      if (openedItem.id === account.id) onClose()
+    }
     setSwipedOpId(null)
 
     const rolledBackCount = rolledBackAccountIds.length
     const toastMessage =
-      rolledBackCount === 0
-        ? op.kind === 'set_cost'
-          ? '已删除记录'
-          : `已删除记录（${balanceWord}未变）`
-        : rolledBackCount === affectedCount
-          ? `已删除并回滚${balanceWord}`
-          : `已删除，已回滚部分${balanceWord}`
-    const tone = rolledBackCount === 0 ? 'neutral' : 'success'
+      willDeleteItem && openedItem
+        ? rolledBackCount > 0
+          ? `已删除「${openedItem.name}」并回滚`
+          : `已删除「${openedItem.name}」`
+        : rolledBackCount === 0
+          ? op.kind === 'set_cost'
+            ? '已删除记录'
+            : `已删除记录（${balanceWord}未变）`
+          : rolledBackCount === affectedCount
+            ? `已删除并回滚${balanceWord}`
+            : `已删除，已回滚部分${balanceWord}`
+    const tone = willDeleteItem || rolledBackCount > 0 ? 'success' : 'neutral'
     toast(toastMessage, { tone })
   }
 
@@ -1420,7 +1453,7 @@ export function AccountDetailSheet(props: {
                       <div className="min-w-0">
                         <div className="text-[13px] font-semibold text-slate-900">已归档</div>
                         <div className="text-[11px] font-medium text-slate-400 truncate">
-                          {formatDateKey(account.archivedAt.slice(0, 10))} · 不计入资产与统计
+                          {archivedDateKey ? `${formatDateKey(archivedDateKey)} · ` : ''}不计入资产与统计
                         </div>
                       </div>
                     </div>

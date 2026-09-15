@@ -1,5 +1,6 @@
 import { getGroupIdByAccountType, type Account, type AccountTypeId } from './accounts'
-import { addMoney, normalizeMoney, subtractMoney } from './money'
+import type { AccountOp } from './accountOps'
+import { addMoney, moneyEquals, normalizeMoney, subtractMoney } from './money'
 
 // 「物品」= 固定资产分组下的账户条目：balance 是账面净值，cost 是购入原值。
 // 会计口径：账面净值 = 原值 − 累计减值；净值高于原值时为增值（如房产升值），不做拦截。
@@ -88,4 +89,59 @@ export function formatDateKey(key: string): string {
 export function todayDateKey(now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+// ISO / 可解析时间戳 → 本地日历日。展示归档时刻必须走这里，不能 slice(0,10)（那是 UTC 日）。
+export function dateKeyFromTimestamp(value: string): string | undefined {
+  const ms = Date.parse(value)
+  if (!Number.isFinite(ms)) return undefined
+  return todayDateKey(new Date(ms))
+}
+
+function hasOtherMoneyHistory(ops: readonly AccountOp[], itemId: string, exceptOpId: string): boolean {
+  return ops.some((op) => {
+    if (op.id === exceptOpId) return false
+    if (op.kind === 'rename' || op.kind === 'set_cost') return false
+    if (op.kind === 'transfer') return op.fromId === itemId || op.toId === itemId
+    return op.accountId === itemId
+  })
+}
+
+// 这笔转账是物品的开户转入（新建并转入，或先建 0 净值再转入）且没有后续金额历史时，
+// 删除转账应连物品一起删，避免留下 0 净值幽灵条目。
+export function findItemOpenedByTransfer(
+  op: AccountOp,
+  accounts: readonly Account[],
+  ops: readonly AccountOp[],
+): Account | null {
+  if (op.kind !== 'transfer') return null
+
+  const sides: Array<{ id: string; before: number; after: number }> = []
+  if (moneyEquals(op.toBefore, 0)) sides.push({ id: op.toId, before: op.toBefore, after: op.toAfter })
+  if (op.fromId !== op.toId && moneyEquals(op.fromBefore, 0)) {
+    sides.push({ id: op.fromId, before: op.fromBefore, after: op.fromAfter })
+  }
+
+  for (const side of sides) {
+    const account = accounts.find((item) => item.id === side.id)
+    if (!account || account.archivedAt || !isItemAccountType(account.type)) continue
+    if (hasOtherMoneyHistory(ops, account.id, op.id)) continue
+    if (!moneyEquals(account.balance, 0) && !moneyEquals(account.balance, side.after)) continue
+    return account
+  }
+
+  return null
+}
+
+export function companionOpIdsForItem(
+  ops: readonly AccountOp[],
+  itemId: string,
+  exceptOpId: string,
+): string[] {
+  const ids: string[] = []
+  for (const op of ops) {
+    if (op.id === exceptOpId || op.kind === 'transfer') continue
+    if (op.accountId === itemId) ids.push(op.id)
+  }
+  return ids
 }

@@ -68,6 +68,42 @@ describe('物品详情完整写路径', () => {
     expect(storedOps().map((op) => op.kind).sort()).toEqual(['set_cost', 'transfer'])
   })
 
+  it('删除新建并转入的转账时连物品和原值记录一起删，银行卡回滚', async () => {
+    render(<Harness id="bank" />)
+    openTransfer()
+    fireEvent.change(await screen.findByLabelText('对方账户'), { target: { value: '__new_item__' } })
+    fireEvent.change(await screen.findByLabelText('new item name'), { target: { value: '镜头' } })
+    fireEvent.change(screen.getByLabelText('transfer amount'), { target: { value: '1500' } })
+    fireEvent.click(screen.getByRole('button', { name: '新建并转入' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.name === '镜头')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: '删除记录' }))
+    fireEvent.click(await screen.findByRole('button', { name: '删除物品并回滚' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.name === '镜头')).toBeUndefined())
+    expect(storedAccounts().find((a) => a.id === bank.id)?.balance).toBe(5000)
+    expect(storedAccounts().find((a) => a.id === item.id)).toMatchObject({ balance: 2000, cost: 3000 })
+    expect(storedOps()).toEqual([])
+  })
+
+  it('删除转入已有物品的转账只回滚金额，不删物品', async () => {
+    localStorage.setItem('ratio.accountOps', JSON.stringify([{
+      id: 'sale', kind: 'transfer', accountType: 'bank_card', at: '2026-09-14T00:00:00.000Z',
+      fromId: bank.id, toId: item.id, amount: 200, fromBefore: 5200, fromAfter: 5000, toBefore: 1800, toAfter: 2000,
+    }]))
+    render(<Harness id="bank" />)
+    fireEvent.click(screen.getByRole('button', { name: '删除记录' }))
+    fireEvent.click(await screen.findByRole('button', { name: '删除并回滚' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.id === bank.id)?.balance).toBe(5200))
+    expect(storedAccounts().find((a) => a.id === item.id)).toMatchObject({ balance: 1800, cost: 3000 })
+    expect(storedOps()).toEqual([])
+  })
+
+  it('归档日期按本地日历展示', async () => {
+    const archivedAt = new Date(2026, 8, 14, 21, 0, 0).toISOString()
+    localStorage.setItem('ratio.accounts', JSON.stringify([bank, { ...item, archivedAt }]))
+    render(<Harness id="item" />)
+    expect(await screen.findByText(/2026年9月14日/)).toBeInTheDocument()
+  })
+
   it.each(['保留', '归档物品'])('全部转出后选择%s，原值和历史保持完整', async (choice) => {
     render(<Harness id="item" />)
     openTransfer()

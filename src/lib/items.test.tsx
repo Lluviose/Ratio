@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Account } from './accounts'
 import { useAccounts } from './useAccounts'
-import { normalizeStoredDateKey, summarizeItemValue, summarizeItemValueTotals } from './accountCost'
+import { normalizeStoredDateKey, summarizeItemValue, summarizeItemValueTotals, todayDateKey, dateKeyFromTimestamp, findItemOpenedByTransfer, companionOpIdsForItem } from './accountCost'
 import { buildSnapshot } from './snapshots'
 import { buildAiFinancialContext } from './ai'
 import { coerceStoredAccountOps } from './accountOpsStorage'
@@ -81,6 +81,58 @@ describe('物品金额、归档与持久化', () => {
     expect(summarizeItemValueTotals([item, { ...item, id: 'archived', archivedAt: '2026-09-01' }, { ...item, id: 'old', cost: undefined }])).toEqual({ counted: 1, cost: 3000, net: 2000, impairment: 1000 })
     expect(normalizeStoredDateKey('2026-02-30')).toBeUndefined()
     expect(normalizeStoredDateKey('2024-02-29')).toBe('2024-02-29')
+  })
+
+  it('ISO 时间戳转本地日历日，不切片 UTC', () => {
+    const local = new Date(2026, 8, 14, 21, 0, 0)
+    const iso = local.toISOString()
+    expect(dateKeyFromTimestamp(iso)).toBe('2026-09-14')
+    expect(dateKeyFromTimestamp(iso)).toBe(todayDateKey(local))
+    expect(dateKeyFromTimestamp('not-a-date')).toBeUndefined()
+    expect(dateKeyFromTimestamp('2026-09-15T00:30:00.000Z')).toBe(todayDateKey(new Date('2026-09-15T00:30:00.000Z')))
+  })
+
+  it('新建并转入的开户转账可识别，有后续金额历史则不删物品', () => {
+    const opened: Account = { ...item, balance: 1500, cost: 1500 }
+    const purchase = {
+      id: 'buy',
+      kind: 'transfer' as const,
+      accountType: 'bank_card' as const,
+      at: '2026-09-15T00:00:00.000Z',
+      fromId: bank.id,
+      toId: opened.id,
+      amount: 1500,
+      fromBefore: 5000,
+      fromAfter: 3500,
+      toBefore: 0,
+      toAfter: 1500,
+    }
+    const costOp = {
+      id: 'cost',
+      kind: 'set_cost' as const,
+      accountId: opened.id,
+      accountType: opened.type,
+      at: '2026-09-15T00:00:00.000Z',
+      before: null,
+      after: 1500,
+    }
+    expect(findItemOpenedByTransfer(purchase, [bank, opened], [costOp, purchase])).toMatchObject({ id: opened.id })
+    expect(companionOpIdsForItem([costOp, purchase], opened.id, purchase.id)).toEqual(['cost'])
+    expect(findItemOpenedByTransfer(purchase, [bank, { ...opened, archivedAt: '2026-09-15T00:00:00.000Z' }], [costOp, purchase])).toBeNull()
+    expect(
+      findItemOpenedByTransfer(purchase, [bank, opened], [
+        costOp,
+        purchase,
+        { id: 'loss', kind: 'revalue', accountId: opened.id, accountType: opened.type, at: '2026-09-16T00:00:00.000Z', before: 1500, after: 1200, delta: -300 },
+      ]),
+    ).toBeNull()
+    expect(
+      findItemOpenedByTransfer(
+        { ...purchase, id: 'later', toBefore: 1500, toAfter: 1800, amount: 300, fromBefore: 3500, fromAfter: 3200 },
+        [bank, { ...opened, balance: 1800 }],
+        [purchase, { ...purchase, id: 'later', toBefore: 1500, toAfter: 1800, amount: 300, fromBefore: 3500, fromAfter: 3200 }],
+      ),
+    ).toBeNull()
   })
 
   it('原值和减值操作保留在备份中；减值回滚尊重后续余额校准', () => {
