@@ -388,7 +388,9 @@ export function AddAccountScreen(props: {
               paddingBottom: 'var(--safe-bottom)',
               paddingLeft: 'var(--safe-left)',
             }}
-            onClick={() => setSelectedType(null)}
+            // 命名弹层短，点下方空白关闭；物品表单更长，空白看起来像表单本身，
+            // 点一下（尤其是收起键盘）不该退出。
+            onClick={selectedIsItem ? undefined : () => setSelectedType(null)}
           >
             <motion.div
               className="w-full max-w-md mx-auto bg-[var(--card)] rounded-b-[28px] p-6 pb-8"
@@ -455,7 +457,11 @@ export function AddAccountScreen(props: {
               )}
             </motion.div>
 
-            <div className="flex-1 bg-white" />
+            <div
+              className="flex-1 bg-white"
+              data-testid="add-sheet-blank"
+              onClick={selectedIsItem ? (e) => e.stopPropagation() : undefined}
+            />
           </motion.div>
         )}
       </AnimatePresence>
