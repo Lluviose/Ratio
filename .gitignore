@@ -33,3 +33,5 @@ test-results
 
 # Local agent working files (planning scripts, logs)
 .codex/
+.playwright-cli/
+output/

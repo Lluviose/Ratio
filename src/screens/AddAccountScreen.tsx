@@ -1,7 +1,11 @@
-import { useState } from 'react'
-import { Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useId, useState } from 'react'
+import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, PackagePlus } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { accountGroups, accountTypeOptions, defaultAccountName, type AccountTypeId, type AccountGroupId } from '../lib/accounts'
+import { formatRatioPercent, normalizeStoredDateKey, summarizeItemValue, todayDateKey } from '../lib/accountCost'
+import { formatCny } from '../lib/format'
+import { normalizeMoney } from '../lib/money'
+import { exitEase, staggerDelay, standardEase } from '../lib/motionPresets'
 import { pickForegroundColor, type ThemeColors } from '../lib/themes'
 
 function withAlpha(color: string, alpha: number): string {
@@ -30,12 +34,207 @@ function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
+export type NewItemInput = {
+  type: AccountTypeId
+  name?: string
+  cost: number
+  net: number
+  acquiredAt?: string
+}
+
+const amountInputProps = { inputMode: 'decimal', enterKeyHint: 'done', autoComplete: 'off' } as const
+
+function parseAmount(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const parsed = Number(trimmed)
+  if (!Number.isFinite(parsed) || parsed < 0) return null
+  return normalizeMoney(parsed)
+}
+
+// 固定资产分组：新增的是「物品」——原值必填、净值缺省等于原值、购入日期缺省今天。
+function ItemForm(props: { type: AccountTypeId; tone: string; onCancel: () => void; onSubmit: (input: NewItemInput) => void }) {
+  const { type, tone, onCancel, onSubmit } = props
+  const [name, setName] = useState('')
+  const [cost, setCost] = useState('')
+  const [net, setNet] = useState('')
+  const [netTouched, setNetTouched] = useState(false)
+  const [acquiredAt, setAcquiredAt] = useState(() => todayDateKey())
+  const uid = useId()
+
+  const costValue = parseAmount(cost)
+  const hasCost = costValue != null && costValue > 0
+  const netValue = netTouched && net.trim() !== '' ? parseAmount(net) : costValue
+  const netValid = netValue != null
+  const dateValid = !acquiredAt || (Boolean(normalizeStoredDateKey(acquiredAt)) && acquiredAt <= todayDateKey())
+  const canSubmit = hasCost && netValid && dateValid
+  const preview = hasCost && netValid ? summarizeItemValue(costValue, netValue) : null
+  const fieldClass =
+    'w-full px-4 py-3.5 rounded-2xl bg-[var(--bg)] border border-[var(--hairline)] text-[var(--text)] font-bold text-[16px] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all'
+
+  const submit = () => {
+    if (!canSubmit || costValue == null || netValue == null) return
+    onSubmit({ type, name, cost: costValue, net: netValue, acquiredAt: acquiredAt || undefined })
+  }
+
+  const rows = [
+    <label key="name" htmlFor={`${uid}-name`} className="block">
+      <div className="mb-1.5 text-[11px] font-bold text-[var(--muted-text)]">名称</div>
+      <input
+        id={`${uid}-name`}
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={`${defaultAccountName(type)}，如：家用车`}
+        className={fieldClass}
+        autoFocus
+      />
+    </label>,
+    <label key="cost" htmlFor={`${uid}-cost`} className="block">
+      <div className="mb-1.5 text-[11px] font-bold text-[var(--muted-text)]">原值（购入价格）</div>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-black text-[var(--muted-text)]">¥</span>
+        <input
+          id={`${uid}-cost`}
+          {...amountInputProps}
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          placeholder="0"
+          className={`${fieldClass} pl-9`}
+          aria-label="item cost"
+        />
+      </div>
+    </label>,
+    <label key="net" htmlFor={`${uid}-net`} className="block">
+      <div className="mb-1.5 flex items-center justify-between text-[11px] font-bold text-[var(--muted-text)]">
+        <span>当前净值</span>
+        <span className="font-semibold">{netTouched && net.trim() ? '' : '留空 = 与原值相同'}</span>
+      </div>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-black text-[var(--muted-text)]">¥</span>
+        <input
+          id={`${uid}-net`}
+          {...amountInputProps}
+          value={net}
+          onChange={(e) => {
+            setNetTouched(true)
+            setNet(e.target.value)
+          }}
+          placeholder={hasCost ? String(costValue) : '与原值相同'}
+          className={`${fieldClass} pl-9`}
+          aria-label="item net value"
+        />
+      </div>
+    </label>,
+    <label key="date" htmlFor={`${uid}-date`} className="block">
+      <div className="mb-1.5 text-[11px] font-bold text-[var(--muted-text)]">购入日期</div>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted-text)]">
+          <CalendarDays size={16} strokeWidth={2.4} />
+        </span>
+        <input
+          id={`${uid}-date`}
+          type="date"
+          value={acquiredAt}
+          max={todayDateKey()}
+          onChange={(e) => setAcquiredAt(e.target.value)}
+          className={`${fieldClass} pl-11`}
+          aria-label="item acquired date"
+        />
+      </div>
+    </label>,
+  ]
+
+  return (
+    <div>
+      <motion.div
+        className="mb-5 flex items-center gap-3"
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.26, delay: 0.08, ease: standardEase }}
+      >
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm"
+          style={{ background: tone, color: pickForegroundColor(tone) }}
+        >
+          <PackagePlus size={20} strokeWidth={2.5} />
+        </span>
+        <div className="min-w-0">
+          <div className="text-lg font-bold text-[var(--text)]">添加物品 · {defaultAccountName(type)}</div>
+          <div className="mt-0.5 text-[12px] text-[var(--muted-text)]">记下原值，之后每次减值都能看到还剩几成</div>
+        </div>
+      </motion.div>
+
+      <div className="flex flex-col gap-3.5">
+        {rows.map((row, i) => (
+          <motion.div
+            key={row.key}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: staggerDelay(i, 0.05, 0.12), ease: standardEase }}
+          >
+            {row}
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="mt-3 min-h-[18px] text-[11px] font-semibold text-[var(--muted-text)]">
+        <AnimatePresence mode="wait" initial={false}>
+          {preview ? (
+            <motion.div
+              key={`${preview.impairment < 0 ? 'gain' : 'loss'}-${Math.round(preview.impairment)}`}
+              initial={{ opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, transition: { duration: 0.1, ease: exitEase } }}
+              transition={{ duration: 0.16, ease: standardEase }}
+            >
+              {preview.impairment === 0
+                ? `净值 ${formatCny(preview.net)}，暂无减值`
+                : `净值 ${formatCny(preview.net)} · ${preview.impairment < 0 ? '增值' : '已减值'} ${formatCny(Math.abs(preview.impairment))}（${formatRatioPercent(preview.impairmentRatio)}）`}
+            </motion.div>
+          ) : (
+            <motion.div key="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              原值只用于计算减值，不影响资产合计；资产合计按净值
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <div className="flex gap-3 mt-5">
+        <motion.button
+          type="button"
+          className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-bold"
+          onClick={onCancel}
+          whileTap={{ scale: 0.98 }}
+        >
+          取消
+        </motion.button>
+        <motion.button
+          type="button"
+          className={`flex-1 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-colors ${
+            canSubmit ? 'bg-[var(--primary)] text-[var(--primary-contrast)]' : 'bg-slate-200 text-slate-400'
+          }`}
+          onClick={submit}
+          disabled={!canSubmit}
+          whileTap={{ scale: canSubmit ? 0.98 : 1 }}
+          aria-label="confirm add item"
+        >
+          <Check size={18} strokeWidth={3} />
+          添加物品
+        </motion.button>
+      </div>
+    </div>
+  )
+}
+
 export function AddAccountScreen(props: {
   onBack: () => void
   onPick: (type: AccountTypeId, customName?: string) => void
+  // 固定资产分组走「添加物品」；未提供时退回普通命名流程
+  onPickItem?: (input: NewItemInput) => void
   colors: ThemeColors
 }) {
-  const { onBack, onPick, colors } = props
+  const { onBack, onPick, onPickItem, colors } = props
   const [expandedGroup, setExpandedGroup] = useState<AccountGroupId | null>(null)
   const [selectedType, setSelectedType] = useState<AccountTypeId | null>(null)
   const [customName, setCustomName] = useState('')
@@ -48,12 +247,15 @@ export function AddAccountScreen(props: {
     debt: accountTypeOptions.filter((t) => t.groupId === 'debt'),
   } as const
 
+  const selectedIsItem = Boolean(selectedType && onPickItem && accountTypeOptions.find((t) => t.id === selectedType)?.groupId === 'fixed')
+
   const renderGroup = (groupId: AccountGroupId, index: number) => {
     const group = accountGroups[groupId]
     const items = grouped[groupId]
     const tone = colors[groupId]
     const isExpanded = expandedGroup === groupId
     const cardBg = isExpanded ? withAlpha(tone, 0.18) : 'var(--card)'
+    const isItemGroup = groupId === 'fixed' && Boolean(onPickItem)
 
     return (
       <motion.div
@@ -84,7 +286,7 @@ export function AddAccountScreen(props: {
                   {group.name}
                 </div>
                 <div className="mt-1 text-[11px] font-medium text-[var(--muted-text)]">
-                  {items.length} 项
+                  {isItemGroup ? `按物品记录 · 原值与减值 · ${items.length} 类` : `${items.length} 项`}
                 </div>
               </div>
             </div>
@@ -149,10 +351,10 @@ export function AddAccountScreen(props: {
   return (
     <div className="h-full overflow-auto bg-[var(--bg)]">
       <div className="sticky top-0 z-10 bg-[var(--bg)]/90 backdrop-blur-md border-b border-[var(--hairline)] px-4 pb-3 pt-[calc(var(--safe-top)+12px)] flex items-center justify-between">
-          <motion.button 
-            type="button" 
+          <motion.button
+            type="button"
             className="w-10 h-10 rounded-full bg-[var(--card)] border border-[var(--hairline)] flex items-center justify-center text-[var(--text)] shadow-sm"
-            onClick={onBack} 
+            onClick={onBack}
             aria-label="back"
             whileTap={{ scale: 0.9 }}
             whileHover={{ scale: 1.05 }}
@@ -196,50 +398,61 @@ export function AddAccountScreen(props: {
               exit={{ y: '-100%', transition: { type: 'tween', duration: 0.22, ease: [0.4, 0, 1, 1] } }}
               transition={{ type: 'spring', stiffness: 420, damping: 40, mass: 0.95 }}
             >
-              <motion.div
-                className="text-center mb-6"
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.26, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <div className="text-lg font-bold text-[var(--text)]">
-                  为"{defaultAccountName(selectedType)}"命名
-                </div>
-                <div className="text-sm text-[var(--muted-text)] mt-1">
-                  输入自定义名称，如：交通银行、支付宝等
-                </div>
-              </motion.div>
-              
-              <input
-                type="text"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                placeholder={defaultAccountName(selectedType)}
-                className="w-full px-4 py-4 rounded-2xl bg-[var(--bg)] border border-[var(--hairline)] text-[var(--text)] font-bold text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
-                autoFocus
-              />
-              
-              <div className="flex gap-3 mt-6">
-                <motion.button
-                  type="button"
-                  className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-bold"
-                  onClick={() => setSelectedType(null)}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  取消
-                </motion.button>
-                <motion.button
-                  type="button"
-                  className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-bold flex items-center justify-center gap-2"
-                  onClick={() => {
-                    onPick(selectedType, customName)
-                  }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  <Check size={18} strokeWidth={3} />
-                  确认
-                </motion.button>
-              </div>
+              {selectedIsItem && onPickItem ? (
+                <ItemForm
+                  type={selectedType}
+                  tone={colors.fixed}
+                  onCancel={() => setSelectedType(null)}
+                  onSubmit={(input) => onPickItem(input)}
+                />
+              ) : (
+                <>
+                  <motion.div
+                    className="text-center mb-6"
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.26, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    <div className="text-lg font-bold text-[var(--text)]">
+                      为"{defaultAccountName(selectedType)}"命名
+                    </div>
+                    <div className="text-sm text-[var(--muted-text)] mt-1">
+                      输入自定义名称，如：交通银行、支付宝等
+                    </div>
+                  </motion.div>
+
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    placeholder={defaultAccountName(selectedType)}
+                    className="w-full px-4 py-4 rounded-2xl bg-[var(--bg)] border border-[var(--hairline)] text-[var(--text)] font-bold text-center text-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"
+                    autoFocus
+                  />
+
+                  <div className="flex gap-3 mt-6">
+                    <motion.button
+                      type="button"
+                      className="flex-1 py-4 rounded-2xl bg-[var(--bg)] text-[var(--text)] font-bold"
+                      onClick={() => setSelectedType(null)}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      取消
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      className="flex-1 py-4 rounded-2xl bg-[var(--primary)] text-[var(--primary-contrast)] font-bold flex items-center justify-center gap-2"
+                      onClick={() => {
+                        onPick(selectedType, customName)
+                      }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <Check size={18} strokeWidth={3} />
+                      确认
+                    </motion.button>
+                  </div>
+                </>
+              )}
             </motion.div>
 
             <div className="flex-1 bg-white" />

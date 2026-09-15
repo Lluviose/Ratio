@@ -48,7 +48,7 @@ export function buildOpRollbackPlan(op: AccountOp, ctx: OpRollbackContext): OpRo
     return canApplyBalanceDelta(balance, delta)
   }
 
-  if (op.kind === 'adjust') {
+  if (op.kind === 'adjust' || op.kind === 'revalue') {
     const delta = subtractMoney(0, op.delta)
     return [{ accountId: op.accountId, delta, canRollback: canRollbackTarget(op.accountId, delta) }]
   }

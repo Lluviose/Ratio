@@ -4,6 +4,7 @@ import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import { AssetsScreen } from './screens/AssetsScreen'
 import { TourScreen } from './screens/TourScreen'
 import { AccountDetailSheet } from './components/AccountDetailSheet'
+import { ItemArchiveSheet } from './components/ItemArchiveSheet'
 import { AddAccountScreen } from './screens/AddAccountScreen'
 import { LazyAiAssistant } from './components/LazyAiAssistant'
 import { loadAiAssistant } from './components/aiAssistantLoader'
@@ -475,6 +476,7 @@ export default function App() {
   const [randomTheme, setRandomTheme] = useState<RealThemeId>(() => pickRandomThemeId())
   const [tourSeen, setTourSeen] = useLocalStorageState<boolean>('ratio.tourSeen', false)
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const [detailTransitionAccountId, setDetailTransitionAccountId] = useState<string | null>(null)
   const [detailAction, setDetailAction] = useState<'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'>('none')
   const [hasVisitedAssets, setHasVisitedAssets] = useState(false)
@@ -513,8 +515,8 @@ export default function App() {
 
   const liveSnapshots = useMemo(() => {
     if (accounts.accounts.length === 0 && snapshots.length === 0) return snapshots
-    return withAccountSnapshot(snapshots, accounts.accounts)
-  }, [accounts.accounts, snapshots])
+    return withAccountSnapshot(snapshots, accounts.activeAccounts)
+  }, [accounts.accounts.length, accounts.activeAccounts, snapshots])
 
   useLayoutEffect(() => {
     applyDocumentTheme(resolvedTheme, themeColors)
@@ -536,7 +538,7 @@ export default function App() {
     applyDocumentSystemGlass(systemGlass)
   }, [systemGlass])
 
-  useDailySnapshotSync(accounts.accounts, snapshots.length, upsertFromAccounts, accounts.storageReady && snapshotsStorageReady)
+  useDailySnapshotSync(accounts.activeAccounts, snapshots.length, upsertFromAccounts, accounts.storageReady && snapshotsStorageReady)
 
   const title = useMemo(() => {
     switch (tab) {
@@ -707,6 +709,14 @@ export default function App() {
               <AddAccountScreen
                 onBack={() => setView('main')}
                 colors={themeColors}
+                onPickItem={(input) => {
+                  const next = accounts.addItem(input)
+                  accountOps.addOp({ kind: 'set_cost', accountId: next.id, accountType: next.type, before: null, after: next.cost!, at: new Date().toISOString() })
+                  setView('main')
+                  setSelectedAccountId(next.id)
+                  setDetailTransitionAccountId(null)
+                  setDetailAction('none')
+                }}
                 onPick={(type, customName) => {
                   const next = accounts.addAccount(type, customName)
                   setView('main')
@@ -770,6 +780,8 @@ export default function App() {
                     >
                       <AssetsScreen
                         grouped={groupedWithTheme}
+                        archivedAccounts={accounts.archivedAccounts}
+                        onOpenArchive={() => setArchiveOpen(true)}
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
                         addButtonTone={themeColors.debt}
@@ -777,7 +789,7 @@ export default function App() {
                         onHomePageActiveChange={setAssetsHomePageActive}
                         onEditAccount={(a: Account) => {
                           setSelectedAccountId(a.id)
-                          setDetailTransitionAccountId(a.id)
+                          setDetailTransitionAccountId(a.archivedAt ? null : a.id)
                           setDetailAction('none')
                         }}
                         skipInitialAnimation={hasVisitedAssets && !isNativeIos()}
@@ -849,7 +861,14 @@ export default function App() {
 
               {tab !== 'assets' ? <BottomTabNav tab={tab} onNavigate={navigateTab} /> : null}
 
-              {tab === 'assets' && view === 'main' && assetsHomePageActive && selectedAccountId == null ? <LazyAiAssistant /> : null}
+              {tab === 'assets' && view === 'main' && assetsHomePageActive && selectedAccountId == null && !archiveOpen ? <LazyAiAssistant /> : null}
+
+              <ItemArchiveSheet open={archiveOpen} accounts={accounts.archivedAccounts} onClose={() => setArchiveOpen(false)} onPick={(account) => {
+                setArchiveOpen(false)
+                setSelectedAccountId(account.id)
+                setDetailTransitionAccountId(null)
+                setDetailAction('none')
+              }} />
 
               <AccountDetailSheet
                 open={Boolean(selectedAccountId)}
@@ -868,6 +887,10 @@ export default function App() {
                 onSetBalance={accounts.updateBalance}
                 onAdjust={accounts.adjustBalance}
                 onTransfer={accounts.transfer}
+                onCreateItem={accounts.addItem}
+                onSetItemCost={accounts.updateItemCost}
+                onArchive={accounts.archiveAccount}
+                onUnarchive={accounts.unarchiveAccount}
                 onDelete={accounts.deleteAccount}
                 onAddOp={accountOps.addOp}
                 onDeleteOp={accountOps.deleteOp}

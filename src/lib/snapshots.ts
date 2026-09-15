@@ -97,6 +97,7 @@ export function todayDateKey() {
 }
 
 export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
+  const activeAccounts = accounts.filter((a) => !a.archivedAt)
   const byGroup: Record<AccountGroupId, number> = {
     liquid: 0,
     invest: 0,
@@ -105,7 +106,7 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
     debt: 0,
   }
 
-  for (const a of accounts) {
+  for (const a of activeAccounts) {
     const balance = normalizeStoredAccountBalance(a.type, a.balance)
     const gid = getGroupIdByAccountType(a.type)
     byGroup[gid] = addMoney(byGroup[gid], balance)
@@ -125,7 +126,7 @@ export function buildSnapshot(date: string, accounts: Account[]): Snapshot {
     invest: byGroup.invest,
     fixed: byGroup.fixed,
     receivable: byGroup.receivable,
-    accounts: accounts.map((a) => ({
+    accounts: activeAccounts.map((a) => ({
       id: a.id,
       type: a.type,
       name: a.name,

@@ -1,5 +1,6 @@
 import type { AccountOp } from '../../lib/accountOps'
 import { subtractMoney } from '../../lib/money'
+import { isItemAccountType } from '../../lib/accountCost'
 
 export type OpDisplayInfo = {
   title: string
@@ -17,10 +18,16 @@ export function describeOpForAccount(
     return { title: `重命名：${op.beforeName} → ${op.afterName}`, delta: null }
   }
   if (op.kind === 'set_balance') {
-    return { title: '修改余额', delta: subtractMoney(op.after, op.before) }
+    return { title: isItemAccountType(op.accountType) ? '修改净值' : '修改余额', delta: subtractMoney(op.after, op.before) }
   }
   if (op.kind === 'adjust') {
     return { title: op.delta >= 0 ? '期间净流入' : '期间净流出', delta: op.delta }
+  }
+  if (op.kind === 'revalue') {
+    return { title: op.delta < 0 ? '计提减值' : '价值上调', delta: op.delta }
+  }
+  if (op.kind === 'set_cost') {
+    return { title: op.before == null ? '记录原值' : '修正原值', delta: null }
   }
   if (accountId === op.fromId) {
     return { title: `转出到 ${getAccountName(op.toId) ?? '账户'}`, delta: subtractMoney(op.fromAfter, op.fromBefore) }

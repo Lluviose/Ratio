@@ -175,7 +175,8 @@ function classifyMonthlyFlows(
   let opsUsed = 0
 
   for (const op of accountOps) {
-    if (op.kind === 'rename' || op.kind === 'transfer') continue
+    // revalue/set_cost 是物品估值调整，不是现金流
+    if (op.kind === 'rename' || op.kind === 'transfer' || op.kind === 'revalue' || op.kind === 'set_cost') continue
 
     const dateKey = opDateKey(op.at)
     if (!dateKey) continue

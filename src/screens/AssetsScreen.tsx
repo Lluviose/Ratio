@@ -76,6 +76,8 @@ type Block = OverlayBlockModel
 
 export function AssetsScreen(props: {
   grouped: GroupedAccounts
+  archivedAccounts?: Account[]
+  onOpenArchive?: () => void
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
   onEditAccount: (account: Account) => void
   onAddAccount: () => void
@@ -87,6 +89,8 @@ export function AssetsScreen(props: {
 }) {
   const {
     grouped,
+    archivedAccounts,
+    onOpenArchive,
     getIcon,
     onEditAccount,
     onAddAccount,
@@ -1037,6 +1041,8 @@ export function AssetsScreen(props: {
 
       <div className="relative flex-1 min-h-0">
         <AssetsListPage
+          archivedAccounts={archivedAccounts}
+          onOpenArchive={onOpenArchive}
           grouped={grouped}
           getIcon={getIcon}
           onPickType={handlePickType}
@@ -1374,6 +1380,8 @@ export function AssetsScreen(props: {
         <div className="w-full h-full flex-shrink-0 snap-center snap-always overflow-y-hidden" style={containedPageStyle}>
           <div className="w-full h-full">
             <AssetsListPage
+              archivedAccounts={archivedAccounts}
+              onOpenArchive={onOpenArchive}
               grouped={grouped}
               getIcon={getIcon}
               onPickType={handlePickType}

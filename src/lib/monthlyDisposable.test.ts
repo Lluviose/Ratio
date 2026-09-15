@@ -123,6 +123,14 @@ describe('coerceMonthlyEstimatedExpense', () => {
 })
 
 describe('buildDisposableEstimate', () => {
+  it('物品减值与原值修正不计入现金流估算', () => {
+    const input = { snapshots: monthlySnapshots, summary: summary() }
+    const accountOps: AccountOp[] = [
+      { id: 'loss', kind: 'revalue', accountId: 'item', accountType: 'other_fixed', at: '2026-06-20T00:00:00.000Z', before: 3000, after: 2000, delta: -1000 },
+      { id: 'cost', kind: 'set_cost', accountId: 'item', accountType: 'other_fixed', at: '2026-06-20T00:00:00.000Z', before: null, after: 3000 },
+    ]
+    expect(build({ ...input, accountOps })).toEqual(build(input))
+  })
   it('uses a manual income override and reserves the current-period savings target', () => {
     const result = build({
       snapshots: [snap('2026-04-01', 100000), snap('2026-07-01', 109000)],

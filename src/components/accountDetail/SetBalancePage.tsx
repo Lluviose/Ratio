@@ -2,6 +2,7 @@ import type { ComponentPropsWithoutRef, Ref } from 'react'
 import { motion } from 'framer-motion'
 import type { Account } from '../../lib/accounts'
 import type { SetBalanceOp } from '../../lib/accountOps'
+import { isItemAccountType } from '../../lib/accountCost'
 import { canApplyBalanceDelta, isNegativeAccountBalance } from '../../lib/accountBalance'
 import { moneyEquals, normalizeMoney, subtractMoney } from '../../lib/money'
 import {
@@ -52,6 +53,7 @@ export function SetBalancePage(props: {
     onSubmit,
     onCancel,
   } = props
+  const balanceLabel = isItemAccountType(account.type) ? '净值' : '余额'
 
   const setBalanceValueTrimmed = value.trim()
   const setBalanceExpression = evaluateMoneyExpression(value)
@@ -125,22 +127,22 @@ export function SetBalancePage(props: {
       />
 
       <div className="mt-3 flex items-center justify-between text-[12px] font-medium text-slate-400">
-        <div>当前余额</div>
+        <div>当前{balanceLabel}</div>
         <div className="text-slate-500">{formatCny(account.balance)}</div>
       </div>
       {!canApplyDiff ? (
         <div className="mt-1 text-[11px] font-semibold text-slate-400">
-          余额不会变（已在后续校准中固定）
+          {balanceLabel}不会变（已在后续校准中固定）
         </div>
       ) : null}
       {setBalanceExpression.ok && isNegativeAccountBalance(setBalanceParsed) ? (
         <div className="mt-1 text-[11px] font-semibold text-rose-500">
-          余额不能为负
+          {balanceLabel}不能为负
         </div>
       ) : null}
       {wouldSetBalanceGoNegative ? (
         <div className="mt-1 text-[11px] font-semibold text-rose-500">
-          保存后余额不能为负
+          保存后{balanceLabel}不能为负
         </div>
       ) : null}
 

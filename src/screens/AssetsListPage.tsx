@@ -1,6 +1,6 @@
 import { clsx } from 'clsx'
 import { AnimatePresence, motion, Reorder } from 'framer-motion'
-import { ChevronDown, GripVertical, MoreHorizontal } from 'lucide-react'
+import { Archive, ChevronDown, ChevronRight, GripVertical, MoreHorizontal } from 'lucide-react'
 import { memo, type ComponentType, type Ref, useEffect, useMemo, useRef, useState } from 'react'
 import { BottomSheet } from '../components/BottomSheet'
 import {
@@ -11,7 +11,7 @@ import {
   type AccountSortMode,
   type ManualTypeOrderByGroup,
 } from '../lib/accountSort'
-import { getAccountTypeOption, type AccountTypeId } from '../lib/accounts'
+import { getAccountTypeOption, type Account, type AccountTypeId } from '../lib/accounts'
 import { formatCny } from '../lib/format'
 import { addMoney } from '../lib/money'
 import { useLocalStorageState } from '../lib/useLocalStorageState'
@@ -51,6 +51,8 @@ function withAlpha(color: string, alpha: number): string {
 
 function AssetsListPageComponent(props: {
   grouped: GroupedAccounts
+  archivedAccounts?: Account[]
+  onOpenArchive?: () => void
   getIcon: (type: AccountTypeId) => ComponentType<{ size?: number }>
   onPickType: (type: AccountTypeId) => void
   expandedGroup: GroupId | null
@@ -157,7 +159,7 @@ function AssetsListPageComponent(props: {
 
   return (
     <div ref={scrollRef} className="h-full overflow-y-auto bg-transparent">     
-      <div className="px-4 pt-[calc(var(--safe-top)+104px)] pb-[calc(var(--safe-bottom)+96px)]">
+      <div className={`px-4 pt-[calc(var(--safe-top)+104px)] ${props.archivedAccounts?.length ? 'pb-4' : 'pb-[calc(var(--safe-bottom)+96px)]'}`}>
         <div className="flex flex-col gap-[4px]">
           {groupModels.map((g, i) => {
             const id = g.id
@@ -369,6 +371,17 @@ function AssetsListPageComponent(props: {
           })}
         </div>
       </div>
+
+      {props.archivedAccounts?.length ? (
+        <div className="px-4 pb-24">
+          <button type="button" onClick={props.onOpenArchive} className="w-full flex items-center gap-3 rounded-[22px] border border-[var(--hairline)] bg-[var(--card)] px-4 py-3 text-[var(--muted-text)]" aria-label="archived items">
+            <Archive size={18} />
+            <span className="flex-1 text-left text-sm font-semibold">已归档物品</span>
+            <span className="text-xs">{props.archivedAccounts.length} 件</span>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      ) : null}
 
       <BottomSheet
         open={Boolean(typeSortGroup)}

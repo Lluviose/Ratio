@@ -30,6 +30,9 @@ export function OpsHistoryList(props: {
   suppressOpClickRef: RefObject<boolean>
   onEditOp: (op: AccountOp) => void
   onDeleteOp: (op: AccountOp, title: string) => void
+  // 物品（固定资产）视角：金额列脚注显示「净值」而非「余额」
+  balanceLabel?: string
+  emptyHint?: string
 }) {
   const {
     account,
@@ -41,6 +44,8 @@ export function OpsHistoryList(props: {
     suppressOpClickRef,
     onEditOp,
     onDeleteOp,
+    balanceLabel = '余额',
+    emptyHint = '用上方「期间增减」或「修改余额」记一笔，这里会保留历史',
   } = props
 
   const [visibleCount, setVisibleCount] = useState(OPS_INITIAL_COUNT)
@@ -60,7 +65,7 @@ export function OpsHistoryList(props: {
         <EmptyState
           variant="ops"
           title="暂无操作"
-          hint="用上方「期间增减」或「修改余额」记一笔，这里会保留历史"
+          hint={emptyHint}
         />
       ) : (
         <AnimatePresence initial={false}>
@@ -82,8 +87,14 @@ export function OpsHistoryList(props: {
               const noteText = op.note?.trim()
               runningAfter = addMoney(runningAfter, -(delta ?? 0))
 
-              const canDeleteOp = op.kind === 'set_balance' || op.kind === 'adjust' || op.kind === 'transfer'
-              const canEditOp = canDeleteOp
+              const canDeleteOp =
+                op.kind === 'set_balance' ||
+                op.kind === 'adjust' ||
+                op.kind === 'revalue' ||
+                op.kind === 'set_cost' ||
+                op.kind === 'transfer'
+              // 原值记录只保留历史，没有可回写的差额，不进编辑页
+              const canEditOp = canDeleteOp && op.kind !== 'set_cost'
 
               const isSwipedOpen = swipedOpId === op.id
 
@@ -193,10 +204,10 @@ export function OpsHistoryList(props: {
 
                       <div className="text-right shrink-0">
                         <div className={`text-[14px] font-semibold ${deltaColor}`}>
-                          {delta == null ? '—' : formatSigned(delta)}
+                          {op.kind === 'set_cost' ? formatCny(op.after) : delta == null ? '—' : formatSigned(delta)}
                         </div>
                         <div className="mt-1 text-[11px] font-medium text-slate-400">
-                          余额 {formatCny(displayAfter)}
+                          {balanceLabel} {formatCny(displayAfter)}
                         </div>
                       </div>
                     </motion.div>

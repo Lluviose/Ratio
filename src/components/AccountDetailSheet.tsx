@@ -1,6 +1,6 @@
 import { createElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowLeftRight, MoreHorizontal, Pencil, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BottomSheet } from './BottomSheet'
 import { useOverlay } from '../lib/overlay'
@@ -10,7 +10,8 @@ import {
   evaluateMoneyExpression,
   type MoneyExpressionOperator,
 } from '../lib/moneyExpression'
-import { type Account, getAccountTypeOption } from '../lib/accounts'
+import { type Account, type AccountTypeId, getAccountTypeOption } from '../lib/accounts'
+import { formatDateKey, isItemAccountType, normalizeStoredDateKey, todayDateKey } from '../lib/accountCost'
 import { hapticSuccess } from '../lib/haptics'
 import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
 import { buildLatestSetBalanceAtMap, buildOpRollbackPlan, canRollbackBalance } from '../lib/opRollback'
@@ -22,9 +23,12 @@ import { OpsHistoryList } from './accountDetail/OpsHistoryList'
 import { AdjustPage, type AdjustDirection } from './accountDetail/AdjustPage'
 import { SetBalancePage } from './accountDetail/SetBalancePage'
 import { RenamePage } from './accountDetail/RenamePage'
-import { TransferPage, type TransferDirection } from './accountDetail/TransferPage'
+import { NEW_ITEM_PEER_ID, TransferPage, type TransferDirection } from './accountDetail/TransferPage'
+import { RevaluePage, type RevalueDirection } from './accountDetail/RevaluePage'
+import { SetCostPage } from './accountDetail/SetCostPage'
+import { ItemValueCard } from './accountDetail/ItemValueCard'
 
-type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer'
+type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer' | 'revalue' | 'set_cost'
 
 export function AccountDetailSheet(props: {
   open: boolean
@@ -44,6 +48,12 @@ export function AccountDetailSheet(props: {
   onAddOp: (op: AccountOpInput) => void
   onDeleteOp: (id: string) => void
   onUpdateOp: (id: string, next: AccountOp) => void
+  // 物品原值/购入日期（固定资产分组）；可选：不传则详情页不显示原值区
+  onSetItemCost?: (id: string, cost: number, acquiredAt?: string) => void
+  // 转出时新建物品作为转入方：返回新建账户（net 由随后的转账带入）
+  onCreateItem?: (input: { type: AccountTypeId; name?: string; cost: number; net: number; acquiredAt?: string }) => Account
+  onArchive?: (id: string) => void
+  onUnarchive?: (id: string) => void
   colors: ThemeColors
 }) {
   const {
@@ -64,6 +74,10 @@ export function AccountDetailSheet(props: {
     onAddOp,
     onDeleteOp,
     onUpdateOp,
+    onSetItemCost,
+    onCreateItem,
+    onArchive,
+    onUnarchive,
     colors,
   } = props
 
@@ -97,6 +111,8 @@ export function AccountDetailSheet(props: {
   const [recordTimeInitValue, setRecordTimeInitValue] = useState('')
   const balanceInputRef = useRef<HTMLInputElement | null>(null)
   const adjustInputRef = useRef<HTMLInputElement | null>(null)
+  const revalueInputRef = useRef<HTMLInputElement | null>(null)
+  const costInputRef = useRef<HTMLInputElement | null>(null)
   const transferInputRef = useRef<HTMLInputElement | null>(null)
   const suppressOpClickRef = useRef(false)
   const suppressActionClickRef = useRef(false)
@@ -107,6 +123,13 @@ export function AccountDetailSheet(props: {
   const [transferDirection, setTransferDirection] = useState<TransferDirection>('out')
   const [transferPeerId, setTransferPeerId] = useState('')
   const [transferAmount, setTransferAmount] = useState('')
+  const [newItemType, setNewItemType] = useState<AccountTypeId>('other_fixed')
+  const [newItemName, setNewItemName] = useState('')
+  // 物品：减值/增值 与 原值 两个动作页的输入态
+  const [revalueDirection, setRevalueDirection] = useState<RevalueDirection>('down')
+  const [revalueAmount, setRevalueAmount] = useState('')
+  const [costValue, setCostValue] = useState('')
+  const [acquiredAtValue, setAcquiredAtValue] = useState('')
   const isIPhone = typeof navigator !== 'undefined' && /iPhone/i.test(navigator.userAgent)
   const amountInputProps = isIPhone
     ? ({
@@ -210,6 +233,30 @@ export function AccountDetailSheet(props: {
     focusAmountInput(balanceInputRef.current)
   }
 
+  const openRevalueAction = () => {
+    flushSync(() => {
+      setMoreOpen(false)
+      setNoteValue('')
+      setRevalueDirection('down')
+      setRevalueAmount('')
+      resetRecordTime()
+      transitionToAction('revalue')
+    })
+    focusAmountInput(revalueInputRef.current)
+  }
+
+  const openSetCostAction = () => {
+    if (!account) return
+    flushSync(() => {
+      setMoreOpen(false)
+      setNoteValue('')
+      setCostValue(account.cost != null ? toMoneyInputValue(account.cost) : '')
+      setAcquiredAtValue(account.acquiredAt ?? '')
+      transitionToAction('set_cost')
+    })
+    focusAmountInput(costInputRef.current)
+  }
+
   const handleActionPointerDown = (e: ReactPointerEvent, openAction: () => void) => {
     if (e.pointerType === 'mouse') return
 
@@ -241,6 +288,9 @@ export function AccountDetailSheet(props: {
       setSwipedOpId(null)
       setBalanceValue('')
       setAdjustAmount('')
+      setRevalueAmount('')
+      setCostValue('')
+      setAcquiredAtValue('')
       setNoteValue('')
       setRecordTimeInitValue('')
       setRecordTimeValue('')
@@ -265,9 +315,15 @@ export function AccountDetailSheet(props: {
     resetRecordTime()
     setAdjustDirection('plus')
     setAdjustAmount('')
+    setRevalueDirection('down')
+    setRevalueAmount('')
+    setCostValue('')
+    setAcquiredAtValue('')
     setTransferDirection('out')
     setTransferPeerId('')
     setTransferAmount('')
+    setNewItemType('other_fixed')
+    setNewItemName('')
   }, [account, accountId, initialAction, open, resetRecordTime])
 
   useEffect(() => {
@@ -278,17 +334,28 @@ export function AccountDetailSheet(props: {
     openedAtRef.current = performance.now()
   }, [open])
 
+  const amountInputRefFor = useCallback(
+    (target: ActionId): HTMLInputElement | null => {
+      if (target === 'set_balance') return balanceInputRef.current
+      if (target === 'adjust') return adjustInputRef.current
+      if (target === 'revalue') return revalueInputRef.current
+      if (target === 'set_cost') return costInputRef.current
+      return null
+    },
+    [],
+  )
+  const isAmountAction = action === 'set_balance' || action === 'adjust' || action === 'revalue' || action === 'set_cost'
+
   useLayoutEffect(() => {
     if (!open) return
-    if (action !== 'set_balance' && action !== 'adjust') return
+    if (!isAmountAction) return
     setMoreOpen(false)
-    const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
-    focusAmountInput(el)
-  }, [action, focusAmountInput, open])
+    focusAmountInput(amountInputRefFor(action))
+  }, [action, amountInputRefFor, focusAmountInput, isAmountAction, open])
 
   useEffect(() => {
     if (!open) return
-    if (action !== 'set_balance' && action !== 'adjust') return
+    if (!isAmountAction) return
     setMoreOpen(false)
     const openedAt = openedAtRef.current
     const openingMs = 280
@@ -296,12 +363,12 @@ export function AccountDetailSheet(props: {
     const delay = elapsed < openingMs ? Math.max(0, openingMs - elapsed) : 0
 
     const timer = window.setTimeout(() => {
-      const el = action === 'set_balance' ? balanceInputRef.current : adjustInputRef.current
+      const el = amountInputRefFor(action)
       if (!el) return
       focusAmountInput(el)
     }, delay)
     return () => window.clearTimeout(timer)
-  }, [action, focusAmountInput, open])
+  }, [action, amountInputRefFor, focusAmountInput, isAmountAction, open])
 
   useEffect(() => {
     if (!open || action !== 'none' || !suppressOpsIntro) return
@@ -321,7 +388,7 @@ export function AccountDetailSheet(props: {
 
   const selectablePeers = useMemo(() => {
     if (!accountId) return []
-    return accounts.filter((a) => a.id !== accountId)
+    return accounts.filter((a) => a.id !== accountId && !a.archivedAt)
   }, [accountId, accounts])
 
   const relatedOps = useMemo(() => {
@@ -331,6 +398,8 @@ export function AccountDetailSheet(props: {
         if (op.kind === 'rename') return op.accountId === accountId
         if (op.kind === 'set_balance') return op.accountId === accountId
         if (op.kind === 'adjust') return op.accountId === accountId
+        if (op.kind === 'revalue') return op.accountId === accountId
+        if (op.kind === 'set_cost') return op.accountId === accountId
         if (op.kind === 'transfer') return op.fromId === accountId || op.toId === accountId
         return false
       })
@@ -378,7 +447,10 @@ export function AccountDetailSheet(props: {
 
   const editingSetBalanceOp = editingOp?.kind === 'set_balance' ? editingOp : null
   const editingAdjustOp = editingOp?.kind === 'adjust' ? editingOp : null
+  const editingRevalueOp = editingOp?.kind === 'revalue' ? editingOp : null
   const editingTransferOp = editingOp?.kind === 'transfer' ? editingOp : null
+  const isItem = isItemAccountType(account.type)
+  const balanceWord = isItem ? '净值' : '余额'
   const nextNote = normalizeNoteValue(noteValue)
 
   // 新建记录的记录时间预览：未改动/无效 → null（视为当前时刻）；改动 → 解析为 ISO
@@ -398,16 +470,12 @@ export function AccountDetailSheet(props: {
   const canApplyAdjustDiff = editingAdjustOp
     ? canRollbackFor(editingAdjustOp.accountId, editingAdjustOp.at)
     : canApplyNewRecord
+  const canApplyRevalueDiff = editingRevalueOp
+    ? canRollbackFor(editingRevalueOp.accountId, editingRevalueOp.at)
+    : canApplyNewRecord
 
   const refocusActiveInput = () => {
-    const el =
-      action === 'set_balance'
-        ? balanceInputRef.current
-        : action === 'adjust'
-          ? adjustInputRef.current
-          : action === 'transfer'
-            ? transferInputRef.current
-            : null
+    const el = action === 'transfer' ? transferInputRef.current : amountInputRefFor(action)
     if (!el) return
     focusAmountInput(el)
   }
@@ -431,6 +499,16 @@ export function AccountDetailSheet(props: {
     focusInputAtEnd(balanceInputRef.current)
   }
 
+  const appendCostOperator = (operator: MoneyExpressionOperator) => {
+    setCostValue((value) => appendMoneyExpressionOperator(value, operator))
+    focusInputAtEnd(costInputRef.current)
+  }
+
+  const clearCostExpression = () => {
+    setCostValue('')
+    focusInputAtEnd(costInputRef.current)
+  }
+
   const appendTransferOperator = (operator: MoneyExpressionOperator) => {
     setTransferAmount((value) => appendMoneyExpressionOperator(value, operator))
     focusInputAtEnd(transferInputRef.current)
@@ -445,6 +523,8 @@ export function AccountDetailSheet(props: {
     setMoreOpen(false)
     balanceInputRef.current?.blur()
     adjustInputRef.current?.blur()
+    revalueInputRef.current?.blur()
+    costInputRef.current?.blur()
     setEditingOpId(null)
     setSwipedOpId(null)
     setRenameValue(account.name)
@@ -452,10 +532,32 @@ export function AccountDetailSheet(props: {
     setNoteValue('')
     setAdjustDirection('plus')
     setAdjustAmount('')
+    setRevalueDirection('down')
+    setRevalueAmount('')
+    setCostValue('')
+    setAcquiredAtValue('')
     setTransferDirection('out')
     setTransferPeerId('')
     setTransferAmount('')
+    setNewItemType('other_fixed')
+    setNewItemName('')
     transitionToAction('none')
+  }
+
+  // 物品全部转出后（净值归零）询问：保留 or 归档。归档当前账户则顺带关闭详情。
+  const offerArchiveIfEmptied = async (target: Account, after: number) => {
+    if (!onArchive || !isItemAccountType(target.type) || target.archivedAt || after !== 0) return
+    const ok = await confirm({
+      title: '已全部转出',
+      message: `「${target.name}」的净值已为 0。归档后不再计入资产与统计，历史保留，可随时在资产列表的「已归档物品」中取消归档。`,
+      confirmText: '归档物品',
+      cancelText: '保留',
+      tone: 'default',
+    })
+    if (!ok) return
+    onArchive(target.id)
+    toast(`已归档「${target.name}」`, { tone: 'success' })
+    if (target.id === account.id) onClose()
   }
 
   const submitRename = () => {
@@ -656,6 +758,124 @@ export function AccountDetailSheet(props: {
     transitionToAction('none')
   }
 
+  // 减值/增值：与期间增减同一套回滚/回溯语义，只是 kind 不同（统计口径排除）
+  const submitRevalue = () => {
+    const raw = revalueAmount.trim()
+    const parsed = Number(raw)
+    const num = normalizeMoney(parsed)
+    if (!raw || !Number.isFinite(parsed) || num <= 0) {
+      toast('请输入正确金额', { tone: 'danger' })
+      refocusActiveInput()
+      return
+    }
+
+    const delta = revalueDirection === 'down' ? -num : num
+
+    if (editingRevalueOp) {
+      if (moneyEquals(delta, editingRevalueOp.delta) && nextNote === editingRevalueOp.note) {
+        revalueInputRef.current?.blur()
+        setEditingOpId(null)
+        transitionToAction('none')
+        return
+      }
+
+      const canApply = canRollbackFor(editingRevalueOp.accountId, editingRevalueOp.at)
+      const diff = subtractMoney(delta, editingRevalueOp.delta)
+      if (canApply && !canApplyBalanceDelta(account.balance, diff)) {
+        toast('保存后净值不能为负', { tone: 'danger' })
+        refocusActiveInput()
+        return
+      }
+      if (canApply && diff !== 0) onAdjust(editingRevalueOp.accountId, diff)
+
+      onUpdateOp(editingRevalueOp.id, { ...editingRevalueOp, delta, after: addMoney(editingRevalueOp.before, delta), note: nextNote })
+      if (canApply) hapticSuccess()
+      toast(canApply ? '已保存' : '已保存（净值未变）', { tone: canApply ? 'success' : 'neutral' })
+
+      setRevalueAmount('')
+      setNoteValue('')
+      revalueInputRef.current?.blur()
+      setEditingOpId(null)
+      transitionToAction('none')
+      return
+    }
+
+    const resolvedAt = resolveNewRecordAt()
+    if (!resolvedAt) {
+      refocusActiveInput()
+      return
+    }
+
+    const canApply = canRollbackFor(account.id, resolvedAt.at)
+    const after = addMoney(account.balance, delta)
+    if (canApply && isNegativeAccountBalance(after)) {
+      toast('减值后净值不能为负', { tone: 'danger' })
+      refocusActiveInput()
+      return
+    }
+
+    onAddOp({
+      kind: 'revalue',
+      at: resolvedAt.at,
+      accountType: account.type,
+      accountId: account.id,
+      delta,
+      before: normalizeMoney(account.balance),
+      after,
+      note: nextNote,
+    })
+    if (canApply) {
+      onAdjust(account.id, delta)
+      hapticSuccess()
+    } else {
+      toast('已记录（净值未变）', { tone: 'neutral' })
+    }
+    setRevalueAmount('')
+    setNoteValue('')
+    revalueInputRef.current?.blur()
+    transitionToAction('none')
+  }
+
+  // 原值：只改 cost/acquiredAt，落一条 set_cost 历史；不涉及余额回滚
+  const submitSetCost = () => {
+    const evaluated = evaluateMoneyExpression(costValue)
+    const num = evaluated.ok ? normalizeMoney(evaluated.value) : 0
+    if (!costValue.trim() || !evaluated.ok || num <= 0) {
+      toast('请输入正确原值', { tone: 'danger' })
+      refocusActiveInput()
+      return
+    }
+    const nextAcquiredAt = acquiredAtValue.trim() || undefined
+    if (nextAcquiredAt && (!normalizeStoredDateKey(nextAcquiredAt) || nextAcquiredAt > todayDateKey())) {
+      toast('请选择有效的购入日期，不能晚于今天', { tone: 'danger' })
+      return
+    }
+    const costUnchanged = account.cost != null && moneyEquals(num, account.cost)
+    const dateUnchanged = (nextAcquiredAt ?? '') === (account.acquiredAt ?? '')
+    if (costUnchanged && dateUnchanged && !nextNote) {
+      costInputRef.current?.blur()
+      transitionToAction('none')
+      return
+    }
+
+    onSetItemCost?.(account.id, num, nextAcquiredAt)
+    if (!costUnchanged || nextNote) {
+      onAddOp({
+        kind: 'set_cost',
+        at: new Date().toISOString(),
+        accountType: account.type,
+        accountId: account.id,
+        before: account.cost ?? null,
+        after: num,
+        note: nextNote,
+      })
+    }
+    hapticSuccess()
+    costInputRef.current?.blur()
+    setNoteValue('')
+    transitionToAction('none')
+  }
+
   const submitTransfer = () => {
     if (editingTransferOp) {
       const evaluated = evaluateMoneyExpression(transferAmount)
@@ -724,6 +944,67 @@ export function AccountDetailSheet(props: {
       toast('请选择账户', { tone: 'danger' })
       return
     }
+
+    // 转出到「新建物品」：物品以 0 净值创建，转账把金额带成初始净值，原值 = 转出金额
+    if (transferPeerId === NEW_ITEM_PEER_ID) {
+      if (!onCreateItem || transferDirection !== 'out') {
+        toast('当前无法新建物品', { tone: 'danger' })
+        return
+      }
+      const evaluated = evaluateMoneyExpression(transferAmount)
+      const num = evaluated.ok ? evaluated.value : 0
+      if (!evaluated.ok || num <= 0) {
+        toast('请输入正确金额', { tone: 'danger' })
+        refocusActiveInput()
+        return
+      }
+      const fromBefore = normalizeMoney(account.balance)
+      const fromAfter = applyAccountFlow(account.type, fromBefore, -num)
+      if (isNegativeAccountBalance(fromAfter)) {
+        toast('转账后余额不能为负', { tone: 'danger' })
+        return
+      }
+
+      const created = onCreateItem({
+        type: newItemType,
+        name: newItemName,
+        cost: num,
+        net: 0,
+        acquiredAt: todayDateKey(),
+      })
+      const now = Date.now()
+      onAddOp({
+        kind: 'set_cost',
+        at: new Date(now - 1).toISOString(),
+        accountType: created.type,
+        accountId: created.id,
+        before: null,
+        after: normalizeMoney(num),
+        note: `购入，资金来自「${account.name}」`,
+      })
+      onAddOp({
+        kind: 'transfer',
+        at: new Date(now).toISOString(),
+        accountType: account.type,
+        fromId: account.id,
+        toId: created.id,
+        amount: num,
+        fromBefore,
+        fromAfter,
+        toBefore: 0,
+        toAfter: normalizeMoney(num),
+      })
+      onTransfer(account.id, created.id, num)
+      hapticSuccess()
+      toast(`已新建物品「${created.name}」`, { tone: 'success' })
+      setTransferAmount('')
+      setTransferPeerId('')
+      setNewItemName('')
+      transitionToAction('none')
+      void offerArchiveIfEmptied(account, fromAfter)
+      return
+    }
+
     const peer = byId.get(transferPeerId)
     if (!peer) {
       toast('账户不存在', { tone: 'danger' })
@@ -766,9 +1047,15 @@ export function AccountDetailSheet(props: {
     setTransferAmount('')
     setTransferPeerId('')
     transitionToAction('none')
+    void offerArchiveIfEmptied(from, fromAfter)
   }
 
   const startEditOp = (op: AccountOp) => {
+    const affectedIds = op.kind === 'transfer' ? [op.fromId, op.toId] : [op.accountId]
+    if (affectedIds.some((id) => byId.get(id)?.archivedAt)) {
+      toast('请先取消相关物品的归档，再修改历史记录', { tone: 'neutral' })
+      return
+    }
     if (op.kind === 'set_balance') {
       setEditingOpId(op.id)
       setNoteValue(op.note ?? '')
@@ -786,6 +1073,15 @@ export function AccountDetailSheet(props: {
       return
     }
 
+    if (op.kind === 'revalue') {
+      setEditingOpId(op.id)
+      setNoteValue(op.note ?? '')
+      setRevalueDirection(op.delta < 0 ? 'down' : 'up')
+      setRevalueAmount(toMoneyInputValue(Math.abs(op.delta)))
+      transitionToAction('revalue')
+      return
+    }
+
     if (op.kind === 'transfer') {
       const direction = account.id === op.fromId ? 'out' : 'in'
       const peerId = direction === 'out' ? op.toId : op.fromId
@@ -799,6 +1095,11 @@ export function AccountDetailSheet(props: {
   }
 
   const confirmDeleteOp = async (op: AccountOp, title: string) => {
+    const affectedIds = op.kind === 'transfer' ? [op.fromId, op.toId] : [op.accountId]
+    if (op.kind !== 'set_cost' && affectedIds.some((id) => byId.get(id)?.archivedAt)) {
+      toast('请先取消相关物品的归档，再删除历史记录', { tone: 'neutral' })
+      return
+    }
     const getAccountName = (id: string) => byId.get(id)?.name ?? '账户'
     const rollbackTargets = buildOpRollbackPlan(op, {
       latestSetBalanceAtByAccountId,
@@ -811,24 +1112,30 @@ export function AccountDetailSheet(props: {
 
     const noRollbackHint =
       affectedCount > 1
-        ? '；其中部分账户余额不变（后续校准或余额不足）'
-        : '；余额不变（后续校准或余额不足）'
+        ? `；其中部分账户${balanceWord}不变（后续校准或${balanceWord}不足）`
+        : `；${balanceWord}不变（后续校准或${balanceWord}不足）`
 
     const rollbackSummary =
-      willRollbackCount > 0
-        ? `将回滚：${willRollback.map((t) => `${getAccountName(t.accountId)} ${formatSigned(t.delta)}`).join('；')}${
-            willRollbackCount < affectedCount ? noRollbackHint : ''
-          }`
-        : '余额不会变化（后续校准或余额不足）'
+      op.kind === 'set_cost'
+        ? '只删除这条原值记录，当前原值与净值都不变'
+        : willRollbackCount > 0
+          ? `将回滚：${willRollback.map((t) => `${getAccountName(t.accountId)} ${formatSigned(t.delta)}`).join('；')}${
+              willRollbackCount < affectedCount ? noRollbackHint : ''
+            }`
+          : `${balanceWord}不会变化（后续校准或${balanceWord}不足）`
 
     const confirmTitle =
       op.kind === 'transfer'
         ? '删除这条转账记录？'
         : op.kind === 'set_balance'
-          ? '删除这条修改余额记录？'
+          ? `删除这条修改${balanceWord}记录？`
           : op.kind === 'adjust'
             ? '删除这条期间变动记录？'
-            : '删除这条记录？'
+            : op.kind === 'revalue'
+              ? `删除这条${op.delta < 0 ? '减值' : '增值'}记录？`
+              : op.kind === 'set_cost'
+                ? '删除这条原值记录？'
+                : '删除这条记录？'
 
     const ok = await confirm({
       title: confirmTitle,
@@ -853,10 +1160,12 @@ export function AccountDetailSheet(props: {
     const rolledBackCount = rolledBackAccountIds.length
     const toastMessage =
       rolledBackCount === 0
-        ? '已删除记录（余额未变）'
+        ? op.kind === 'set_cost'
+          ? '已删除记录'
+          : `已删除记录（${balanceWord}未变）`
         : rolledBackCount === affectedCount
-          ? '已删除并回滚余额'
-          : '已删除，已回滚部分余额'
+          ? `已删除并回滚${balanceWord}`
+          : `已删除，已回滚部分${balanceWord}`
     const tone = rolledBackCount === 0 ? 'neutral' : 'success'
     toast(toastMessage, { tone })
   }
@@ -935,22 +1244,72 @@ export function AccountDetailSheet(props: {
                         onClick={(e) => e.stopPropagation()}
                         className="absolute right-0 top-full mt-2 min-w-[180px] rounded-[18px] bg-white/90 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden z-10"
                       >
-                        <button
-                          type="button"
-                          className="w-full px-4 py-3 text-left text-[13px] font-semibold text-slate-800 hover:bg-black/5"
-                          onClick={() => {
-                            setMoreOpen(false)
-                            setTransferDirection('out')
-                            setTransferPeerId('')
-                            setTransferAmount('')
-                            transitionToAction('transfer')
-                          }}
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <ArrowLeftRight size={16} strokeWidth={2.6} />
-                            转账
-                          </span>
-                        </button>
+                        {account.archivedAt ? (
+                          <button
+                            type="button"
+                            className="w-full px-4 py-3 text-left text-[13px] font-semibold text-slate-800 hover:bg-black/5"
+                            onClick={() => {
+                              setMoreOpen(false)
+                              onUnarchive?.(account.id)
+                              toast('已取消归档', { tone: 'success' })
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <ArchiveRestore size={16} strokeWidth={2.6} />
+                              取消归档
+                            </span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="w-full px-4 py-3 text-left text-[13px] font-semibold text-slate-800 hover:bg-black/5"
+                            onClick={() => {
+                              setMoreOpen(false)
+                              setTransferDirection('out')
+                              setTransferPeerId('')
+                              setTransferAmount('')
+                              setNewItemType('other_fixed')
+                              setNewItemName('')
+                              transitionToAction('transfer')
+                            }}
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <ArrowLeftRight size={16} strokeWidth={2.6} />
+                              转账
+                            </span>
+                          </button>
+                        )}
+
+                        {isItem && !account.archivedAt && onArchive ? (
+                          <>
+                            <div className="h-px bg-black/5" />
+                            <button
+                              type="button"
+                              className="w-full px-4 py-3 text-left text-[13px] font-semibold text-slate-800 hover:bg-black/5"
+                              onClick={async () => {
+                                setMoreOpen(false)
+                                const ok = await confirm({
+                                  title: '归档物品',
+                                  message: `「${account.name}」归档后不再计入资产与统计，历史保留，可随时取消归档。${
+                                    account.balance > 0 ? `当前净值 ${formatCny(account.balance)} 将一并退出汇总。` : ''
+                                  }`,
+                                  confirmText: '归档',
+                                  cancelText: '取消',
+                                  tone: 'default',
+                                })
+                                if (!ok) return
+                                onArchive(account.id)
+                                toast(`已归档「${account.name}」`, { tone: 'success' })
+                                onClose()
+                              }}
+                            >
+                              <span className="inline-flex items-center gap-2">
+                                <Archive size={16} strokeWidth={2.6} />
+                                归档物品
+                              </span>
+                            </button>
+                          </>
+                        ) : null}
 
                         <div className="h-px bg-black/5" />
 
@@ -960,8 +1319,8 @@ export function AccountDetailSheet(props: {
                           onClick={async () => {
                             setMoreOpen(false)
                             const ok = await confirm({
-                              title: '删除账户',
-                              message: `确定要删除账户「${account.name}」吗？此操作不可撤销。`,
+                              title: isItem ? '删除物品' : '删除账户',
+                              message: `确定要删除${isItem ? '物品' : '账户'}「${account.name}」吗？此操作不可撤销。`,
                               confirmText: '删除',
                               cancelText: '取消',
                               tone: 'danger',
@@ -974,7 +1333,7 @@ export function AccountDetailSheet(props: {
                         >
                           <span className="inline-flex items-center gap-2">
                             <Trash2 size={16} strokeWidth={2.6} />
-                            删除账户
+                            {isItem ? '删除物品' : '删除账户'}
                           </span>
                         </button>
                       </motion.div>
@@ -1034,9 +1393,12 @@ export function AccountDetailSheet(props: {
                 exit="exit"
                 transition={pageTransition}
               >
+                {isItem ? (
+                  <div className="mt-4 text-[11px] font-semibold text-slate-400">账面净值</div>
+                ) : null}
                 <motion.div
                   key={`balance-${account.balance}`}
-                  className="mt-4 text-[34px] font-black tracking-tight text-slate-900"
+                  className={`${isItem ? 'mt-0.5' : 'mt-4'} text-[34px] font-black tracking-tight text-slate-900`}
                   initial={{ opacity: 0, y: 8, scale: 0.99 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.8 }}
@@ -1044,41 +1406,103 @@ export function AccountDetailSheet(props: {
                   {formatCny(account.balance)}
                 </motion.div>
 
-                <div className="mt-5 flex gap-3">
-                  <motion.button
-                    type="button"
-                    aria-label="adjust balance action"
-                    onPointerDown={(e) => handleActionPointerDown(e, openAdjustAction)}
-                    onClick={() => handleActionClick(openAdjustAction)}
-                    whileTap={{ scale: 0.965, y: 1 }}
-                    transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
-                    className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
+                {isItem && account.archivedAt ? (
+                  <motion.div
+                    className="mt-5 flex items-center justify-between gap-3 rounded-[22px] border border-white/70 bg-white/70 px-4 py-3 shadow-sm"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.8 }}
                   >
-                    期间增减
-                  </motion.button>
-                  <motion.button
-                    type="button"
-                    aria-label="set balance action"
-                    onPointerDown={(e) => handleActionPointerDown(e, openSetBalanceAction)}
-                    onClick={() => handleActionClick(openSetBalanceAction)}
-                    whileTap={{ scale: 0.965, y: 1 }}
-                    transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
-                    className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
-                  >
-                    修改余额
-                  </motion.button>
-                </div>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-200/70 text-slate-500">
+                        <Archive size={16} strokeWidth={2.6} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold text-slate-900">已归档</div>
+                        <div className="text-[11px] font-medium text-slate-400 truncate">
+                          {formatDateKey(account.archivedAt.slice(0, 10))} · 不计入资产与统计
+                        </div>
+                      </div>
+                    </div>
+                    <motion.button
+                      type="button"
+                      aria-label="unarchive action"
+                      onClick={() => {
+                        onUnarchive?.(account.id)
+                        toast('已取消归档', { tone: 'success' })
+                      }}
+                      whileTap={{ scale: 0.96 }}
+                      className="shrink-0 h-9 rounded-full bg-slate-900 px-3.5 text-[12px] font-semibold text-white shadow-sm"
+                    >
+                      取消归档
+                    </motion.button>
+                  </motion.div>
+                ) : isItem ? (
+                  <div className="mt-5 flex gap-3">
+                    <motion.button
+                      type="button"
+                      aria-label="set balance action"
+                      onPointerDown={(e) => handleActionPointerDown(e, openSetBalanceAction)}
+                      onClick={() => handleActionClick(openSetBalanceAction)}
+                      whileTap={{ scale: 0.965, y: 1 }}
+                      transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
+                      className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
+                    >
+                      修改净值
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      aria-label="revalue action"
+                      onPointerDown={(e) => handleActionPointerDown(e, openRevalueAction)}
+                      onClick={() => handleActionClick(openRevalueAction)}
+                      whileTap={{ scale: 0.965, y: 1 }}
+                      transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
+                      className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
+                    >
+                      记录减值
+                    </motion.button>
+                  </div>
+                ) : (
+                  <div className="mt-5 flex gap-3">
+                    <motion.button
+                      type="button"
+                      aria-label="adjust balance action"
+                      onPointerDown={(e) => handleActionPointerDown(e, openAdjustAction)}
+                      onClick={() => handleActionClick(openAdjustAction)}
+                      whileTap={{ scale: 0.965, y: 1 }}
+                      transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
+                      className="flex-1 h-12 rounded-full bg-white/80 border border-white/70 text-slate-900 font-semibold shadow-sm"
+                    >
+                      期间增减
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      aria-label="set balance action"
+                      onPointerDown={(e) => handleActionPointerDown(e, openSetBalanceAction)}
+                      onClick={() => handleActionClick(openSetBalanceAction)}
+                      whileTap={{ scale: 0.965, y: 1 }}
+                      transition={{ type: 'spring', stiffness: 700, damping: 40, mass: 0.6 }}
+                      className="flex-1 h-12 rounded-full bg-slate-900 text-white font-semibold shadow-sm"
+                    >
+                      修改余额
+                    </motion.button>
+                  </div>
+                )}
+
+                {isItem && onSetItemCost ? (
+                  <ItemValueCard account={account} tone={accountTypeInfo?.tone ?? 'var(--primary)'} onEditCost={openSetCostAction} />
+                ) : null}
 
                 <div className="mt-7 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-500">
-                    <span>期间变动</span>
+                    <span>{isItem ? '价值变动' : '期间变动'}</span>
                     <SlidersHorizontal size={14} strokeWidth={2.5} className="opacity-60" />
                   </div>
                   <div className="text-[13px] font-semibold text-slate-400">金额</div>
                 </div>
 
                 <div className="mt-1 text-[11px] font-semibold text-slate-400/80">
-                  这里记录的是期间净流量/校准/转账（非逐笔流水）
+                  {isItem ? '这里记录的是减值/增值、净值校准与原值变更' : '这里记录的是期间净流量/校准/转账（非逐笔流水）'}
                 </div>
 
                 <OpsHistoryList
@@ -1093,6 +1517,8 @@ export function AccountDetailSheet(props: {
                   onDeleteOp={(op, title) => {
                     void confirmDeleteOp(op, title)
                   }}
+                  balanceLabel={balanceWord}
+                  emptyHint={isItem ? '用上方「记录减值」或「修改净值」记一笔，这里会保留历史' : undefined}
                 />
               </motion.div>
             ) : action === 'adjust' ? (
@@ -1153,6 +1579,61 @@ export function AccountDetailSheet(props: {
                   onCancel={cancelEdit}
                 />
               </motion.div>
+            ) : action === 'revalue' ? (
+              <motion.div
+                key="revalue"
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
+              >
+                <RevaluePage
+                  account={account}
+                  editingOp={editingRevalueOp}
+                  direction={revalueDirection}
+                  amount={revalueAmount}
+                  note={noteValue}
+                  canApplyDiff={canApplyRevalueDiff}
+                  recordTime={recordTimeValue}
+                  recordTimeMax={recordTimeMax}
+                  amountInputProps={amountInputProps}
+                  inputRef={revalueInputRef}
+                  onChangeAmount={setRevalueAmount}
+                  onChangeNote={setNoteValue}
+                  onChangeRecordTime={setRecordTimeValue}
+                  onChangeDirection={setRevalueDirection}
+                  onSubmit={submitRevalue}
+                  onCancel={cancelEdit}
+                />
+              </motion.div>
+            ) : action === 'set_cost' ? (
+              <motion.div
+                key="set_cost"
+                custom={pageDir}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
+              >
+                <SetCostPage
+                  account={account}
+                  value={costValue}
+                  note={noteValue}
+                  acquiredAt={acquiredAtValue}
+                  expressionInputProps={expressionInputProps}
+                  inputRef={costInputRef}
+                  onChangeValue={setCostValue}
+                  onChangeNote={setNoteValue}
+                  onChangeAcquiredAt={setAcquiredAtValue}
+                  onOperator={appendCostOperator}
+                  onClearExpression={clearCostExpression}
+                  onSubmit={submitSetCost}
+                  onCancel={cancelEdit}
+                />
+              </motion.div>
             ) : action === 'rename' ? (
               <motion.div
                 key="rename"
@@ -1188,11 +1669,19 @@ export function AccountDetailSheet(props: {
                   peerId={transferPeerId}
                   amount={transferAmount}
                   selectablePeers={selectablePeers}
+                  allowNewItem={Boolean(onCreateItem) && !account.archivedAt}
+                  newItemType={newItemType}
+                  newItemName={newItemName}
                   expressionInputProps={expressionInputProps}
                   inputRef={transferInputRef}
-                  onChangeDirection={setTransferDirection}
+                  onChangeDirection={(dir) => {
+                    setTransferDirection(dir)
+                    if (dir !== 'out' && transferPeerId === NEW_ITEM_PEER_ID) setTransferPeerId('')
+                  }}
                   onChangePeer={setTransferPeerId}
                   onChangeAmount={setTransferAmount}
+                  onChangeNewItemType={setNewItemType}
+                  onChangeNewItemName={setNewItemName}
                   onOperator={appendTransferOperator}
                   onClearExpression={clearTransferExpression}
                   onSubmit={submitTransfer}

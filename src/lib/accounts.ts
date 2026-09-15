@@ -40,7 +40,14 @@ export type Account = {
   id: string
   type: AccountTypeId
   name: string
+  // 固定资产分组下的条目是「物品」：balance 是账面净值，cost 是购入原值，
+  // 累计减值 = cost - balance 由此派生（见 src/lib/accountCost.ts）。其他分组不使用这两个字段。
   balance: number
+  cost?: number
+  // 购入日期，YYYY-MM-DD；仅物品使用
+  acquiredAt?: string
+  // 归档时刻（ISO）。归档的物品不计入任何汇总/快照/列表，只保留历史可查、可取消归档
+  archivedAt?: string
   updatedAt: string
 }
 

@@ -1,5 +1,6 @@
 import { accountGroups, getAccountTypeOption, getGroupIdByAccountType, type Account, type AccountGroupId, type AccountTypeId } from './accounts'
 import { coerceStoredAccountOps } from './accountOpsStorage'
+import { isItemAccountType, normalizeStoredAccountCost, normalizeStoredDateKey } from './accountCost'
 import { isAbortError } from './abortError'
 import { fetchCloudAiChat, fetchCloudAiChatStream, getCloudSyncSettings, hasCloudCredentials } from './cloud'
 import { coerceStoredTransactions } from './ledgerStorage'
@@ -218,13 +219,20 @@ function coerceAccounts(value: unknown): Account[] {
     const name = typeof item.name === 'string' && item.name.trim() ? item.name.trim() : option.name
     const id = typeof item.id === 'string' && item.id.trim() ? item.id : `ai-account-${index}`
     const updatedAt = typeof item.updatedAt === 'string' ? item.updatedAt : ''
-    accounts.push({
+    // 已归档物品不计入资产，也不进 AI 证据
+    if (isItemAccountType(type) && typeof item.archivedAt === 'string' && Number.isFinite(Date.parse(item.archivedAt))) return
+    const account: Account = {
       id,
       type,
       name,
       balance: finiteMoney(item.balance),
       updatedAt,
-    })
+    }
+    if (isItemAccountType(type)) {
+      account.cost = normalizeStoredAccountCost(item.cost)
+      account.acquiredAt = normalizeStoredDateKey(item.acquiredAt)
+    }
+    accounts.push(account)
   })
 
   return accounts
@@ -406,6 +414,8 @@ function buildActivity(accountOps: AccountOp[], ledger: Transaction[]) {
     rename: 0,
     set_balance: 0,
     adjust: 0,
+    revalue: 0,
+    set_cost: 0,
     transfer: 0,
   }
 
@@ -496,6 +506,8 @@ function trimAccounts(accounts: Account[], maxAccounts: number) {
         groupId: option.groupId,
         groupName: accountGroups[option.groupId].name,
         balance: account.balance,
+        cost: account.cost,
+        acquiredAt: account.acquiredAt,
         updatedAt: account.updatedAt,
       }
     })
@@ -547,7 +559,7 @@ function buildSections(args: {
     {
       id: 'accountOps.recent',
       title: '最近账户操作',
-      description: 'adjust 是期间净变动汇总，transfer 是内部转移，set_balance 是余额校准。',
+      description: 'adjust 是期间净变动汇总，transfer 是内部转移，set_balance 是余额校准；revalue/set_cost 是固定资产物品的减值/原值记录，不是现金流。',
       totalItems: accountOps.length,
       includedItems: Math.min(accountOps.length, options.maxRecentOps),
       omittedItems: Math.max(0, accountOps.length - options.maxRecentOps),
@@ -664,6 +676,7 @@ export function buildAiSystemMessage(storage: Storage = appStorage): AiChatMessa
       '- accountOps.kind="adjust" 表示期间净流量/净变动的汇总记录，不是单笔交易。\n' +
       '- accountOps.kind="set_balance" 是余额校准/覆盖；差额可能同时包含现金流、估值波动和校准。\n' +
       '- accountOps.kind="transfer" 是账户间内部转移，不改变净资产；不要把它当作收入或支出。\n' +
+      '- 固定资产分组的账户是「物品」：balance 是账面净值，cost 是购入原值，累计减值 = cost - balance；accountOps.kind="revalue" 是减值/增值，kind="set_cost" 是原值记录，都不是现金流。\n' +
       '- snapshots 是不同日期的余额快照；相邻快照差值代表期间总变化，不能拆成逐笔明细。\n' +
       '- ledger 是可选明细，可能不完整；不要假设它覆盖全部收支。\n' +
       '- savingsGoal 是目标，不是实际资产或负债。\n\n' +

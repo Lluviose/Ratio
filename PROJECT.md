@@ -189,12 +189,18 @@ Page 0        Page 1        Page 2        Page 3（按需挂载）
 
 ### 账户操作（src/lib/accountOps.ts）
 
+固定资产分组内的条目在界面上称为「物品」，沿用 `Account` 的 id/type/balance：`balance` 是当前净值，可选 `cost` 是购入原值，`acquiredAt` 是购入日期（YYYY-MM-DD），`archivedAt` 是归档时刻。旧账户无需迁移，可在详情中补录原值。`accountCost.ts` 负责校验及原值、净值、累计减值和保值率的派生计算；净值可高于原值，此时显示增值。
+
+新增物品可直接填写原值与净值，也可从其他账户的转出页选择「新建物品」，将转账金额同时作为原值和初始净值。全部转出后提示保留或归档。归档保留条目和历史，从 `useAccounts.activeAccounts`、汇总、当前快照及 AI 当前资产证据中排除；资产列表底部的「已归档物品」可查看及取消归档。历史快照保留原样。涉及已归档物品的金额历史需先取消归档再编辑或删除，防止回滚余额被隐藏。
+
 | kind | 语义 | 统计口径注意 |
 | --- | --- | --- |
 | `rename` | 改名 | 无金额影响 |
 | `set_balance` | 余额校准/覆盖（before → after） | 差额不是收支 |
 | `adjust` | **期间净变动汇总** | 不是单笔交易 |
 | `transfer` | 账户间内部转移 | 不改变净资产，绝不能算收入/支出 |
+| `revalue` | 物品减值/增值 | 只改净值，不是现金流；沿用余额校准后的回滚保护 |
+| `set_cost` | 记录/修正物品原值 | 不改净值；删除记录不会回写原值或购入日期 |
 
 存储与规范化在 `src/lib/accountOpsStorage.ts`，Hook 在 `src/lib/useAccountOps.ts`。编辑/删除历史操作时有「回滚」语义：只有当该账户此后没有更晚的 `set_balance` 校准时才回滚余额（`canRollbackBalance` 模式，详见 `AccountDetailSheet`）。新建「修改余额 / 期间增减」可选记录时间（默认现在、不允许未来）：所选时间早于最近一次校准时仅落历史记录、不改当前余额（同一 `canRollbackBalance` 判断换上所选时间）；编辑历史记录时记录时间只读——改时间会让「差额是否已应用」跨校准边界漂移。`op.at` 同时决定月度流量统计的归属月份（`monthlyDisposable`）。
 

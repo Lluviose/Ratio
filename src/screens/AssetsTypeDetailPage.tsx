@@ -12,6 +12,7 @@ import {
   type ManualAccountOrderByType,
 } from '../lib/accountSort'
 import { formatCny } from '../lib/format'
+import { formatRatioPercent, summarizeItemValue, summarizeItemValueTotals } from '../lib/accountCost'
 import { addMoney } from '../lib/money'
 import { accountGroups, getAccountTypeOption, type Account, type AccountTypeId } from '../lib/accounts'
 import { accountDetailSheetLayoutId } from '../lib/layoutIds'
@@ -63,6 +64,7 @@ export function AssetsTypeDetailPage(props: {
   }, [accountSortMode, accounts, manualAccountOrderByType, type])
 
   const total = useMemo(() => list.reduce((sum, a) => addMoney(sum, a.balance), 0), [list])  
+  const itemTotals = useMemo(() => summarizeItemValueTotals(list), [list])
   const maskedText = '*****'
   const maskedClass = 'tracking-[0.28em]'
 
@@ -164,6 +166,18 @@ export function AssetsTypeDetailPage(props: {
       </motion.div>
 
       <div className="px-4 pt-4 pb-8">
+        {info.group.id === 'fixed' && itemTotals.counted > 0 ? (
+          <div className="mb-4 rounded-[24px] border border-[var(--hairline)] bg-[var(--card)] p-4">
+            <div className="flex justify-between gap-3 text-xs text-[var(--muted-text)]">
+              <span>物品原值</span><span>{itemTotals.impairment < 0 ? '累计增值' : '累计减值'}</span>
+            </div>
+            <div className="mt-1 flex justify-between gap-3 font-bold text-[var(--text)]">
+              <span>{hideAmounts ? maskedText : formatCny(itemTotals.cost)}</span>
+              <span>{hideAmounts ? maskedText : formatCny(Math.abs(itemTotals.impairment))}</span>
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--muted-text)]">按已记录原值的 {itemTotals.counted} 件物品汇总 · 资产合计按当前净值</p>
+          </div>
+        ) : null}
         <motion.div
           className="bg-[var(--card)] rounded-[24px] border border-[var(--hairline)] overflow-hidden"
           style={{ boxShadow: 'var(--shadow-soft)' }}
@@ -186,6 +200,7 @@ export function AssetsTypeDetailPage(props: {
           <div className="flex flex-col p-3 gap-2">
             {list.map((account, i) => {
               const isActive = Boolean(activeAccountId && activeAccountId === account.id)
+              const value = info.group.id === 'fixed' ? summarizeItemValue(account.cost, account.balance) : null
 
               return (
                 <motion.div
@@ -232,7 +247,10 @@ export function AssetsTypeDetailPage(props: {
                       <div className="w-9 h-9 rounded-2xl bg-white/80 flex items-center justify-center text-slate-700 shadow-sm border border-white/70">
                         {createElement(info.opt.icon, { size: 18 })}
                       </div>
-                      <div className="font-bold text-sm text-slate-800 truncate">{account.name}</div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-[var(--text)] truncate">{account.name}</div>
+                        {value ? <div className="mt-1 text-[11px] text-[var(--muted-text)] truncate">原值 {hideAmounts ? maskedText : formatCny(value.cost)} · 保值 {hideAmounts ? maskedText : formatRatioPercent(value.retainedRatio)}</div> : null}
+                      </div>
                     </div>
                     <div className={hideAmounts ? `font-bold text-sm text-[var(--text)] ${maskedClass}` : 'font-bold text-sm text-[var(--text)]'}>
                       {hideAmounts ? maskedText : formatCny(account.balance)}

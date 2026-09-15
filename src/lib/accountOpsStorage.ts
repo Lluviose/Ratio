@@ -67,13 +67,22 @@ export function normalizeAccountOp(op: AccountOp): AccountOp {
     }
   }
 
-  if (op.kind === 'adjust') {
+  if (op.kind === 'adjust' || op.kind === 'revalue') {
     return {
       ...op,
       note: normalizeOptionalNote(op.note),
       delta: normalizeMoney(op.delta),
       before: normalizeStoredOpBalance(op.accountType, op.before),
       after: normalizeStoredOpBalance(op.accountType, op.after),
+    }
+  }
+
+  if (op.kind === 'set_cost') {
+    return {
+      ...op,
+      note: normalizeOptionalNote(op.note),
+      before: op.before == null ? null : normalizeUnknownOpBalance(op.before),
+      after: normalizeUnknownOpBalance(op.after),
     }
   }
 
@@ -105,13 +114,22 @@ export function normalizeAccountOpInput(op: AccountOpInput): AccountOpInput {
     }
   }
 
-  if (op.kind === 'adjust') {
+  if (op.kind === 'adjust' || op.kind === 'revalue') {
     return {
       ...op,
       note: normalizeOptionalNote(op.note),
       delta: normalizeMoney(op.delta),
       before: normalizeStoredOpBalance(op.accountType, op.before),
       after: normalizeStoredOpBalance(op.accountType, op.after),
+    }
+  }
+
+  if (op.kind === 'set_cost') {
+    return {
+      ...op,
+      note: normalizeOptionalNote(op.note),
+      before: op.before == null ? null : normalizeUnknownOpBalance(op.before),
+      after: normalizeUnknownOpBalance(op.after),
     }
   }
 
@@ -186,7 +204,7 @@ export function coerceStoredAccountOps(value: unknown): AccountOp[] {
       continue
     }
 
-    if (kind === 'adjust') {
+    if (kind === 'adjust' || kind === 'revalue') {
       const accountId = toNonEmptyString(item.accountId)
       const delta = toFiniteNumber(item.delta)
       const before = toFiniteNumber(item.before)
@@ -213,6 +231,30 @@ export function coerceStoredAccountOps(value: unknown): AccountOp[] {
           note: normalizeOptionalNote(item.note),
           accountId,
           delta,
+          before,
+          after,
+        }),
+      )
+      continue
+    }
+
+    if (kind === 'set_cost') {
+      const accountId = toNonEmptyString(item.accountId)
+      const before = item.before == null ? null : toFiniteNumber(item.before)
+      const after = toFiniteNumber(item.after)
+      if (!accountId || after == null) continue
+      const id =
+        typeof item.id === 'string' && item.id.trim()
+          ? item.id
+          : legacyAccountOpId(index, [String(kind), at, accountType, accountId, String(before ?? ''), String(after)])
+      result.push(
+        normalizeAccountOp({
+          id,
+          kind,
+          at,
+          accountType: accountType as AccountOp['accountType'],
+          note: normalizeOptionalNote(item.note),
+          accountId,
           before,
           after,
         }),
