@@ -11,7 +11,7 @@ import {
   type MoneyExpressionOperator,
 } from '../lib/moneyExpression'
 import { type Account, type AccountTypeId, getAccountTypeOption } from '../lib/accounts'
-import { formatDateKey, isItemAccountType, normalizeStoredDateKey, todayDateKey, dateKeyFromTimestamp, findItemOpenedByTransfer, companionOpIdsForItem } from '../lib/accountCost'
+import { formatDateKey, isItemAccountType, normalizeStoredDateKey, todayDateKey, dateKeyFromTimestamp, findItemOpenedByTransfer, companionOpIdsForItem, findPurchaseCostOp } from '../lib/accountCost'
 import { hapticSuccess } from '../lib/haptics'
 import { applyAccountFlow, canApplyBalanceDelta, isNegativeAccountBalance } from '../lib/accountBalance'
 import { buildLatestSetBalanceAtMap, buildOpRollbackPlan, canRollbackBalance } from '../lib/opRollback'
@@ -931,6 +931,22 @@ export function AccountDetailSheet(props: {
         fromAfter: nextFromAfter,
         toAfter: nextToAfter,
       })
+
+      // 购入转账（新建并转入）：原值 = 转账金额。改金额时把物品原值和那条首次原值记录一并改掉，
+      // 否则价值卡会把差额显示成「增值/减值」，历史里的原值也对不上。
+      const openedItem = findItemOpenedByTransfer(editingTransferOp, accounts, ops)
+      if (
+        openedItem &&
+        openedItem.id === editingTransferOp.toId &&
+        openedItem.cost != null &&
+        moneyEquals(openedItem.cost, editingTransferOp.amount)
+      ) {
+        const nextCost = normalizeMoney(num)
+        onSetItemCost?.(openedItem.id, nextCost, openedItem.acquiredAt)
+        const costOp = findPurchaseCostOp(ops, openedItem.id, editingTransferOp.amount)
+        if (costOp) onUpdateOp(costOp.id, { ...costOp, after: nextCost })
+      }
+
       if (canApplyFrom && canApplyTo) hapticSuccess()
       toast(canApplyFrom && canApplyTo ? '已保存' : '已保存（部分余额未变）', { tone: canApplyFrom && canApplyTo ? 'success' : 'neutral' })
 

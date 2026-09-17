@@ -109,6 +109,8 @@ function hasOtherMoneyHistory(ops: readonly AccountOp[], itemId: string, exceptO
 
 // 这笔转账是物品的开户转入（新建并转入，或先建 0 净值再转入）且没有后续金额历史时，
 // 删除转账应连物品一起删，避免留下 0 净值幽灵条目。
+// 但物品若带有与转账金额不同的原值（用户手工建的物品，转入只是部分付款），
+// 它承载了转账之外的信息，删除转账只回滚金额、不能连物品和原值一起删。
 export function findItemOpenedByTransfer(
   op: AccountOp,
   accounts: readonly Account[],
@@ -125,6 +127,7 @@ export function findItemOpenedByTransfer(
   for (const side of sides) {
     const account = accounts.find((item) => item.id === side.id)
     if (!account || account.archivedAt || !isItemAccountType(account.type)) continue
+    if (account.cost != null && !moneyEquals(account.cost, op.amount)) continue
     if (hasOtherMoneyHistory(ops, account.id, op.id)) continue
     if (!moneyEquals(account.balance, 0) && !moneyEquals(account.balance, side.after)) continue
     return account
@@ -144,4 +147,18 @@ export function companionOpIdsForItem(
     if (op.accountId === itemId) ids.push(op.id)
   }
   return ids
+}
+
+// 购入转账对应的那条「首次记录原值」记录（新建并转入时随转账一起落下，after = 转账金额）。
+// 修改购入金额时要把它一并改掉，否则历史里的原值和价值卡上的原值对不上。
+export function findPurchaseCostOp(
+  ops: readonly AccountOp[],
+  itemId: string,
+  amount: number,
+): Extract<AccountOp, { kind: 'set_cost' }> | null {
+  for (const op of ops) {
+    if (op.kind !== 'set_cost' || op.accountId !== itemId) continue
+    if (op.before === null && moneyEquals(op.after, amount)) return op
+  }
+  return null
 }

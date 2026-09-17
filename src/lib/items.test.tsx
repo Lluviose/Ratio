@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Account } from './accounts'
 import { useAccounts } from './useAccounts'
-import { normalizeStoredDateKey, summarizeItemValue, summarizeItemValueTotals, todayDateKey, dateKeyFromTimestamp, findItemOpenedByTransfer, companionOpIdsForItem } from './accountCost'
+import { normalizeStoredDateKey, summarizeItemValue, summarizeItemValueTotals, todayDateKey, dateKeyFromTimestamp, findItemOpenedByTransfer, companionOpIdsForItem, findPurchaseCostOp } from './accountCost'
 import { buildSnapshot } from './snapshots'
 import { buildAiFinancialContext } from './ai'
 import { coerceStoredAccountOps } from './accountOpsStorage'
@@ -133,6 +133,25 @@ describe('物品金额、归档与持久化', () => {
         [purchase, { ...purchase, id: 'later', toBefore: 1500, toAfter: 1800, amount: 300, fromBefore: 3500, fromAfter: 3200 }],
       ),
     ).toBeNull()
+  })
+
+  it('手工建的物品原值与转入金额不同时，删除转账不删物品；购入原值记录按金额定位', () => {
+    // 先建「汽车」原值 100000、净值 0，再从银行卡转入 20000 首付：转账不是开户购入，不能连物品一起删
+    const car: Account = { id: 'car', type: 'other_fixed', name: '汽车', balance: 20000, cost: 100000, acquiredAt: '2024-05-01', updatedAt: '' }
+    const costOp = { id: 'cost', kind: 'set_cost' as const, accountId: car.id, accountType: car.type, at: '2026-09-15T00:00:00.000Z', before: null, after: 100000 }
+    const deposit = {
+      id: 'deposit', kind: 'transfer' as const, accountType: 'bank_card' as const, at: '2026-09-15T00:00:01.000Z',
+      fromId: bank.id, toId: car.id, amount: 20000, fromBefore: 50000, fromAfter: 30000, toBefore: 0, toAfter: 20000,
+    }
+    expect(findItemOpenedByTransfer(deposit, [bank, car], [costOp, deposit])).toBeNull()
+    // 原值等于转账金额（新建并转入）或旧账户没有原值时仍视为开户购入
+    expect(findItemOpenedByTransfer(deposit, [bank, { ...car, cost: 20000 }], [costOp, deposit])).toMatchObject({ id: car.id })
+    expect(findItemOpenedByTransfer(deposit, [bank, { ...car, cost: undefined }], [deposit])).toMatchObject({ id: car.id })
+
+    expect(findPurchaseCostOp([costOp, deposit], car.id, 100000)).toMatchObject({ id: 'cost' })
+    expect(findPurchaseCostOp([costOp, deposit], car.id, 20000)).toBeNull()
+    // 只匹配首次记录（before 为 null），后续修正记录不算
+    expect(findPurchaseCostOp([{ ...costOp, before: 90000 }], car.id, 100000)).toBeNull()
   })
 
   it('原值和减值操作保留在备份中；减值回滚尊重后续余额校准', () => {

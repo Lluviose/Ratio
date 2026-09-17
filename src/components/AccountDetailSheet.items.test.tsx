@@ -84,6 +84,40 @@ describe('物品详情完整写路径', () => {
     expect(storedOps()).toEqual([])
   })
 
+  it('修改购入转账金额时，物品原值和首次原值记录一并更新', async () => {
+    render(<Harness id="bank" />)
+    openTransfer()
+    fireEvent.change(await screen.findByLabelText('对方账户'), { target: { value: '__new_item__' } })
+    fireEvent.change(await screen.findByLabelText('new item name'), { target: { value: '镜头' } })
+    fireEvent.change(screen.getByLabelText('transfer amount'), { target: { value: '1500' } })
+    fireEvent.click(screen.getByRole('button', { name: '新建并转入' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.name === '镜头')).toMatchObject({ cost: 1500, balance: 1500 }))
+
+    fireEvent.click(screen.getByText('转出到 镜头'))
+    fireEvent.change(await screen.findByLabelText('transfer amount'), { target: { value: '1800' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.name === '镜头')).toMatchObject({ cost: 1800, balance: 1800 }))
+    expect(storedAccounts().find((a) => a.id === bank.id)?.balance).toBe(3200)
+    const costOp = storedOps().find((op) => op.kind === 'set_cost')
+    expect(costOp).toMatchObject({ before: null, after: 1800 })
+    expect(storedOps().find((op) => op.kind === 'transfer')).toMatchObject({ amount: 1800, toAfter: 1800, fromAfter: 3200 })
+  })
+
+  it('删除转入手工建物品（原值与转账不同）的转账只回滚金额，保留物品和原值', async () => {
+    const car: Account = { id: 'car', name: '汽车', type: 'other_fixed', balance: 20000, cost: 100000, acquiredAt: '2024-05-01', updatedAt: '' }
+    localStorage.setItem('ratio.accounts', JSON.stringify([bank, car]))
+    localStorage.setItem('ratio.accountOps', JSON.stringify([
+      { id: 'cost', kind: 'set_cost', accountType: car.type, accountId: car.id, at: '2026-09-14T00:00:00.000Z', before: null, after: 100000 },
+      { id: 'deposit', kind: 'transfer', accountType: 'bank_card', at: '2026-09-14T00:00:01.000Z', fromId: bank.id, toId: car.id, amount: 20000, fromBefore: 25000, fromAfter: 5000, toBefore: 0, toAfter: 20000 },
+    ]))
+    render(<Harness id="bank" />)
+    fireEvent.click(screen.getByRole('button', { name: '删除记录' }))
+    fireEvent.click(await screen.findByRole('button', { name: '删除并回滚' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.id === bank.id)?.balance).toBe(25000))
+    expect(storedAccounts().find((a) => a.id === car.id)).toMatchObject({ balance: 0, cost: 100000, acquiredAt: '2024-05-01' })
+    expect(storedOps().map((op) => op.id)).toEqual(['cost'])
+  })
+
   it('删除转入已有物品的转账只回滚金额，不删物品', async () => {
     localStorage.setItem('ratio.accountOps', JSON.stringify([{
       id: 'sale', kind: 'transfer', accountType: 'bank_card', at: '2026-09-14T00:00:00.000Z',
