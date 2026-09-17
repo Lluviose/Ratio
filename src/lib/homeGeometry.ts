@@ -49,9 +49,48 @@ export function getRatioCorner(kind: CornerKind, chartRadius: number): CornerRad
   return { tl: 0, tr: 0, bl: 0, br: 0 }
 }
 
-export function getListCorner(kind: CornerKind, listRadius: number): CornerRadii {
-  const isListLastBlock = kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt'
+export function getListCorner(kind: CornerKind, listRadius: number, isListLast?: boolean): CornerRadii {
+  // 列表页的「最后一块」按列表顺序判定（调用方可显式传入）；未传入时退化为按占比页形态推断
+  const isListLastBlock =
+    isListLast ?? (kind === 'debt' || kind === 'assetBottomNoDebt' || kind === 'assetOnlyNoDebt')
   return { tl: 0, tr: listRadius, bl: 0, br: isListLastBlock ? listRadius : 0 }
+}
+
+const ZERO_RECT: Rect = { x: 0, y: 0, w: 0, h: 0 }
+
+export type OverlayChartGeometry = {
+  /** 该色块是否参与气泡页 / 占比页的图表（金额 > 0 且占比布局给了矩形） */
+  inChart: boolean
+  ratio: Rect
+  list: Rect
+  bubbleRadius: number
+}
+
+// 金额为 0（占比 0%）的分组仍有列表卡片，因此 OverlayBlock 必须存在；
+// 但它既不在占比布局里、也没有气泡节点。若直接回退到列表矩形渲染，
+// 就会在彩条图里冒出一个「0%」色块、在气泡页里冒出一个默认半径的幽灵气泡。
+// 这里把它在图表态折叠为零尺寸：气泡半径 0、占比矩形收缩为列表位置上的零高条，
+// 滑到列表页时再原地展开。
+export function resolveOverlayChartGeometry(params: {
+  amount: number
+  ratioRect?: Rect
+  listRect?: Rect
+  bubbleRadius: number
+}): OverlayChartGeometry {
+  const { amount, ratioRect, listRect, bubbleRadius } = params
+  const inChart = Boolean(ratioRect) && Number.isFinite(amount) && amount > 0
+
+  if (inChart && ratioRect) {
+    return { inChart: true, ratio: ratioRect, list: listRect ?? ratioRect, bubbleRadius }
+  }
+
+  const anchor = listRect ?? ratioRect ?? ZERO_RECT
+  return {
+    inChart: false,
+    ratio: { x: anchor.x, y: anchor.y, w: anchor.w, h: 0 },
+    list: anchor,
+    bubbleRadius: 0,
+  }
 }
 
 export function isSameRect(a?: Rect, b?: Rect): boolean {

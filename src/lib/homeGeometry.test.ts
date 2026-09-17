@@ -20,6 +20,7 @@ import {
   isSameRect,
   isSameRectMap,
   lerp,
+  resolveOverlayChartGeometry,
   type CornerKind,
   type GroupId,
   type ListMeasureItem,
@@ -65,6 +66,13 @@ describe('corner tables', () => {
     expect(getRatioCorner('assetTopNoDebt', R)).toEqual({ tl: R, tr: R, bl: 0, br: 0 })
     expect(getRatioCorner('assetBottomNoDebt', R)).toEqual({ tl: R, tr: R, bl: R, br: R })
     expect(getRatioCorner('assetMiddleNoDebt', R)).toEqual({ tl: R, tr: R, bl: 0, br: 0 })
+  })
+
+  it('list corners follow an explicit list-last flag when provided', () => {
+    // 负债金额为 0 时资产用 NoDebt 形态，但列表里负债卡仍排在最后：只有负债块该圆底角
+    expect(getListCorner('assetBottomNoDebt', 30, false).br).toBe(0)
+    expect(getListCorner('debt', 30, true).br).toBe(30)
+    expect(getListCorner('assetMiddle', 30, true).br).toBe(30)
   })
 
   it('list corners round the bottom only on the visually last block', () => {
@@ -355,5 +363,57 @@ describe('getBubbleRuntimeState', () => {
     const a = { pageActive: true, physicsActive: false, burstsVisible: false }
     expect(isSameBubbleRuntimeState(a, { ...a })).toBe(true)
     expect(isSameBubbleRuntimeState(a, { ...a, burstsVisible: true })).toBe(false)
+  })
+})
+
+describe('resolveOverlayChartGeometry', () => {
+  const ratioRect = { x: 100, y: 120, w: 320, h: 200 }
+  const listRect = { x: 0, y: 400, w: 380, h: 90 }
+
+  it('keeps chart geometry for positive amounts', () => {
+    const g = resolveOverlayChartGeometry({ amount: 1, ratioRect, listRect, bubbleRadius: 80 })
+    expect(g).toEqual({ inChart: true, ratio: ratioRect, list: listRect, bubbleRadius: 80 })
+  })
+
+  it('collapses zero-amount groups out of the bubble and ratio charts', () => {
+    // 有账户但金额为 0 的分组：不该在彩条图里出现 0% 色块，也不该在气泡页里出现默认半径的气泡
+    const g = resolveOverlayChartGeometry({ amount: 0, ratioRect: undefined, listRect, bubbleRadius: 60 })
+    expect(g.inChart).toBe(false)
+    expect(g.bubbleRadius).toBe(0)
+    expect(g.ratio).toEqual({ x: listRect.x, y: listRect.y, w: listRect.w, h: 0 })
+    expect(g.list).toEqual(listRect)
+  })
+
+  it('treats a missing ratio rect as out of chart even when amount is positive', () => {
+    const g = resolveOverlayChartGeometry({ amount: 5, ratioRect: undefined, listRect, bubbleRadius: 60 })
+    expect(g.inChart).toBe(false)
+    expect(g.bubbleRadius).toBe(0)
+  })
+
+  it('falls back to a zero rect when nothing has been measured yet', () => {
+    const g = resolveOverlayChartGeometry({ amount: 0, bubbleRadius: 60 })
+    expect(g.ratio).toEqual({ x: 0, y: 0, w: 0, h: 0 })
+    expect(g.list).toEqual({ x: 0, y: 0, w: 0, h: 0 })
+  })
+
+  it('性质：金额 ≤ 0 或缺少占比矩形时，图表态尺寸恒为 0', () => {
+    fc.assert(
+      fc.property(
+        fc.double({ min: -1e6, max: 0, noNaN: true }),
+        fc.record({
+          x: fc.integer({ min: 0, max: 500 }),
+          y: fc.integer({ min: 0, max: 900 }),
+          w: fc.integer({ min: 0, max: 500 }),
+          h: fc.integer({ min: 0, max: 300 }),
+        }),
+        fc.integer({ min: 0, max: 200 }),
+        (amount, rect, r) => {
+          const g = resolveOverlayChartGeometry({ amount, ratioRect: rect, listRect: rect, bubbleRadius: r })
+          expect(g.inChart).toBe(false)
+          expect(g.bubbleRadius).toBe(0)
+          expect(g.ratio.h).toBe(0)
+        },
+      ),
+    )
   })
 })

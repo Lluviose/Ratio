@@ -551,9 +551,11 @@ export function AssetsScreen(props: {
 
   const homeBlockGeometries = useMemo<HomeBlockGeometry[]>(
     () =>
-      overlayBlocksInListOrder.map((block) => {
+      overlayBlocksInListOrder.map((block, index) => {
         const kind = blockKinds[block.id] ?? 'assetMiddle'
         const bubbleRadius = bubbleNodeById.get(block.id)?.radius ?? 60
+        // 列表页最后一块按列表顺序判定（金额为 0 的分组不在占比布局里，不能靠占比形态推断）
+        const isListLast = index === overlayBlocksInListOrder.length - 1
         return {
           block,
           kind,
@@ -564,7 +566,7 @@ export function AssetsScreen(props: {
           bubbleRadius,
           burstProgress: bubblePhysics.burstProgress.get(block.id),
           ratioCorner: getRatioCorner(kind, chartRadius),
-          listCorner: getListCorner(kind, listRadius),
+          listCorner: getListCorner(kind, listRadius, isListLast),
           bubbleCorner: { tl: bubbleRadius, tr: bubbleRadius, bl: bubbleRadius, br: bubbleRadius },
         }
       }),

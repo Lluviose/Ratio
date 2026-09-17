@@ -1,7 +1,14 @@
 import { motion, useMotionValue, useTransform, type MotionValue } from 'framer-motion'
 import { formatCny } from '../lib/format'
 import { pickForegroundColor } from '../lib/themes'
-import { lerp, type CornerKind, type CornerRadii, type GroupId, type Rect } from '../lib/homeGeometry'
+import {
+  lerp,
+  resolveOverlayChartGeometry,
+  type CornerKind,
+  type CornerRadii,
+  type GroupId,
+  type Rect,
+} from '../lib/homeGeometry'
 
 // 首页形变色块的数据模型与几何描述。
 // OverlayBlock 是「气泡 → 占比 → 列表」三态间逐像素插值的可视层：
@@ -216,9 +223,12 @@ export function OverlayBlock(props: {
     listCorner,
     bubbleCorner,
   } = geometry
-  const ratio = ratioRect ?? listRect ?? { x: 0, y: 0, w: 0, h: 0 }
-  const list = listRect ?? ratioRect ?? ratio
-  const bRadius = bubbleRadius
+  // 金额为 0 的分组不参与图表：气泡半径 0、占比态折叠为零高条，只在列表页展开
+  const {
+    ratio,
+    list,
+    bubbleRadius: bRadius,
+  } = resolveOverlayChartGeometry({ amount: block.amount, ratioRect, listRect, bubbleRadius })
 
   // Fallback for bubble pos if missing (shouldn't happen if initialized)
   const defaultBX = useMotionValue(ratio.x + ratio.w / 2)
