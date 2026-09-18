@@ -28,12 +28,134 @@ function openTransfer() {
   fireEvent.click(screen.getByRole('button', { name: '转账' }))
 }
 
+const purchase: AccountOp = {
+  id: 'buy', kind: 'transfer', accountType: 'bank_card', at: '2026-09-14T00:00:01.000Z',
+  fromId: bank.id, toId: item.id, amount: 2000, fromBefore: 7000, fromAfter: 5000, toBefore: 0, toAfter: 2000,
+}
+const purchaseCost: AccountOp = {
+  id: 'cost', kind: 'set_cost', accountId: item.id, accountType: item.type,
+  at: '2026-09-14T00:00:00.999Z', before: null, after: 2000,
+}
+
+function seedPurchase(accounts: Account[] = [bank, { ...item, cost: 2000 }], ops: AccountOp[] = [purchaseCost, purchase]) {
+  localStorage.setItem('ratio.accounts', JSON.stringify(accounts))
+  localStorage.setItem('ratio.accountOps', JSON.stringify(ops))
+}
+
+function openDeleteItem() {
+  fireEvent.click(within(screen.getByRole('button', { name: 'rename' }).parentElement!).getByRole('button', { name: 'more' }))
+  fireEvent.click(screen.getByRole('button', { name: '删除物品' }))
+}
+
 beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('ratio.accounts', JSON.stringify([bank, item]))
 })
 
 describe('物品详情完整写路径', () => {
+  it('从物品删除入口回滚唯一购入，恢复付款余额并清理配套记录', async () => {
+    seedPurchase()
+    render(<Harness id="item" />)
+    openDeleteItem()
+    expect(await screen.findByText(/是否同时回滚交易/)).toBeInTheDocument()
+    expect(storedAccounts()).toHaveLength(2)
+    fireEvent.click(screen.getByRole('button', { name: '删除并回滚交易' }))
+    await waitFor(() => expect(storedAccounts()).toEqual([{ ...bank, balance: 7000, updatedAt: expect.any(String) }]))
+    expect(storedOps()).toEqual([])
+  })
+
+  it('选择仅删除物品时保留交易和付款余额', async () => {
+    seedPurchase()
+    render(<Harness id="item" />)
+    openDeleteItem()
+    fireEvent.click(await screen.findByRole('button', { name: '仅删除物品' }))
+    await waitFor(() => expect(storedAccounts()).toEqual([bank]))
+    expect(storedOps().map((op) => op.id).sort()).toEqual(['buy', 'cost'])
+  })
+
+  it('取消删除不改变物品、交易或付款余额', async () => {
+    seedPurchase()
+    const before = { accounts: storedAccounts(), ops: storedOps() }
+    render(<Harness id="item" />)
+    openDeleteItem()
+    fireEvent.click(await screen.findByRole('button', { name: '取消' }))
+    expect(storedAccounts()).toEqual(before.accounts)
+    expect(storedOps()).toEqual(before.ops)
+  })
+
+  it.each(['校准', '缺失', '归档', '负余额'] as const)('付款账户%s时不能执行购入回滚', async (reason) => {
+    const source: Account = reason === '归档'
+      ? { ...bank, type: 'other_fixed', archivedAt: '2026-09-15T00:00:00.000Z' }
+      : reason === '负余额' ? { ...bank, type: 'credit_card', balance: 1000 } : bank
+    const buy = reason === '负余额' ? { ...purchase, fromBefore: 0, fromAfter: 2000 } : purchase
+    const ops: AccountOp[] = [purchaseCost, buy]
+    if (reason === '校准') ops.push({ id: 'calibrate', kind: 'set_balance', accountType: bank.type, accountId: bank.id, at: '2026-09-15T00:00:00.000Z', before: 5000, after: 5000 })
+    seedPurchase([...(reason === '缺失' ? [] : [source]), { ...item, cost: 2000 }], ops)
+    render(<Harness id="item" />)
+    openDeleteItem()
+    const rollback = await screen.findByRole('button', { name: '删除并回滚交易' })
+    expect(rollback).toBeDisabled()
+    fireEvent.click(rollback)
+    expect(storedAccounts().some((a) => a.id === item.id)).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '仅删除物品' }))
+    await waitFor(() => expect(storedAccounts().some((a) => a.id === item.id)).toBe(false))
+    expect(storedAccounts()).toEqual(reason === '缺失' ? [] : [source])
+    expect(storedOps()).toHaveLength(ops.length)
+  })
+
+  it('信用卡购入回滚减少欠款，不增加余额', async () => {
+    seedPurchase([{ ...bank, type: 'credit_card', balance: 2500 }, { ...item, cost: 2000 }], [
+      purchaseCost, { ...purchase, accountType: 'credit_card', fromBefore: 500, fromAfter: 2500 },
+    ])
+    render(<Harness id="item" />)
+    openDeleteItem()
+    fireEvent.click(await screen.findByRole('button', { name: '删除并回滚交易' }))
+    await waitFor(() => expect(storedAccounts()[0].balance).toBe(500))
+    expect(storedOps()).toEqual([])
+  })
+
+  it('只有一条购入记录的旧物品也可回滚，保留付款账户的其他收支', async () => {
+    const deposit: AccountOp = { id: 'income', kind: 'adjust', accountId: bank.id, accountType: bank.type, at: '2026-09-15T00:00:00.000Z', delta: 100.25, before: 5000, after: 5100.25 }
+    seedPurchase([{ ...bank, balance: 5100.25 }, { ...item, cost: undefined }], [purchase, deposit])
+    render(<Harness id="item" />)
+    openDeleteItem()
+    fireEvent.click(await screen.findByRole('button', { name: '删除并回滚交易' }))
+    await waitFor(() => expect(storedAccounts()[0].balance).toBe(7100.25))
+    expect(storedOps()).toEqual([deposit])
+  })
+
+  it.each(['零净值', '手工新建', '后续减值', '后续原值', '多笔转账', '改名', '已归档'] as const)('%s的物品不套用唯一购入回滚', async (kind) => {
+    const current = { ...item, cost: 2000 }
+    let ops: AccountOp[] = [purchaseCost, purchase]
+    if (kind === '零净值') current.balance = 0
+    if (kind === '已归档') Object.assign(current, { archivedAt: '2026-09-15T00:00:00.000Z' })
+    if (kind === '手工新建') ops = [purchaseCost]
+    if (kind === '后续减值') {
+      current.balance = 1500
+      ops.push({ id: 'loss', kind: 'revalue', accountId: item.id, accountType: item.type, at: '2026-09-15T00:00:00.000Z', delta: -500, before: 2000, after: 1500 })
+    }
+    if (kind === '后续原值') ops.push({ ...purchaseCost, id: 'correction', before: 2500 })
+    if (kind === '多笔转账') ops.push({ ...purchase, id: 'second' })
+    if (kind === '改名') ops.push({ id: 'rename', kind: 'rename', accountId: item.id, accountType: item.type, at: '2026-09-15T00:00:00.000Z', beforeName: '旧名', afterName: item.name })
+    seedPurchase([bank, current], ops)
+    render(<Harness id="item" />)
+    openDeleteItem()
+    expect(await screen.findByRole('button', { name: '仅删除物品' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '删除并回滚交易' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '仅删除物品' }))
+    await waitFor(() => expect(storedAccounts()).toEqual([bank]))
+    expect(storedOps()).toHaveLength(ops.length)
+  })
+
+  it('删除购入历史不会连带删除已有原值修正的物品', async () => {
+    seedPurchase(undefined, [purchaseCost, purchase, { ...purchaseCost, id: 'correction', before: 2500 }])
+    render(<Harness id="bank" />)
+    fireEvent.click(screen.getByRole('button', { name: '删除记录' }))
+    fireEvent.click(await screen.findByRole('button', { name: '删除并回滚' }))
+    await waitFor(() => expect(storedAccounts().find((a) => a.id === item.id)).toMatchObject({ balance: 0, cost: 2000 }))
+    expect(storedOps().map((op) => op.id).sort()).toEqual(['correction', 'cost'])
+  })
+
   it('余额不足时拒绝新建并转入，不留下空物品或历史', async () => {
     render(<Harness id="bank" />)
     openTransfer()

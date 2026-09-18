@@ -98,16 +98,18 @@ export function dateKeyFromTimestamp(value: string): string | undefined {
   return todayDateKey(new Date(ms))
 }
 
-function hasOtherMoneyHistory(ops: readonly AccountOp[], itemId: string, exceptOpId: string): boolean {
+function hasOtherItemHistory(ops: readonly AccountOp[], itemId: string, purchase: Extract<AccountOp, { kind: 'transfer' }>): boolean {
   return ops.some((op) => {
-    if (op.id === exceptOpId) return false
-    if (op.kind === 'rename' || op.kind === 'set_cost') return false
+    if (op.id === purchase.id || op.kind === 'rename') return false
     if (op.kind === 'transfer') return op.fromId === itemId || op.toId === itemId
+    if (op.kind === 'set_cost' && op.accountId === itemId) {
+      return op.before !== null || !moneyEquals(op.after, purchase.amount) || op.at > purchase.at
+    }
     return op.accountId === itemId
   })
 }
 
-// 这笔转账是物品的开户转入（新建并转入，或先建 0 净值再转入）且没有后续金额历史时，
+// 这笔转账是物品的开户转入（新建并转入，或先建 0 净值再转入）且没有其他金额/原值历史时，
 // 删除转账应连物品一起删，避免留下 0 净值幽灵条目。
 // 但物品若带有与转账金额不同的原值（用户手工建的物品，转入只是部分付款），
 // 它承载了转账之外的信息，删除转账只回滚金额、不能连物品和原值一起删。
@@ -116,24 +118,31 @@ export function findItemOpenedByTransfer(
   accounts: readonly Account[],
   ops: readonly AccountOp[],
 ): Account | null {
-  if (op.kind !== 'transfer') return null
+  if (op.kind !== 'transfer' || op.fromId === op.toId || op.amount <= 0) return null
+  if (!moneyEquals(op.toBefore, 0) || !moneyEquals(op.toAfter, op.amount)) return null
+  const account = accounts.find((item) => item.id === op.toId)
+  if (!account || account.archivedAt || !isItemAccountType(account.type)) return null
+  if (account.cost != null && !moneyEquals(account.cost, op.amount)) return null
+  if (hasOtherItemHistory(ops, account.id, op)) return null
+  if (!moneyEquals(account.balance, 0) && !moneyEquals(account.balance, op.toAfter)) return null
+  return account
+}
 
-  const sides: Array<{ id: string; before: number; after: number }> = []
-  if (moneyEquals(op.toBefore, 0)) sides.push({ id: op.toId, before: op.toBefore, after: op.toAfter })
-  if (op.fromId !== op.toId && moneyEquals(op.fromBefore, 0)) {
-    sides.push({ id: op.fromId, before: op.fromBefore, after: op.fromAfter })
-  }
-
-  for (const side of sides) {
-    const account = accounts.find((item) => item.id === side.id)
-    if (!account || account.archivedAt || !isItemAccountType(account.type)) continue
-    if (account.cost != null && !moneyEquals(account.cost, op.amount)) continue
-    if (hasOtherMoneyHistory(ops, account.id, op.id)) continue
-    if (!moneyEquals(account.balance, 0) && !moneyEquals(account.balance, side.after)) continue
-    return account
-  }
-
-  return null
+// 直接删除非零物品时，只对唯一一次开户购入提供回滚选择。
+// 新建并转入会额外生成首次原值记录，它是同一次创建的附属记录，不算后续操作。
+export function findOnlyItemOpeningTransfer(
+  account: Account,
+  ops: readonly AccountOp[],
+): Extract<AccountOp, { kind: 'transfer' }> | null {
+  if (!isItemAccountType(account.type) || account.archivedAt || moneyEquals(account.balance, 0)) return null
+  const related = ops.filter((op) => op.kind === 'transfer'
+    ? op.fromId === account.id || op.toId === account.id
+    : op.accountId === account.id)
+  const purchases = related.filter((op) => op.kind === 'transfer')
+  if (purchases.length !== 1) return null
+  const purchase = purchases[0]
+  if (related.length > 2 || related.some((op) => op.kind !== 'transfer' && op.kind !== 'set_cost')) return null
+  return findItemOpenedByTransfer(purchase, [account], related) ? purchase : null
 }
 
 export function companionOpIdsForItem(
