@@ -27,6 +27,7 @@ import { NEW_ITEM_PEER_ID, TransferPage, type TransferDirection } from './accoun
 import { RevaluePage, type RevalueDirection } from './accountDetail/RevaluePage'
 import { SetCostPage } from './accountDetail/SetCostPage'
 import { ItemValueCard } from './accountDetail/ItemValueCard'
+import { DeleteItemSheet } from './accountDetail/DeleteItemSheet'
 
 type ActionId = 'none' | 'rename' | 'set_balance' | 'adjust' | 'transfer' | 'revalue' | 'set_cost'
 
@@ -100,6 +101,7 @@ export function AccountDetailSheet(props: {
   const [pageDir, setPageDir] = useState<-1 | 0 | 1>(0)
   const [suppressOpsIntro, setSuppressOpsIntro] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [itemDeleteOpen, setItemDeleteOpen] = useState(false)
   const [editingOpId, setEditingOpId] = useState<string | null>(null)
   const [swipedOpId, setSwipedOpId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -284,6 +286,7 @@ export function AccountDetailSheet(props: {
       setPageDir(0)
       setSuppressOpsIntro(false)
       setMoreOpen(false)
+      setItemDeleteOpen(false)
       setEditingOpId(null)
       setSwipedOpId(null)
       setBalanceValue('')
@@ -307,6 +310,7 @@ export function AccountDetailSheet(props: {
     setSuppressOpsIntro(false)
     setAction(nextAction)
     setMoreOpen(false)
+    setItemDeleteOpen(false)
     setEditingOpId(null)
     setSwipedOpId(null)
     setRenameValue(account.name)
@@ -1222,6 +1226,7 @@ export function AccountDetailSheet(props: {
   const TypeIcon = accountTypeInfo?.opt.icon
 
   return (
+    <>
     <BottomSheet
       open={open}
       title={account.name}
@@ -1367,6 +1372,10 @@ export function AccountDetailSheet(props: {
                           className="w-full px-4 py-3 text-left text-[13px] font-semibold text-rose-600 hover:bg-rose-50"
                           onClick={async () => {
                             setMoreOpen(false)
+                            if (isItem) {
+                              setItemDeleteOpen(true)
+                              return
+                            }
                             const ok = await confirm({
                               title: isItem ? '删除物品' : '删除账户',
                               message: `确定要删除${isItem ? '物品' : '账户'}「${account.name}」吗？此操作不可撤销。`,
@@ -1743,5 +1752,17 @@ export function AccountDetailSheet(props: {
 
       </motion.div>
     </BottomSheet>
+    <DeleteItemSheet
+      open={open && itemDeleteOpen}
+      account={account}
+      accounts={accounts}
+      ops={ops}
+      onClose={() => setItemDeleteOpen(false)}
+      onDeleted={onClose}
+      onDelete={onDelete}
+      onDeleteOp={onDeleteOp}
+      onAdjust={onAdjust}
+    />
+    </>
   )
 }

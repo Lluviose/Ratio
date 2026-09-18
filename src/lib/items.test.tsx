@@ -145,7 +145,9 @@ describe('物品金额、归档与持久化', () => {
     }
     expect(findItemOpenedByTransfer(deposit, [bank, car], [costOp, deposit])).toBeNull()
     // 原值等于转账金额（新建并转入）或旧账户没有原值时仍视为开户购入
-    expect(findItemOpenedByTransfer(deposit, [bank, { ...car, cost: 20000 }], [costOp, deposit])).toMatchObject({ id: car.id })
+    expect(findItemOpenedByTransfer(deposit, [bank, { ...car, cost: 20000 }], [{ ...costOp, after: 20000 }, deposit])).toMatchObject({ id: car.id })
+    // 当前原值即使相等，历史里的不同原值仍说明它不是这次转账创建的物品。
+    expect(findItemOpenedByTransfer(deposit, [bank, { ...car, cost: 20000 }], [costOp, deposit])).toBeNull()
     expect(findItemOpenedByTransfer(deposit, [bank, { ...car, cost: undefined }], [deposit])).toMatchObject({ id: car.id })
 
     expect(findPurchaseCostOp([costOp, deposit], car.id, 100000)).toMatchObject({ id: 'cost' })
