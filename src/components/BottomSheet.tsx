@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { hapticImpact } from '../lib/haptics'
+import { AppFramePortal } from './AppFramePortal'
 
 const openSheetStack: string[] = []
 
@@ -14,6 +15,7 @@ type ScrollLockState = {
   bodyLeft: string
   bodyRight: string
   bodyWidth: string
+  content: { element: HTMLElement; overflow: string; touchAction: string }[]
 }
 
 let scrollLockCount = 0
@@ -37,8 +39,16 @@ function lockBodyScroll() {
       bodyLeft: body.style.left,
       bodyRight: body.style.right,
       bodyWidth: body.style.width,
+      // The app scrolls .content, not the body. Portaled sheets are its siblings.
+      content: Array.from(document.querySelectorAll<HTMLElement>('.appFrame .content'))
+        .filter((element) => !element.closest('.sheetOverlay'))
+        .map((element) => ({ element, overflow: element.style.overflow, touchAction: element.style.touchAction })),
     }
 
+    for (const { element } of scrollLockState.content) {
+      element.style.overflow = 'hidden'
+      element.style.touchAction = 'none'
+    }
     html.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
     body.style.position = 'fixed'
@@ -73,6 +83,10 @@ function unlockBodyScroll() {
   body.style.left = state.bodyLeft
   body.style.right = state.bodyRight
   body.style.width = state.bodyWidth
+  for (const { element, overflow, touchAction } of state.content) {
+    element.style.overflow = overflow
+    element.style.touchAction = touchAction
+  }
 
   window.scrollTo(0, state.scrollY)
 }
@@ -161,19 +175,21 @@ export function BottomSheet(props: {
   }
 
   const sheetIdRef = useRef<string>(makeSheetId())
-  const scrollLockCountRef = useRef(0)
+  const scrollLockedRef = useRef(false)
+  const openRef = useRef(open)
   const onCloseRef = useRef(onClose)
   useEffect(() => {
     onCloseRef.current = onClose
-  }, [onClose])
+    openRef.current = open
+  }, [onClose, open])
 
   useEffect(() => {
     const sheetId = sheetIdRef.current
     return () => {
       removeOpenSheet(sheetId)
-      while (scrollLockCountRef.current > 0) {
+      if (scrollLockedRef.current) {
         unlockBodyScroll()
-        scrollLockCountRef.current -= 1
+        scrollLockedRef.current = false
       }
     }
   }, [])
@@ -181,37 +197,51 @@ export function BottomSheet(props: {
   useEffect(() => {
     if (!open) return
     const sheetId = sheetIdRef.current
+    removeOpenSheet(sheetId)
     pushOpenSheet(sheetId)
     // 抽屉升起的轻按反馈（原生 iOS 的 sheet 手感）；关闭不给，避免一次操作震两下
     hapticImpact('light')
-    lockBodyScroll()
-    scrollLockCountRef.current += 1
+    // One lock per sheet, including its exit. Reopening cancels that exit rather
+    // than acquiring a second lock which would never receive an exit callback.
+    if (!scrollLockedRef.current) {
+      lockBodyScroll()
+      scrollLockedRef.current = true
+    }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isTopSheet(sheetId)) onCloseRef.current()       
+      if (e.key === 'Escape' && isTopSheet(sheetId)) {
+        e.preventDefault()
+        onCloseRef.current()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
-    return () => {
-      window.removeEventListener('keydown', onKeyDown)
-      removeOpenSheet(sheetId)
-    }
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [open])
 
   const handleExitComplete = () => {
-    if (scrollLockCountRef.current > 0) {
+    if (openRef.current) return
+    removeOpenSheet(sheetIdRef.current)
+    if (scrollLockedRef.current) {
       unlockBodyScroll()
-      scrollLockCountRef.current -= 1
+      scrollLockedRef.current = false
     }
     onExitComplete?.()
   }
 
   return (
+    <AppFramePortal>
     <AnimatePresence onExitComplete={handleExitComplete}>
       {open && (
         <motion.div
           className="sheetOverlay"
+          data-framer-portal-id="sheet"
           role="dialog"
           aria-modal="true"
-          onClick={onClose}
+          aria-label={title}
+          onClick={(e) => {
+            // Portals still bubble through React ancestors (e.g. a sort trigger).
+            e.stopPropagation()
+            if (isTopSheet(sheetIdRef.current)) onClose()
+          }}
           initial={overlayInitial}
           animate={overlayAnimate}
           exit={overlayExit}
@@ -290,5 +320,6 @@ export function BottomSheet(props: {
         </motion.div>
       )}
     </AnimatePresence>
+    </AppFramePortal>
   )
 }

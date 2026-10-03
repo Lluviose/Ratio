@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { BottomSheet } from './BottomSheet'
+import { AppFramePortal } from './AppFramePortal'
 import { hapticError, hapticImpact, hapticSuccess, hapticWarning } from '../lib/haptics'
 import { OverlayContext, subscribeAppToasts, takeQueuedToastAfterReload, type ConfirmOptions, type OverlayApi, type ToastAction, type ToastOptions, type ToastTone } from '../lib/overlay'
 
@@ -195,12 +196,13 @@ export function OverlayProvider(props: { children: ReactNode }) {
     <OverlayContext.Provider value={api}>
       {children}
 
-      <div className="toastViewport" aria-live="polite" aria-atomic="true">
+      <AppFramePortal>
+      <div className="toastViewport" aria-live="polite" aria-atomic="true" onClick={(e) => e.stopPropagation()}>
         <AnimatePresence initial={false}>
           {toasts.map((t) => (
             <motion.div
               key={t.id}
-              className="toast"
+              className={t.action ? 'toast toast--action' : 'toast'}
               layout
               initial={{ opacity: 0, y: -18, scale: 0.94 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -230,7 +232,7 @@ export function OverlayProvider(props: { children: ReactNode }) {
                 }
               />
               <div className="toastText">{t.message}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div className="toastControls">
                 {t.action ? (
                   <button
                     type="button"
@@ -256,6 +258,7 @@ export function OverlayProvider(props: { children: ReactNode }) {
           ))}
         </AnimatePresence>
       </div>
+      </AppFramePortal>
 
       <BottomSheet
         open={confirmOpen}

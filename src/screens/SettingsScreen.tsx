@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Archive, ChevronRight } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { queueToastAfterReload, useOverlay } from '../lib/overlay'
 import {
@@ -47,12 +48,14 @@ import { formatSnapshotTime, kindLabel } from './settings/localSnapshotFormat'
 import { useCloudSyncActions } from './settings/useCloudSyncActions'
 
 export function SettingsScreen(props: {
+  archivedItemCount: number
+  onOpenArchive: () => void
   themeOptions: ThemeOption[]
   theme: ThemeId
   activeThemeColor: string
   onThemeChange: (id: ThemeId, origin?: ThemeChangeOrigin) => void
 }) {
-  const { themeOptions, theme, activeThemeColor, onThemeChange } = props
+  const { archivedItemCount, onOpenArchive, themeOptions, theme, activeThemeColor, onThemeChange } = props
 
   const [accountSortMode, setAccountSortMode] = useLocalStorageState<AccountSortMode>(
     ACCOUNT_SORT_MODE_KEY,
@@ -317,6 +320,18 @@ export function SettingsScreen(props: {
       <ThemeCard themeOptions={themeOptions} theme={theme} activeThemeColor={activeThemeColor} onThemeChange={onThemeChange} />
 
       <AccountSortCard accountSortMode={accountSortMode} onChange={setAccountSortMode} />
+
+      <button type="button" className="card w-full text-left" aria-label="archived items" onClick={onOpenArchive}>
+        <span className="cardInner flex items-center gap-3">
+          <Archive size={20} className="shrink-0 text-[var(--muted-text)]" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-base font-extrabold">已归档物品</span>
+            <span className="muted block mt-1 text-xs">查看历史，或将物品取消归档</span>
+          </span>
+          <span className="muted shrink-0 text-xs">{archivedItemCount} 件</span>
+          <ChevronRight size={16} className="shrink-0" />
+        </span>
+      </button>
 
       <MonthStartCard monthStartDay={monthStartDay} onChange={setMonthStartDayRaw} />
 

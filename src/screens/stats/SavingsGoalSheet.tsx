@@ -76,7 +76,7 @@ export function SavingsGoalSheet(props: {
           <input className="input" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
         </label>
 
-        <div style={{ ...insetPanelStyle, display: 'grid', gap: 8 }}>
+        <div style={{ ...insetPanelStyle, background: 'var(--card)', borderColor: 'var(--hairline)', boxShadow: 'none', display: 'grid', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 700 }}>
             <CalendarDays size={15} />
             起点

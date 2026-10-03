@@ -780,8 +780,6 @@ export default function App() {
                     >
                       <AssetsScreen
                         grouped={groupedWithTheme}
-                        archivedAccounts={accounts.archivedAccounts}
-                        onOpenArchive={() => setArchiveOpen(true)}
                         getIcon={accounts.getIcon}
                         onAddAccount={() => setView('addAccount')}
                         addButtonTone={themeColors.debt}
@@ -847,6 +845,8 @@ export default function App() {
                       <LazyLoadBoundary fallback={<ScreenLoadError />}>
                         <Suspense fallback={<ScreenSkeleton screen="settings" />}>
                           <SettingsScreen
+                            archivedItemCount={accounts.archivedAccounts.length}
+                            onOpenArchive={() => setArchiveOpen(true)}
                             themeOptions={themeOptions}
                             theme={themeTransition?.targetTheme ?? theme}
                             activeThemeColor={themeTransition?.color ?? themeColors.invest}

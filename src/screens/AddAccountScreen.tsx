@@ -7,6 +7,7 @@ import { formatCny } from '../lib/format'
 import { normalizeMoney } from '../lib/money'
 import { exitEase, staggerDelay, standardEase } from '../lib/motionPresets'
 import { pickForegroundColor, type ThemeColors } from '../lib/themes'
+import { AppFramePortal } from '../components/AppFramePortal'
 
 function withAlpha(color: string, alpha: number): string {
   const hex = color.trim()
@@ -375,10 +376,14 @@ export function AddAccountScreen(props: {
         {renderGroup('debt', 4)}
       </div>
 
+      <AppFramePortal>
       <AnimatePresence>
         {selectedType && (
           <motion.div
-            className="fixed inset-0 z-50 flex flex-col bg-white"
+            className="addAccountOverlay"
+            role="dialog"
+            aria-modal="true"
+            aria-label={selectedIsItem ? '添加物品' : '账户命名'}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -390,10 +395,13 @@ export function AddAccountScreen(props: {
             }}
             // 命名弹层短，点下方空白关闭；物品表单更长，空白看起来像表单本身，
             // 点一下（尤其是收起键盘）不该退出。
-            onClick={selectedIsItem ? undefined : () => setSelectedType(null)}
+            onClick={(e) => {
+              e.stopPropagation()
+              if (!selectedIsItem) setSelectedType(null)
+            }}
           >
             <motion.div
-              className="w-full max-w-md mx-auto bg-[var(--card)] rounded-b-[28px] p-6 pb-8"
+              className="addAccountPanel w-full max-w-md mx-auto bg-[var(--card)] rounded-b-[28px] p-6 pb-8"
               onClick={(e) => e.stopPropagation()}
               initial={{ y: '-100%' }}
               animate={{ y: 0 }}
@@ -458,13 +466,14 @@ export function AddAccountScreen(props: {
             </motion.div>
 
             <div
-              className="flex-1 bg-white"
+              className="flex-1 bg-[var(--bg)]"
               data-testid="add-sheet-blank"
               onClick={selectedIsItem ? (e) => e.stopPropagation() : undefined}
             />
           </motion.div>
         )}
       </AnimatePresence>
+      </AppFramePortal>
     </div>
   )
 }

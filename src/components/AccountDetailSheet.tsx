@@ -554,7 +554,7 @@ export function AccountDetailSheet(props: {
     if (!onArchive || !isItemAccountType(target.type) || target.archivedAt || after !== 0) return
     const ok = await confirm({
       title: '已全部转出',
-      message: `「${target.name}」的净值已为 0。归档后不再计入资产与统计，历史保留，可随时在资产列表的「已归档物品」中取消归档。`,
+      message: `「${target.name}」的净值已为 0。归档后不再计入资产与统计，历史保留，可随时在设置的「已归档物品」中取消归档。`,
       confirmText: '归档物品',
       cancelText: '保留',
       tone: 'default',
