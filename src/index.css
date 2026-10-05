@@ -840,10 +840,7 @@ a {
 .sheetOverlay {
   position: fixed;
   inset: 0;
-  /* 遮罩必须保持「透亮」：曾加 blur(2px) + 40% 黑，把抽屉背后的内容
-     先糊掉再压暗，sheet 的 backdrop-filter 采到的是一团暗糊——玻璃感
-     被遮罩吃光。现在只做轻度压暗、不模糊，内容透过遮罩清晰可见，
-     抽屉的模糊才有东西可「透」。 */
+  /* 遮罩只压暗。内容面使用主题实底，不在动画抽屉上叠加模糊或系统材质。 */
   background: rgba(11, 15, 26, 0.26);
   display: flex;
   justify-content: center;
@@ -884,20 +881,16 @@ a {
   overscroll-behavior: contain;
 }
 
-/* 标准属性必须写在前缀后：Lightning CSS 对 var() 值保留最后一种写法，
-   顺序反过来会只剩 -webkit-backdrop-filter，使 Chromium 失去模糊。 */
+/* 动画弹窗只绘制一层主题实底。系统材质与 backdrop-filter 都不参与，
+   避免 iOS 在滑入/调整高度后留下第二个圆角轮廓。 */
 .sheet {
   width: min(420px, 100%);
-  /* 液态玻璃：半透明底 + 折射渐变 + 顶部内高光（web 近似，降级见文末 @supports not）。
-     背景透明度 0.62：太低文字可读性差，太高玻璃感消失（0.8 时几乎看不出模糊）。 */
-  background:
-    var(--glass-sheen),
-    rgb(var(--glass-tint-rgb) / 0.62);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
+  background: var(--bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   border-top-left-radius: 32px;
   border-top-right-radius: 32px;
-  box-shadow: var(--shadow-sheet), var(--glass-hi);
+  box-shadow: var(--shadow-sheet);
   border: none;
   max-height: 85%;
   min-width: 0;
@@ -961,18 +954,55 @@ a {
   max-width: 100%;
 }
 
-/* WebKit's native date editor otherwise retains an intrinsic minimum width. */
+/* WebKit 的原生日期外观会绕过普通 width 绘制宽背景；保留原生 picker，
+   但让控件外观和内部编辑区域都服从同一个 border-box。 */
 .sheetBody input:is([type="date"], [type="datetime-local"]),
 .addAccountPanel input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
   display: block;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  inline-size: 100%;
   min-inline-size: 0;
+  max-inline-size: 100%;
+  min-height: 44px;
+  font-size: 16px;
+  overflow: hidden;
 }
 
 .sheetBody input::-webkit-date-and-time-value,
 .addAccountPanel input::-webkit-date-and-time-value {
   min-width: 0;
-  text-align: left;
+  min-height: 1.2em;
+  max-width: 100%;
+  text-align: inherit;
+}
+
+.sheetBody input::-webkit-datetime-edit,
+.addAccountPanel input::-webkit-datetime-edit {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.nativeDateRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* 中文日期时间在窄屏单独占一行，不把原生编辑区域挤到标签外侧。 */
+@media (max-width: 360px) {
+  .nativeDateRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
 }
 
 .sheetBody::-webkit-scrollbar {
@@ -1185,6 +1215,8 @@ a {
 
 .field {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 6px;
 }
 
@@ -1932,29 +1964,19 @@ html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
   color-scheme: light;
 }
 
-/* 液态玻璃降级：无 backdrop-filter（老 WebKit / 桌面浏览器）时，
-   玻璃表面回退高不透明底并去掉内高光，保证内容可读性。 */
+/* 无 backdrop-filter 时导航去掉高光；弹窗在所有浏览器中均使用主题实底。 */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .sheet {
-    background: var(--card);
-    box-shadow: var(--shadow-sheet);
-  }
   .navBar {
     box-shadow: none;
   }
 }
 
-/* 系统液态玻璃（可选，默认关）：iOS 原生壳打开 WKWebView 私有偏好
-   `_useSystemAppearance` 后，`-apple-visual-effect` 才会被认。
-   Safari / PWA / 桌面 @supports 失败，这段整块不生效，视觉基线不变。
-   非首页四栏在开启时使用悬浮胶囊；首页保留原有迷你导航。
-   不要用 backdrop-filter: liquid-glass——那不是 WebKit 的真实属性。
-   不要给 .segment / .pills 这类小控件套玻璃，叠多层会把页面打成一块雾。
-   toast 保持原来的 CSS 毛玻璃：系统材质会把通知掏成一块雾，字也看不清。 */
+/* 系统液态玻璃仅用于页面卡片和导航。弹窗及其所有子节点必须从授权材质的
+   选择器中排除，而非只覆盖 background；否则 iOS 仍会创建第二个原生材质面。
+   `:where` 不增加 specificity，保留页面原有主题优先级。 */
 @supports (-apple-visual-effect: -apple-system-glass-material) {
-  html[data-system-glass="1"] .sheet:not(.sheet--solid),
-  html[data-system-glass="1"] .navBar,
-  html[data-system-glass="1"] .glassChrome {
+  html[data-system-glass="1"] .navBar:not(:where([role="dialog"], [role="dialog"] *)),
+  html[data-system-glass="1"] .glassChrome:not(:where([role="dialog"], [role="dialog"] *)) {
     background-color: transparent;
     background-image: none;
     -webkit-backdrop-filter: none;
@@ -1962,19 +1984,15 @@ html[data-system-glass="1"] .screenSkeletonTrend .skeletonChart {
     -apple-visual-effect: -apple-system-glass-material;
   }
 
-  html[data-system-glass="1"] .glassChrome {
+  html[data-system-glass="1"] .glassChrome:not(:where([role="dialog"], [role="dialog"] *)) {
     border-color: rgb(var(--glass-rgb) / 0.45);
     box-shadow: none;
   }
 
-  html[data-system-glass="1"] .sheet:not(.sheet--solid) {
-    box-shadow: var(--shadow-sheet);
-  }
-
-  /* 卡片：系统材质 + 裁进圆角，保留发丝边，避免相邻卡片融成一片 */
-  html[data-system-glass="1"] .card,
-  html[data-system-glass="1"] .iosInsightsPage .card,
-  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card {
+  /* 只有页面卡片可使用系统材质，模态窗口里的 .card 不得重新叠一层。 */
+  html[data-system-glass="1"] .card:not(:where([role="dialog"], [role="dialog"] *)),
+  html[data-system-glass="1"] .iosInsightsPage .card:not(:where([role="dialog"], [role="dialog"] *)),
+  html[data-system-glass="1"] .iosInsightsPage.iosStatsPage .card:not(:where([role="dialog"], [role="dialog"] *)) {
     background-color: rgb(var(--glass-rgb) / 0.22);
     background-image: none;
     -webkit-backdrop-filter: none;

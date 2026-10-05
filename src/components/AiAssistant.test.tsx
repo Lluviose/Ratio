@@ -48,6 +48,33 @@ describe('AiAssistant', () => {
     expect(sessionStorage.getItem('ratio.ai.chat.session.v1')).toContain('我的资产结构健康吗？')
   })
 
+  it('accepts the named privacy dialog without sending a request', async () => {
+    localStorage.removeItem('ratio.aiPrivacyAcceptedServerUrl')
+    render(<AiAssistant initialOpen />)
+
+    expect(screen.getByRole('dialog', { name: '隐私提示' })).toHaveAttribute('aria-modal', 'true')
+    expect(screen.queryByRole('button', { name: 'AI analysis' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '我的资产结构健康吗？' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '我已了解' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '隐私提示' })).not.toBeInTheDocument())
+    expect(screen.getByRole('dialog', { name: 'AI 分析' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '我的资产结构健康吗？' })).toBeEnabled()
+    expect(localStorage.getItem('ratio.aiPrivacyAcceptedServerUrl')).toBe(JSON.stringify('http://localhost:8787'))
+    expect(aiMocks.fetchAiChatCompletion).not.toHaveBeenCalled()
+  })
+
+  it('declines privacy without accepting or sending a request', async () => {
+    localStorage.removeItem('ratio.aiPrivacyAcceptedServerUrl')
+    render(<AiAssistant initialOpen />)
+
+    fireEvent.click(screen.getByRole('button', { name: '不同意' }))
+
+    await waitFor(() => expect(screen.queryAllByRole('dialog')).toHaveLength(0))
+    expect(localStorage.getItem('ratio.aiPrivacyAcceptedServerUrl')).toBe(JSON.stringify(''))
+    expect(aiMocks.fetchAiChatCompletion).not.toHaveBeenCalled()
+  })
+
   it('restores and clears the session chat', async () => {
     sessionStorage.setItem('ratio.ai.chat.session.v1', JSON.stringify([
       { role: 'user', content: 'hello' },

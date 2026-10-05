@@ -96,7 +96,7 @@ export function SetCostPage(props: {
         <div className="text-[13px] font-semibold text-slate-700">{isFirst ? '记录原值' : '修正原值'}</div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-4">
+      <div className="nativeDateRow mt-3">
         <div className="shrink-0 text-[12px] font-medium text-slate-400">购入日期</div>
         <input
           type="date"

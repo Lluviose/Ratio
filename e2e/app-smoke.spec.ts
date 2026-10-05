@@ -31,9 +31,10 @@ async function seedApp(page: Page) {
 }
 
 async function expectAssetsHomeVisible(page: Page) {
-  await expect(page.getByRole('button', { name: 'stats' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'trend' })).toBeVisible()
-  await expect(accountGroupCard(page)).toBeVisible()
+  // Node-side polling avoids starving startup rAF callbacks in Windows WebKit.
+  await expect.poll(() => page.getByRole('button', { name: 'stats' }).isVisible()).toBe(true)
+  await expect.poll(() => page.getByRole('button', { name: 'trend' }).isVisible()).toBe(true)
+  await expect.poll(() => accountGroupCard(page).isVisible()).toBe(true)
 }
 
 function accountGroupCard(page: Page) {

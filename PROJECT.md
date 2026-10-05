@@ -79,7 +79,7 @@ docker compose up -d --build   # 后端地址 http://localhost:8787
 - 四个底部 Tab：`assets`（常驻首包）与 `trend` / `stats` / `settings`（React.lazy 懒加载，切换带方向感知的滑动过渡）。Web 看过引导页后在空闲回调里预热；iOS 原生壳在 `main.tsx` 启动时立即并行预热，已预热页面同步渲染，避免首次导航再闪加载占位。
 - 主题切换：`handleThemeChange` 创建全屏 bloom 过渡覆盖层（脉冲环 + 径向扩散 + 颜色 wash），用两个定时器编排「先播动画 → 中途应用 `data-theme` 与 CSS 变量 → 结束移除覆盖层」。`SettingsScreen` 通过 `onThemeChange(id, origin)` 上报点击坐标作为扩散原点——改主题流程时不要破坏这个坐标约定。
 - 账户详情 `AccountDetailSheet` 挂在 App 层：从资产列表行进入时走 `sheetMotion="morph"`（共享 `layoutId`，行卡片变形为抽屉），其他入口走 `slide`。
-- 共享 `BottomSheet` 和通知经 `AppFramePortal` 挂在 `.appFrame` 根层，不进入页面的动画、滚动及隔离上下文；应用内按框架绝对定位，独立渲染回退 body/视口。弹窗只纵向滚动，嵌套与快速重开共用引用计数滚动锁，最后一层退出后恢复背景滚动。不要把弹层改回页面内联子节点（统计页直接子元素样式会覆写遮罩定位）。
+- 共享 `BottomSheet` 和通知经 `AppFramePortal` 挂在 `.appFrame` 根层，不进入页面的动画、滚动及隔离上下文；应用内按框架绝对定位，独立渲染回退 body/视口。所有抽屉统一主题实底，`[role="dialog"]` 及其后代不能匹配私有系统材质授权选择器（包括内部 `.card` / `.glassChrome`），防止 iOS 动画后留下双层圆角材质。日期/时间输入保留原生 picker，但使用 `appearance: none`、border-box、明确的 inline-size 与可收缩 grid，中文窄屏的记录时间另占一行。弹窗只纵向滚动，嵌套与快速重开共用引用计数滚动锁，最后一层退出后恢复背景滚动。不要把弹层改回页面内联子节点（统计页直接子元素样式会覆写遮罩定位）。
 - 每日快照同步（`useDailySnapshotSync`）、云自动同步、遥测都在这里初始化。
 - `main.tsx` 在 App 外层挂根级 `RootErrorBoundary`：渲染崩溃不再白屏，兜底界面提供「刷新 + 导出数据备份」（数据在 localStorage，渲染崩溃不伤数据）。`useLocalStorageState` 写入失败（配额满/隐私模式）默认经 `emitAppToast` 提示用户（30s 节流）；`lib/overlay.ts` 的 `emitAppToast` 是 React 树外发 toast 的统一入口（Provider 挂载前排队），toast 支持可选动作按钮。`index.html` 内联启动骨架屏：`storageKernel.ready` 门控期间显示（配色跟随 `html[data-mode]`），React 挂载时整体替换——WebKit IDB open 挂死的最坏 5s 不再是纯白屏。
 

@@ -13,8 +13,8 @@ export function SystemGlassCard(props: { enabled: boolean; onChange: (enabled: b
             <div style={{ fontWeight: 800, fontSize: 16 }}>系统液态玻璃</div>
             <div className="muted" style={{ marginTop: 4, fontSize: 13, fontWeight: 550 }}>
               {supported
-                ? '用 iOS 系统材质替换网页毛玻璃（卡片、抽屉、导航）'
-                : '仅 iPhone 原生应用内生效。当前继续使用网页毛玻璃，打开后下次在应用里自动启用'}
+                ? '用 iOS 系统材质显示页面卡片和导航；弹窗保留单层实底，避免重影'
+                : '仅 iPhone 原生应用内的页面卡片和导航生效；弹窗始终使用单层实底'}
             </div>
           </div>
           <Toggle checked={enabled} onChange={onChange} />

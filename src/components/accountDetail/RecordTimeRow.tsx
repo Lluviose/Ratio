@@ -11,7 +11,7 @@ export function RecordTimeRow(props: {
   const { editingAt, value, max, onChange } = props
 
   return (
-    <div className="mt-3 flex items-center justify-between gap-4">
+    <div className="nativeDateRow mt-3">
       <div className="shrink-0 text-[12px] font-medium text-slate-400">记录时间</div>
       {editingAt ? (
         <div className="text-[13px] font-semibold text-slate-500">{formatTime(editingAt)}</div>

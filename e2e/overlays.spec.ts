@@ -1,4 +1,8 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import postcss from 'postcss'
+
+// iOS renders a wider localized native date editor than the default en-US fixture.
+test.use({ locale: 'zh-CN' })
 
 async function seedApp(page: Page) {
   await page.addInitScript(() => {
@@ -25,6 +29,58 @@ async function expectHittable(locator: Locator) {
   })).toBe(true)
 }
 
+async function expectBoundedNativeDate(input: Locator) {
+  await input.scrollIntoViewIfNeeded()
+  const geometry = await input.evaluate((element) => {
+    const field = element.parentElement!
+    const body = element.closest('.sheetBody, .addAccountPanel')!
+    const bounds = element.getBoundingClientRect()
+    const fieldBounds = field.getBoundingClientRect()
+    const bodyBounds = body.getBoundingClientRect()
+    const fieldStyle = getComputedStyle(field)
+    const bodyStyle = getComputedStyle(body)
+    const style = getComputedStyle(element)
+    return {
+      left: bounds.left,
+      right: bounds.right,
+      fieldLeft: fieldBounds.left + parseFloat(fieldStyle.paddingLeft),
+      fieldRight: fieldBounds.right - parseFloat(fieldStyle.paddingRight),
+      bodyLeft: bodyBounds.left + parseFloat(bodyStyle.paddingLeft),
+      bodyRight: bodyBounds.right - parseFloat(bodyStyle.paddingRight),
+      appearance: style.appearance || style.getPropertyValue('-webkit-appearance'),
+      boxSizing: style.boxSizing,
+      fontSize: parseFloat(style.fontSize),
+      height: bounds.height,
+    }
+  })
+  expect(geometry.left).toBeGreaterThanOrEqual(Math.max(geometry.fieldLeft, geometry.bodyLeft) - 1)
+  expect(geometry.right).toBeLessThanOrEqual(Math.min(geometry.fieldRight, geometry.bodyRight) + 1)
+  expect(geometry.appearance).toBe('none')
+  expect(geometry.boxSizing).toBe('border-box')
+  expect(geometry.fontSize).toBeGreaterThanOrEqual(16)
+  expect(geometry.height).toBeGreaterThanOrEqual(44)
+  await expectHittable(input)
+}
+
+async function expectOpaqueSheet(sheet: Locator) {
+  const surface = await sheet.evaluate((element) => {
+    const style = getComputedStyle(element)
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const context = canvas.getContext('2d')!
+    context.fillStyle = style.backgroundColor
+    context.fillRect(0, 0, 1, 1)
+    return {
+      alpha: context.getImageData(0, 0, 1, 1).data[3],
+      backdrop: style.backdropFilter || style.getPropertyValue('-webkit-backdrop-filter'),
+      backgroundImage: style.backgroundImage,
+    }
+  })
+  expect(surface.alpha).toBe(255)
+  expect(surface.backdrop).toBe('none')
+  expect(surface.backgroundImage).toBe('none')
+}
+
 for (const screen of [
   { name: 'narrow-dark-glass', width: 320, height: 568, dark: true, glass: true },
   { name: 'phone', width: 390, height: 844, dark: false, glass: false },
@@ -40,6 +96,7 @@ for (const screen of [
     await page.getByRole('button', { name: 'edit savings goal' }).scrollIntoViewIfNeeded()
     await page.evaluate((glass) => {
       if (glass) document.documentElement.dataset.systemGlass = '1'
+      document.documentElement.style.setProperty('--safe-top', '59px')
       document.documentElement.style.setProperty('--safe-bottom', '34px')
     }, screen.glass)
     const background = page.locator('.content')
@@ -58,12 +115,7 @@ for (const screen of [
     })).toBe(true)
 
     const body = dialog.locator('.sheetBody')
-    // Check the production CSS, not just source declarations: minification must
-    // retain the standard filter as well as the older WebKit fallback.
-    expect(await dialog.locator('.sheet').evaluate((element) => {
-      const style = getComputedStyle(element)
-      return style.backdropFilter || style.getPropertyValue('-webkit-backdrop-filter')
-    })).toContain('blur(')
+    await expectOpaqueSheet(dialog.locator('.sheet'))
     const widthGap = await dialog.evaluate((element) => {
       const style = getComputedStyle(element)
       const available = element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
@@ -73,7 +125,9 @@ for (const screen of [
     for (const element of [dialog, dialog.locator('.sheet'), body, dialog.locator('.stack').first()]) {
       await expectNoHorizontalOverflow(element)
     }
-    await expectNoHorizontalOverflow(dialog.locator('input[type="date"]').locator('..'))
+    await expectBoundedNativeDate(dialog.getByLabel('目标日期'))
+    await dialog.getByLabel('目标日期').focus()
+    await expectBoundedNativeDate(dialog.getByLabel('目标日期'))
     await body.evaluate((element) => { element.scrollLeft = 100 })
     expect(await body.evaluate((element) => element.scrollLeft)).toBe(0)
 
@@ -99,6 +153,46 @@ for (const screen of [
     await expect.poll(() => dialog.count()).toBe(0)
   })
 }
+
+test('production native-material rules exclude dialogs and nested cards', async ({ page }) => {
+  await seedApp(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'stats', exact: true }).click()
+  await page.getByRole('button', { name: 'edit savings goal' }).click()
+  const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) => links.map((link) => (link as HTMLLinkElement).href))
+  const selectors: string[] = []
+  for (const url of stylesheets) {
+    const response = await page.request.get(url)
+    expect(response.ok()).toBe(true)
+    postcss.parse(await response.text()).walkDecls('-apple-visual-effect', (declaration) => {
+      if (declaration.value.includes('glass-material') && declaration.parent?.type === 'rule') {
+        selectors.push(declaration.parent.selector)
+      }
+    })
+  }
+  expect(selectors.length).toBeGreaterThan(0)
+  // Stock WebKit cannot enable the private @supports branch. Match the actual
+  // production selectors directly so the native-only branch is still checked.
+  const result = await page.evaluate((selectors) => {
+    document.documentElement.dataset.systemGlass = '1'
+    const fixture = document.createElement('div')
+    fixture.className = 'iosInsightsPage iosStatsPage'
+    fixture.innerHTML = '<div class="card"><div class="glassChrome"></div></div>'
+    document.querySelector('.sheetBody')!.append(fixture)
+    try {
+      const matches = selectors.flatMap((selector) => [...document.querySelectorAll(selector)])
+      return {
+        dialogMatches: matches.filter((element) => element.closest('[role="dialog"]')).length,
+        navigationMatches: matches.some((element) => element.matches('.navBar')),
+        pageCardMatches: matches.some((element) => element.matches('.card') && !element.closest('[role="dialog"]')),
+      }
+    } finally {
+      fixture.remove()
+    }
+  }, selectors)
+  expect(result).toEqual({ dialogMatches: 0, navigationMatches: true, pageCardMatches: true })
+  await expectOpaqueSheet(page.locator('.sheet'))
+})
 
 test('archived items live in settings and can be restored without losing item values', async ({ page }) => {
   await seedApp(page)
@@ -141,6 +235,55 @@ test('archived items live in settings and can be restored without losing item va
   })).toEqual(expect.objectContaining({ cost: 5000, balance: 2000, acquiredAt: '2026-05-01' }))
 })
 
+test('account date and record-time fields fit the narrow Chinese editor', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await seedApp(page)
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'settings', exact: true }).click()
+  await page.getByRole('button', { name: 'archived items', exact: true }).click()
+  await page.getByRole('button', { name: 'archived item 已归档相机', exact: true }).click()
+  await expect.poll(() => page.locator('.sheetOverlay').count()).toBe(1)
+  await page.getByRole('button', { name: 'unarchive action' }).click()
+  await page.getByRole('button', { name: 'edit cost', exact: true }).click()
+  const acquired = page.getByLabel('acquired date', { exact: true })
+  await expectBoundedNativeDate(acquired)
+  await acquired.fill('2026-04-30')
+  await page.getByRole('button', { name: '保存修改', exact: true }).click()
+  await expect.poll(() => acquired.count()).toBe(0)
+  await page.getByRole('button', { name: 'set balance action', exact: true }).click()
+  const recordTime = page.getByLabel('record time', { exact: true })
+  await expectBoundedNativeDate(recordTime)
+  await recordTime.focus()
+  await expectBoundedNativeDate(recordTime)
+  await expectOpaqueSheet(page.locator('.sheet'))
+  await expectNoHorizontalOverflow(page.locator('.sheetBody'))
+})
+
+test('type and account sorting use a single bounded sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await seedApp(page)
+  await page.addInitScript(() => localStorage.setItem('ratio.accountSort.mode', JSON.stringify('manual')))
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  const scroller = page.getByTestId('home-scroller')
+  await expect.poll(() => scroller.getAttribute('aria-hidden')).toBe('false')
+  await page.getByRole('button', { name: 'account group liquid', exact: true }).click()
+  await page.getByRole('button', { name: 'sort menu', exact: true }).click()
+  await page.getByRole('button', { name: '排序', exact: true }).click()
+  let dialog = page.getByRole('dialog', { name: '排序 - 流动资金', exact: true })
+  await expectOpaqueSheet(dialog.locator('.sheet'))
+  await expectNoHorizontalOverflow(dialog.locator('.sheetBody'))
+  await dialog.getByRole('button', { name: 'close', exact: true }).click()
+  await expect.poll(() => dialog.count()).toBe(0)
+  await page.getByRole('button', { name: 'account type bank_card', exact: true }).click()
+  await page.getByRole('button', { name: 'more', exact: true }).click()
+  await page.getByRole('button', { name: '排序', exact: true }).click()
+  dialog = page.locator('.sheetOverlay')
+  await expectOpaqueSheet(dialog.locator('.sheet'))
+  await expectNoHorizontalOverflow(dialog.locator('.sheetBody'))
+  await dialog.getByRole('button', { name: 'close', exact: true }).click()
+  await expect.poll(() => dialog.count()).toBe(0)
+})
+
 test('settings confirmation covers navigation and can cancel on a short screen', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 480 })
   await seedApp(page)
@@ -167,7 +310,7 @@ test('new item form scrolls to its actions on a short dark screen', async ({ pag
   await page.getByRole('button', { name: /固定资产/ }).click()
   await page.getByRole('button', { name: /其他固定资产/ }).click()
   await page.getByLabel('item cost').fill('5000')
-  await expectNoHorizontalOverflow(page.getByLabel('item acquired date').locator('..'))
+  await expectBoundedNativeDate(page.getByLabel('item acquired date'))
   const cancel = page.getByRole('button', { name: '取消', exact: true })
   await cancel.scrollIntoViewIfNeeded()
   await expectHittable(cancel)

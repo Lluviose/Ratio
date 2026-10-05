@@ -389,7 +389,9 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
             <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px]" />
 
             <motion.div
-              className="absolute right-4 bottom-[calc(var(--safe-bottom)+80px)] w-[min(390px,calc(100%-32px))] h-[560px] max-h-[calc(100%-var(--safe-top)-var(--safe-bottom)-112px)] rounded-[28px] bg-white/85 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
+              role="dialog"
+              aria-label="AI 分析"
+              className="absolute right-4 bottom-[calc(var(--safe-bottom)+80px)] w-[min(390px,calc(100%-32px))] h-[560px] max-h-[calc(100%-var(--safe-top)-var(--safe-bottom)-112px)] rounded-[28px] bg-[var(--card)] border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden flex flex-col"
               style={{ originX: 1, originY: 1 }}
               initial={{ opacity: 0, y: 18, scale: 0.88 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -556,7 +558,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                 </div>
               </div>
 
-              <div className="px-3 pb-3 pt-2 border-t border-white/60 bg-white/65 backdrop-blur-md">
+              <div className="px-3 pb-3 pt-2 border-t border-white/60 bg-white/65">
                 <div className="flex items-end gap-2">
                   <textarea
                     ref={inputRef}
@@ -608,7 +610,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
               {privacyOpen ? (
                 <motion.div
                   key="privacy"
-                  className="absolute inset-0 flex items-center justify-center p-4"
+                  className="absolute inset-0 flex items-center justify-center pt-[calc(var(--safe-top)+16px)] pr-[calc(var(--safe-right)+16px)] pb-[calc(var(--safe-bottom)+16px)] pl-[calc(var(--safe-left)+16px)]"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -616,7 +618,10 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                   onClick={(e) => e.stopPropagation()}
                 >
                   <motion.div
-                    className="w-full max-w-[360px] rounded-[28px] bg-white/92 backdrop-blur-md border border-white/70 shadow-[var(--shadow-hover)] overflow-hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="隐私提示"
+                    className="w-full max-w-[360px] min-h-0 max-h-full rounded-[28px] bg-[var(--card)] border border-white/70 shadow-[var(--shadow-hover)] overflow-x-hidden overflow-y-auto overscroll-contain"
                     initial={{ opacity: 0, y: 12, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 12, scale: 0.98 }}
@@ -637,7 +642,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
                       </div>
                     </div>
 
-                    <div className="px-5 pb-5 flex gap-10 justify-end">
+                    <div className="px-5 pb-5 flex flex-wrap gap-3 justify-end">
                       <button
                         type="button"
                         className="h-11 px-4 rounded-[18px] border border-white/70 bg-white/70 text-slate-700 font-extrabold hover:bg-black/5"
@@ -667,7 +672,7 @@ export function AiAssistant(props: { initialOpen?: boolean } = {}) {
         ) : null}
       </AnimatePresence>
 
-      <div className="absolute right-4 bottom-[calc(var(--safe-bottom)+16px)] pointer-events-auto">
+      <div hidden={open && privacyOpen} className="absolute right-4 bottom-[calc(var(--safe-bottom)+16px)] pointer-events-auto">
         <motion.button
           type="button"
           aria-label="AI analysis"

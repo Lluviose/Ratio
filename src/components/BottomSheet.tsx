@@ -155,9 +155,8 @@ export function BottomSheet(props: {
   const overlayFadeInDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.18
   const overlayFadeOutDuration = resolvedSheetMotion === 'morph' ? 0.22 : 0.2
   const overlayEase: [number, number, number, number] = [0.16, 1, 0.3, 1]
-  // 遮罩只做压暗、绝不动画 blur：iOS WebKit 动画 backdrop-filter 不会插值，
-  // 结束帧会突然弹出一层边缘雾（账户详情最外圈「卡一下再出现」）。
-  // 抽屉玻璃在 .sheet 上；账户详情走 .sheet--solid，避免不透明底外再套一圈延迟滤镜。
+  // 遮罩只压暗。内容面保持单层实底：iOS 系统材质在 transform/尺寸变化时
+  // 可能保留旧轮廓，与实际抽屉叠成上下错位的两层圆角背景。
   const overlayInitial = { backgroundColor: 'rgba(11, 15, 26, 0)' }
   const overlayAnimate = {
     backgroundColor: 'rgba(11, 15, 26, 0.4)',
